@@ -40,6 +40,7 @@ func TestRunFakeOnceDetectsCaseFromAlerts(t *testing.T) {
 		ObservedAt: time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC),
 		Cluster:    fixtureClusterIdentity(t),
 		Health:     fixtureHealth(t),
+		OSDs:       fixtureOSDs(t),
 	}); err != nil {
 		t.Fatalf("save inventory observation: %v", err)
 	}
@@ -91,6 +92,9 @@ func TestRunFakeOnceDetectsCaseFromAlerts(t *testing.T) {
 	}
 	if eventType != "case_detected" || payload["signal"] != "CEPH_OSD_DOWN" {
 		t.Fatalf("timeline event = %s %+v, want case_detected with signal", eventType, payload)
+	}
+	if payload["osd"] != float64(1) || payload["host"] != "host-b.example.invalid" {
+		t.Fatalf("timeline payload = %+v, want osd and host context from the synced read model", payload)
 	}
 
 	var runStatus string
@@ -177,6 +181,13 @@ func fixtureHealth(t *testing.T) inventory.Health {
 	var health inventory.Health
 	loadFixture(t, "ceph", "reef-osd-down-baremetal", "health.json", &health)
 	return health
+}
+
+func fixtureOSDs(t *testing.T) []inventory.OSD {
+	t.Helper()
+	var osds []inventory.OSD
+	loadFixture(t, "ceph", "reef-osd-down-baremetal", "osds.json", &osds)
+	return osds
 }
 
 func loadFixture(t *testing.T, family, scenario, name string, target any) {

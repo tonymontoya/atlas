@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type AlertCandidate struct {
 	Source       string
 	Signal       string
 	ClusterLabel string
+	OSDLabel     string
 	State        string
 	StartedAt    time.Time
 }
@@ -340,6 +342,10 @@ func createDetectedCase(ctx context.Context, tx *sql.Tx, candidate AlertCandidat
 	if err != nil {
 		return 0, err
 	}
+	osdContext, err := resolveOSDContext(ctx, tx, clusterFSID, candidate.OSDLabel)
+	if err != nil {
+		return 0, err
+	}
 
 	var caseID int64
 	err = tx.QueryRowContext(ctx, `
@@ -351,7 +357,7 @@ func createDetectedCase(ctx context.Context, tx *sql.Tx, candidate AlertCandidat
 		return 0, err
 	}
 
-	payload, err := detectedPayload(candidate, clusterFSID)
+	payload, err := detectedPayload(candidate, clusterFSID, osdContext)
 	if err != nil {
 		return 0, err
 	}
@@ -399,11 +405,42 @@ func resolveClusterLabel(ctx context.Context, tx *sql.Tx, label string) (sql.Nul
 	return sql.NullString{String: fsid, Valid: true}, nil
 }
 
-func detectedPayload(candidate AlertCandidate, clusterFSID sql.NullString) (string, error) {
+type osdContext struct {
+	OSD  int
+	Host string
+}
+
+func resolveOSDContext(ctx context.Context, tx *sql.Tx, clusterFSID sql.NullString, osdLabel string) (osdContext, error) {
+	if !clusterFSID.Valid || osdLabel == "" {
+		return osdContext{}, nil
+	}
+	osdID, err := strconv.Atoi(osdLabel)
+	if err != nil {
+		return osdContext{}, nil
+	}
+	var host string
+	err = tx.QueryRowContext(ctx, `
+		SELECT host
+		FROM cluster_current_osds
+		WHERE fsid = $1 AND osd_id = $2
+		LIMIT 1
+	`, clusterFSID.String, osdID).Scan(&host)
+	if errors.Is(err, sql.ErrNoRows) {
+		return osdContext{}, nil
+	}
+	if err != nil {
+		return osdContext{}, err
+	}
+	return osdContext{OSD: osdID, Host: host}, nil
+}
+
+func detectedPayload(candidate AlertCandidate, clusterFSID sql.NullString, osdContext osdContext) (string, error) {
 	payload := struct {
 		Source      string  `json:"source"`
 		ClusterFSID *string `json:"clusterFsid,omitempty"`
 		Signal      string  `json:"signal"`
+		OSD         *int    `json:"osd,omitempty"`
+		Host        string  `json:"host,omitempty"`
 	}{
 		Source: candidate.Source,
 		Signal: candidate.Signal,
@@ -411,6 +448,11 @@ func detectedPayload(candidate AlertCandidate, clusterFSID sql.NullString) (stri
 	if clusterFSID.Valid {
 		fsid := clusterFSID.String
 		payload.ClusterFSID = &fsid
+	}
+	if osdContext.Host != "" {
+		osd := osdContext.OSD
+		payload.OSD = &osd
+		payload.Host = osdContext.Host
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

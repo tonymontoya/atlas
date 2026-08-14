@@ -109,7 +109,7 @@ wait_for_json "current pools" "$api_base/api/v1/clusters/current/pools" \
 wait_for_json "inventory sync runs" "$api_base/api/v1/inventory-sync-runs" \
     'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded"'
 wait_for_json "alert evaluation runs" "$api_base/api/v1/alert-evaluation-runs" \
-    'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded" and .[0].casesCreated == 1'
+    'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded" and .[0].alertsEvaluated == 1'
 wait_for_json "cases" "$api_base/api/v1/cases" \
     'any(.[]; .title == "CephOSDDown on osd=1" and .status == "detected" and .severity == "high") and any(.[]; .title == "Review weekly capacity trend" and .status == "triaged")'
 detected_case_id="$(curl -fsS "$api_base/api/v1/cases" | jq -r '.[] | select(.title == "CephOSDDown on osd=1") | .id')"

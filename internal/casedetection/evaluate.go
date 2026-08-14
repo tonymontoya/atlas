@@ -88,6 +88,7 @@ func candidatesFromAlerts(alerts []observability.Alert) []store.AlertCandidate {
 			Source:       string(input.Source),
 			Signal:       input.Signal,
 			ClusterLabel: input.ClusterLabel,
+			OSDLabel:     alert.Labels["osd"],
 			State:        string(alert.State),
 			StartedAt:    alert.StartedAt,
 		})

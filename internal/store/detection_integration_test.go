@@ -56,6 +56,7 @@ func detectionCandidate(fingerprint, clusterLabel, state string) AlertCandidate 
 		Source:       "prometheus",
 		Signal:       "CEPH_OSD_DOWN",
 		ClusterLabel: clusterLabel,
+		OSDLabel:     "1",
 		State:        state,
 		StartedAt:    time.Date(2026, 8, 14, 9, 15, 0, 0, time.UTC),
 	}
@@ -73,6 +74,9 @@ func syncDetectionTestCluster(t *testing.T, store *PostgresStore, ctx context.Co
 			Type:        "bare-metal",
 		},
 		Health: inventory.Health{Status: inventory.HealthOK, Summary: "test cluster"},
+		OSDs: []inventory.OSD{
+			{ID: 1, Host: "detection-test-host.example.invalid", Up: false, In: true},
+		},
 	})
 	if err != nil {
 		t.Fatalf("save inventory observation: %v", err)
@@ -142,6 +146,9 @@ func TestDetectFromAlertsCreatesCaseTimelineAndDedupRow(t *testing.T) {
 	}
 	if payload["clusterFsid"] != "00000000-0000-4000-8000-000000000906" {
 		t.Fatalf("timeline payload = %+v, want clusterFsid", payload)
+	}
+	if payload["osd"] != float64(1) || payload["host"] != "detection-test-host.example.invalid" {
+		t.Fatalf("timeline payload = %+v, want osd and host context from the current read model", payload)
 	}
 
 	var dedupState, dedupName string
@@ -378,6 +385,9 @@ func TestDetectFromAlertsWithUnresolvedClusterLabelCreatesCaseWithoutCluster(t *
 	}
 	if payload["clusterFsid"] != nil {
 		t.Fatalf("timeline payload = %+v, want no clusterFsid", payload)
+	}
+	if payload["osd"] != nil || payload["host"] != nil {
+		t.Fatalf("timeline payload = %+v, want no osd or host context without a resolved cluster", payload)
 	}
 }
 
