@@ -20,7 +20,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	result, err := inventorysync.RunFakeOnce(ctx, store.NewPostgres(db), inventorysync.Options{
 		Scenario: cfg.FakeScenario,
