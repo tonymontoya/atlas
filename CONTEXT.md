@@ -84,6 +84,14 @@ _Avoid_: Timeline entry, log line
 A user-facing chronological event showing operational progress on a Case or Workflow Instance.
 _Avoid_: Audit event
 
+**Alert**:
+A normalized condition report from an observability source such as Prometheus.
+_Avoid_: Incident, alarm
+
+**Alert Fingerprint**:
+A stable identity for an alert condition (alert name plus non-context labels), used to deduplicate automatic Case creation.
+_Avoid_: Alert ID, hash key
+
 **Atlas Agent**:
 A privileged component that executes strongly typed, approved operations close to Ceph clusters.
 _Avoid_: SSH proxy, remote shell, worker node

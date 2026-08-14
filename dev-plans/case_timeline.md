@@ -1,6 +1,9 @@
 # Case Timeline Read Model
 **Version:** 0.1 (Draft)
-**Status:** Pre-implementation Design
+**Status:** Read model implemented (`GET /api/v1/cases/{id}/timeline`, seeded
+events); `case_detected` write side implemented in v0.3.0
+(`internal/casedetection` writes it when an alert creates a Case). Remaining
+event types are still design-only.
 **Audience:** Engineering, Architecture, Product, Contributors
 **Project:** Atlas
 

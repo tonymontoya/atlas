@@ -1,6 +1,9 @@
 # Atlas Provider Contracts
 **Version:** 0.1 (Draft)  
-**Status:** Pre-development Design  
+**Status:** Design with partial implementation — the CephReadProvider read
+surface (§10) and the ObservabilityProvider `CurrentAlerts` method (§11) are
+implemented against the fake provider with shared contract suites; remaining
+methods and real-Ceph/Rook/Prometheus implementations are unimplemented.  
 **Audience:** Engineering, Architecture, Product, Contributors  
 **Project:** Atlas
 

@@ -14,14 +14,19 @@ What exists today:
 - React and TypeScript web UI scaffold
 - PostgreSQL persistence with plain SQL migrations
 - Fake-provider inventory fixtures and an inventory sync command
+- Fake-provider alert evaluation that automatically creates a Case (with
+  Timeline Events and deduplication) from a firing alert
 - Seeded read-only Case and Case Timeline records
 - A local Docker Compose stack for the full development environment
 
 What does not exist yet:
 
-- Real Ceph or Rook providers (the only provider is the fake provider)
+- Real Ceph or Rook providers (the only provider is the fake provider; alert
+  detection reads fake Prometheus fixtures, not a live Prometheus)
 - Atlas Agent and any mutating operation
 - Authentication, RBAC, and audit enforcement
+- Manual Case creation, assignment, or status mutation (Case writes are
+  detection-generated only)
 
 ## Roadmap
 
@@ -79,7 +84,8 @@ make db-up
 ```
 
 The full local stack runs PostgreSQL, applies migrations, seeds one fake
-inventory snapshot, starts the API on `127.0.0.1:8080`, and starts the web UI on
+inventory snapshot, runs one fake alert evaluation that creates a detected
+Case, starts the API on `127.0.0.1:8080`, and starts the web UI on
 `127.0.0.1:5173`:
 
 ```sh

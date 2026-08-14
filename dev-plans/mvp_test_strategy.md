@@ -275,6 +275,12 @@ Required first fixtures:
 - normalized Host/Storage Device inventory
 - normalized Case input from alert
 
+All required first fixtures exist as of v0.3.0: Ceph read scenarios and
+error directives under `dev/fixtures/ceph/`, Prometheus alert scenarios
+under `dev/fixtures/prometheus/`, and normalized examples under
+`dev/fixtures/normalized/` (including `case-input/osd-down-alert.json`,
+pinned by a golden test in `internal/casedetection`).
+
 Fixture rules:
 
 - scrub all sensitive values
@@ -424,10 +430,10 @@ The first scaffold is test-ready when:
   Resolved: vitest (already in use). TypeScript linting uses ESLint with
   typescript-eslint; `make web-lint` runs it.
 - ~~Should provider contract tests be shared test suites that every implementation imports?~~
-  Resolved: `internal/providers/contracttest` exports a shared suite
-  (`RunReadProviderSuite`) that every read provider implementation
-  wires into its own tests via a scenario factory. Run with
-  `make provider-contract-test`.
+  Resolved: `internal/providers/contracttest` exports shared suites
+  (`RunReadProviderSuite` and `RunObservabilityProviderSuite`) that every
+  provider implementation wires into its own tests via a scenario factory.
+  Run with `make provider-contract-test`.
 - Should fixture schema be JSON Schema, Go validation code, or both?
   Provisional convention in place: fake-provider fixtures may carry an
   error-directive envelope (`{"error": {"class": ..., "message": ...}}`)

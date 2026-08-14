@@ -21,6 +21,13 @@ Persist one fake-provider inventory observation with:
 make db-sync-fake
 ```
 
+Run one fake-provider alert evaluation (creates a Case from a firing alert,
+deduplicated across reruns) with:
+
+```sh
+make db-alert-eval-fake
+```
+
 Run the API against PostgreSQL-backed reads after syncing:
 
 ```sh
