@@ -98,6 +98,14 @@ wait_for_json "cluster health" "$api_base/api/v1/clusters/current/health" \
     '.status == "HEALTH_OK" and .summary == "cluster is healthy"'
 wait_for_json "current OSDs" "$api_base/api/v1/clusters/current/osds" \
     'length >= 1 and all(.[]; has("id") and has("host") and has("up") and has("in"))'
+wait_for_json "current hosts" "$api_base/api/v1/clusters/current/hosts" \
+    'length >= 1 and all(.[]; has("name") and (.name != ""))'
+wait_for_json "current storage devices" "$api_base/api/v1/clusters/current/storage-devices" \
+    'length >= 2 and all(.[]; has("host") and has("serial")) and (map(select(has("osdId"))) | length >= 1)'
+wait_for_json "current daemons" "$api_base/api/v1/clusters/current/daemons" \
+    'length >= 3 and any(.[]; .type == "mon" and .status == "running")'
+wait_for_json "current pools" "$api_base/api/v1/clusters/current/pools" \
+    'length >= 1 and all(.[]; .name != "" and (.type == "replicated" or .type == "erasure"))'
 wait_for_json "inventory sync runs" "$api_base/api/v1/inventory-sync-runs" \
     'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded"'
 wait_for_json "cases" "$api_base/api/v1/cases" \
