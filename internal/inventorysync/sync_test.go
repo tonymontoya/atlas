@@ -59,6 +59,27 @@ func TestRunOnceCollectsProviderDataAndWritesObservation(t *testing.T) {
 	if len(writer.observation.OSDs) != 2 {
 		t.Fatalf("OSD count = %d, want 2", len(writer.observation.OSDs))
 	}
+	if len(writer.observation.Hosts) != 3 {
+		t.Fatalf("Host count = %d, want 3", len(writer.observation.Hosts))
+	}
+	if len(writer.observation.Devices) != 3 {
+		t.Fatalf("Storage Device count = %d, want 3", len(writer.observation.Devices))
+	}
+	spareDevices := 0
+	for _, device := range writer.observation.Devices {
+		if device.OSDID == nil {
+			spareDevices++
+		}
+	}
+	if spareDevices != 1 {
+		t.Fatalf("Storage Devices without an OSD link = %d, want 1", spareDevices)
+	}
+	if len(writer.observation.Daemons) != 7 {
+		t.Fatalf("Ceph Daemon count = %d, want 7", len(writer.observation.Daemons))
+	}
+	if len(writer.observation.Pools) != 2 {
+		t.Fatalf("Pool count = %d, want 2", len(writer.observation.Pools))
+	}
 	if !writer.observation.ObservedAt.Equal(observedAt) {
 		t.Fatalf("ObservedAt = %s, want %s", writer.observation.ObservedAt, observedAt)
 	}

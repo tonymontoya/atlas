@@ -56,4 +56,8 @@ type CephReadProvider interface {
 	ClusterIdentity(ctx context.Context) (fleet.ClusterIdentity, error)
 	Health(ctx context.Context) (inventory.Health, error)
 	OSDs(ctx context.Context) ([]inventory.OSD, error)
+	Hosts(ctx context.Context) ([]inventory.Host, error)
+	HostDevices(ctx context.Context, host string) ([]inventory.StorageDevice, error)
+	Daemons(ctx context.Context) ([]inventory.Daemon, error)
+	Pools(ctx context.Context) ([]inventory.Pool, error)
 }

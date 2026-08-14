@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -22,6 +23,10 @@ type InventoryObservation struct {
 	Cluster    fleet.ClusterIdentity
 	Health     inventory.Health
 	OSDs       []inventory.OSD
+	Hosts      []inventory.Host
+	Devices    []inventory.StorageDevice
+	Daemons    []inventory.Daemon
+	Pools      []inventory.Pool
 	Metadata   json.RawMessage
 }
 
@@ -386,6 +391,233 @@ func (s *PostgresStore) OSDs(ctx context.Context) ([]inventory.OSD, error) {
 	return osds, nil
 }
 
+func (s *PostgresStore) Hosts(ctx context.Context) ([]inventory.Host, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		WITH current_cluster AS (
+			SELECT id AS snapshot_id
+			FROM inventory_snapshots
+			ORDER BY observed_at DESC, id DESC
+			LIMIT 1
+		)
+		SELECT hosts.host_name, hosts.address
+		FROM host_observations AS hosts
+		WHERE hosts.snapshot_id = (SELECT snapshot_id FROM current_cluster)
+		ORDER BY hosts.host_name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var hosts []inventory.Host
+	for rows.Next() {
+		var host inventory.Host
+		var address sql.NullString
+		if err := rows.Scan(&host.Name, &address); err != nil {
+			return nil, err
+		}
+		if address.Valid {
+			host.Address = address.String
+		}
+		hosts = append(hosts, host)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(hosts) == 0 {
+		return nil, notFound("current host inventory not found")
+	}
+	return hosts, nil
+}
+
+func (s *PostgresStore) HostDevices(ctx context.Context, host string) ([]inventory.StorageDevice, error) {
+	if host == "" {
+		return nil, notFound("host not found")
+	}
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+		WITH current_cluster AS (
+			SELECT id AS snapshot_id
+			FROM inventory_snapshots
+			ORDER BY observed_at DESC, id DESC
+			LIMIT 1
+		)
+		SELECT EXISTS (
+			SELECT 1
+			FROM host_observations AS hosts
+			WHERE hosts.snapshot_id = (SELECT snapshot_id FROM current_cluster)
+				AND hosts.host_name = $1
+		)
+	`, host).Scan(&exists)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, notFound(fmt.Sprintf("host %q not found", host))
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		WITH current_cluster AS (
+			SELECT id AS snapshot_id
+			FROM inventory_snapshots
+			ORDER BY observed_at DESC, id DESC
+			LIMIT 1
+		)
+		SELECT devices.host_name, devices.serial, devices.device_type, devices.device_path, devices.device_health, devices.osd_id
+		FROM storage_device_observations AS devices
+		WHERE devices.snapshot_id = (SELECT snapshot_id FROM current_cluster)
+			AND devices.host_name = $1
+		ORDER BY devices.serial
+	`, host)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	devices := make([]inventory.StorageDevice, 0)
+	for rows.Next() {
+		device, err := scanStorageDevice(rows)
+		if err != nil {
+			return nil, err
+		}
+		devices = append(devices, device)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return devices, nil
+}
+
+func (s *PostgresStore) Daemons(ctx context.Context) ([]inventory.Daemon, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		WITH current_cluster AS (
+			SELECT id AS snapshot_id
+			FROM inventory_snapshots
+			ORDER BY observed_at DESC, id DESC
+			LIMIT 1
+		)
+		SELECT daemons.daemon_type, daemons.daemon_name, daemons.host_name, daemons.status, daemons.ceph_version
+		FROM daemon_observations AS daemons
+		WHERE daemons.snapshot_id = (SELECT snapshot_id FROM current_cluster)
+		ORDER BY daemons.daemon_type, daemons.daemon_name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var daemons []inventory.Daemon
+	for rows.Next() {
+		var daemon inventory.Daemon
+		var version sql.NullString
+		if err := rows.Scan(&daemon.Type, &daemon.Name, &daemon.Host, &daemon.Status, &version); err != nil {
+			return nil, err
+		}
+		if version.Valid {
+			daemon.Version = version.String
+		}
+		daemons = append(daemons, daemon)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(daemons) == 0 {
+		return nil, notFound("current Ceph Daemon inventory not found")
+	}
+	return daemons, nil
+}
+
+func (s *PostgresStore) Pools(ctx context.Context) ([]inventory.Pool, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		WITH current_cluster AS (
+			SELECT id AS snapshot_id
+			FROM inventory_snapshots
+			ORDER BY observed_at DESC, id DESC
+			LIMIT 1
+		)
+		SELECT pools.pool_id, pools.name, pools.pool_type, pools.size, pools.min_size
+		FROM pool_observations AS pools
+		WHERE pools.snapshot_id = (SELECT snapshot_id FROM current_cluster)
+		ORDER BY pools.pool_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pools []inventory.Pool
+	for rows.Next() {
+		pool, err := scanPool(rows)
+		if err != nil {
+			return nil, err
+		}
+		pools = append(pools, pool)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(pools) == 0 {
+		return nil, notFound("current Pool inventory not found")
+	}
+	return pools, nil
+}
+
+func scanStorageDevice(scanner rowScanner) (inventory.StorageDevice, error) {
+	var device inventory.StorageDevice
+	var deviceType sql.NullString
+	var devicePath sql.NullString
+	var deviceHealth sql.NullString
+	var osdID sql.NullInt64
+	if err := scanner.Scan(
+		&device.Host,
+		&device.Serial,
+		&deviceType,
+		&devicePath,
+		&deviceHealth,
+		&osdID,
+	); err != nil {
+		return inventory.StorageDevice{}, err
+	}
+	if deviceType.Valid {
+		device.Type = deviceType.String
+	}
+	if devicePath.Valid {
+		device.Path = devicePath.String
+	}
+	if deviceHealth.Valid {
+		device.Health = deviceHealth.String
+	}
+	if osdID.Valid {
+		id := int(osdID.Int64)
+		device.OSDID = &id
+	}
+	return device, nil
+}
+
+func scanPool(scanner rowScanner) (inventory.Pool, error) {
+	var pool inventory.Pool
+	var size sql.NullInt64
+	var minSize sql.NullInt64
+	if err := scanner.Scan(
+		&pool.ID,
+		&pool.Name,
+		&pool.Type,
+		&size,
+		&minSize,
+	); err != nil {
+		return inventory.Pool{}, err
+	}
+	if size.Valid {
+		value := int(size.Int64)
+		pool.Size = &value
+	}
+	if minSize.Valid {
+		value := int(minSize.Int64)
+		pool.MinSize = &value
+	}
+	return pool, nil
+}
+
 func (s *PostgresStore) SaveInventoryObservation(ctx context.Context, obs InventoryObservation) (SaveInventoryResult, error) {
 	obs, err := normalizeInventoryObservation(obs)
 	if err != nil {
@@ -421,6 +653,26 @@ func (s *PostgresStore) SaveInventoryObservation(ctx context.Context, obs Invent
 	}
 	for _, osd := range obs.OSDs {
 		if err := insertOSD(ctx, tx, snapshotID, osd); err != nil {
+			return SaveInventoryResult{}, err
+		}
+	}
+	for _, host := range obs.Hosts {
+		if err := insertHost(ctx, tx, snapshotID, host); err != nil {
+			return SaveInventoryResult{}, err
+		}
+	}
+	for _, device := range obs.Devices {
+		if err := insertStorageDevice(ctx, tx, snapshotID, device); err != nil {
+			return SaveInventoryResult{}, err
+		}
+	}
+	for _, daemon := range obs.Daemons {
+		if err := insertDaemon(ctx, tx, snapshotID, daemon); err != nil {
+			return SaveInventoryResult{}, err
+		}
+	}
+	for _, pool := range obs.Pools {
+		if err := insertPool(ctx, tx, snapshotID, pool); err != nil {
 			return SaveInventoryResult{}, err
 		}
 	}
@@ -577,5 +829,54 @@ func insertOSD(ctx context.Context, tx *sql.Tx, snapshotID int64, osd inventory.
 		INSERT INTO osd_observations (snapshot_id, osd_id, host, osd_up, osd_in, device)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, snapshotID, osd.ID, osd.Host, osd.Up, osd.In, device)
+	return err
+}
+
+func insertHost(ctx context.Context, tx *sql.Tx, snapshotID int64, host inventory.Host) error {
+	address := sql.NullString{String: host.Address, Valid: host.Address != ""}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO host_observations (snapshot_id, host_name, address)
+		VALUES ($1, $2, $3)
+	`, snapshotID, host.Name, address)
+	return err
+}
+
+func insertStorageDevice(ctx context.Context, tx *sql.Tx, snapshotID int64, device inventory.StorageDevice) error {
+	deviceType := sql.NullString{String: device.Type, Valid: device.Type != ""}
+	devicePath := sql.NullString{String: device.Path, Valid: device.Path != ""}
+	deviceHealth := sql.NullString{String: device.Health, Valid: device.Health != ""}
+	osdID := sql.NullInt64{}
+	if device.OSDID != nil {
+		osdID.Int64, osdID.Valid = int64(*device.OSDID), true
+	}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO storage_device_observations (snapshot_id, host_name, serial, device_type, device_path, device_health, osd_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, snapshotID, device.Host, device.Serial, deviceType, devicePath, deviceHealth, osdID)
+	return err
+}
+
+func insertDaemon(ctx context.Context, tx *sql.Tx, snapshotID int64, daemon inventory.Daemon) error {
+	version := sql.NullString{String: daemon.Version, Valid: daemon.Version != ""}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO daemon_observations (snapshot_id, daemon_type, daemon_name, host_name, status, ceph_version)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, snapshotID, daemon.Type, daemon.Name, daemon.Host, daemon.Status, version)
+	return err
+}
+
+func insertPool(ctx context.Context, tx *sql.Tx, snapshotID int64, pool inventory.Pool) error {
+	size := sql.NullInt64{}
+	if pool.Size != nil {
+		size.Int64, size.Valid = int64(*pool.Size), true
+	}
+	minSize := sql.NullInt64{}
+	if pool.MinSize != nil {
+		minSize.Int64, minSize.Valid = int64(*pool.MinSize), true
+	}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO pool_observations (snapshot_id, pool_id, name, pool_type, size, min_size)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, snapshotID, pool.ID, pool.Name, pool.Type, size, minSize)
 	return err
 }

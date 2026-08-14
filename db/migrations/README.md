@@ -40,6 +40,18 @@ behavior.
 The migration seeds local development Timeline Events for the seeded cases.
 These records are display-oriented operational history, not Audit Events.
 
+## Inventory Read Model
+
+`000005_inventory_read_model.up.sql` creates:
+
+- `host_observations`, `storage_device_observations`, `daemon_observations`,
+  and `pool_observations`: append-only per-snapshot inventory observations.
+- `cluster_current_hosts`, `cluster_current_storage_devices`,
+  `cluster_current_daemons`, and `cluster_current_pools`: API-facing views
+  over the latest observations.
+- `storage_device_osd_history`: historical Storage Device to OSD identity
+  links with first/last observed timestamps (see ADR-0014).
+
 The API can optionally read inventory, Case, and Case Timeline records from
 PostgreSQL with `ATLAS_READ_SOURCE=postgres`. Inventory endpoints need an
 explicit fake-provider sync before they have current cluster data. Seeded Case

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tonymontoya/ceph-atlas/internal/fleet"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
@@ -78,6 +80,62 @@ func TestRunOncePersistsFakeProviderObservationToPostgres(t *testing.T) {
 		t.Fatal("expected one down OSD")
 	}
 
+	var hostCount int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM cluster_current_hosts
+		WHERE fsid = $1
+	`, fsid).Scan(&hostCount); err != nil {
+		t.Fatalf("query current hosts: %v", err)
+	}
+	if hostCount != 3 {
+		t.Fatalf("Host count = %d, want 3", hostCount)
+	}
+
+	var deviceCount int
+	var hasErrorDevice bool
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*), bool_or(device_health = 'error')
+		FROM cluster_current_storage_devices
+		WHERE fsid = $1
+	`, fsid).Scan(&deviceCount, &hasErrorDevice); err != nil {
+		t.Fatalf("query current storage devices: %v", err)
+	}
+	if deviceCount != 3 {
+		t.Fatalf("Storage Device count = %d, want 3", deviceCount)
+	}
+	if !hasErrorDevice {
+		t.Fatal("expected one Storage Device with error health")
+	}
+
+	var daemonCount int
+	var stoppedDaemons int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*), count(*) FILTER (WHERE status = 'stopped')
+		FROM cluster_current_daemons
+		WHERE fsid = $1
+	`, fsid).Scan(&daemonCount, &stoppedDaemons); err != nil {
+		t.Fatalf("query current daemons: %v", err)
+	}
+	if daemonCount != 7 {
+		t.Fatalf("Ceph Daemon count = %d, want 7", daemonCount)
+	}
+	if stoppedDaemons != 1 {
+		t.Fatalf("stopped Ceph Daemon count = %d, want 1", stoppedDaemons)
+	}
+
+	var poolCount int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM cluster_current_pools
+		WHERE fsid = $1
+	`, fsid).Scan(&poolCount); err != nil {
+		t.Fatalf("query current pools: %v", err)
+	}
+	if poolCount != 2 {
+		t.Fatalf("Pool count = %d, want 2", poolCount)
+	}
+
 	var runStatus string
 	var runSnapshotID int64
 	if err := db.QueryRowContext(ctx, `
@@ -94,6 +152,102 @@ func TestRunOncePersistsFakeProviderObservationToPostgres(t *testing.T) {
 	}
 	if runSnapshotID != result.SnapshotID {
 		t.Fatalf("sync run snapshot = %d, want %d", runSnapshotID, result.SnapshotID)
+	}
+}
+
+func TestSaveInventoryObservationPreservesDeviceOSDHistory(t *testing.T) {
+	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
+	}
+
+	ctx := context.Background()
+	db, err := store.OpenPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer db.Close()
+
+	const fsid = "00000000-0000-4000-8000-000000000201"
+	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid); err != nil {
+		t.Fatalf("delete existing test cluster: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid)
+	})
+
+	cluster := fleet.ClusterIdentity{
+		FSID:        fsid,
+		Name:        "device-history-test",
+		CephVersion: "18.2.x",
+		Type:        fleet.ClusterTypeBareMetal,
+	}
+	base := store.InventoryObservation{
+		Provider: "fake",
+		Scenario: "device-history-test",
+		Cluster:  cluster,
+		Health:   inventory.Health{Status: inventory.HealthOK},
+		Hosts:    []inventory.Host{{Name: "host-h.example.invalid"}},
+		Daemons:  []inventory.Daemon{{Type: "mon", Name: "mon.a", Host: "host-h.example.invalid", Status: "running"}},
+		Pools:    []inventory.Pool{{ID: 1, Name: ".mgr", Type: "replicated"}},
+	}
+
+	firstOSD := 3
+	secondOSD := 7
+	first := base
+	first.ObservedAt = time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	first.OSDs = []inventory.OSD{{ID: firstOSD, Host: "host-h.example.invalid", Up: true, In: true}}
+	first.Devices = []inventory.StorageDevice{{Host: "host-h.example.invalid", Serial: "nvme-serial-h", OSDID: &firstOSD}}
+	if _, err := store.NewPostgres(db).SaveInventoryObservation(ctx, first); err != nil {
+		t.Fatalf("save first observation: %v", err)
+	}
+
+	second := base
+	second.ObservedAt = time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
+	second.OSDs = []inventory.OSD{{ID: secondOSD, Host: "host-h.example.invalid", Up: true, In: true}}
+	second.Devices = []inventory.StorageDevice{{Host: "host-h.example.invalid", Serial: "nvme-serial-h", OSDID: &secondOSD}}
+	if _, err := store.NewPostgres(db).SaveInventoryObservation(ctx, second); err != nil {
+		t.Fatalf("save second observation: %v", err)
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT osd_id, first_observed_at, last_observed_at
+		FROM storage_device_osd_history
+		WHERE fsid = $1 AND serial = 'nvme-serial-h'
+		ORDER BY osd_id
+	`, fsid)
+	if err != nil {
+		t.Fatalf("query device OSD history: %v", err)
+	}
+	defer rows.Close()
+
+	type link struct {
+		osdID         int
+		firstObserved time.Time
+		lastObserved  time.Time
+	}
+	var links []link
+	for rows.Next() {
+		var l link
+		if err := rows.Scan(&l.osdID, &l.firstObserved, &l.lastObserved); err != nil {
+			t.Fatalf("scan device OSD history: %v", err)
+		}
+		links = append(links, l)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate device OSD history: %v", err)
+	}
+	if len(links) != 2 {
+		t.Fatalf("history link count = %d, want 2 (OSD 3 then OSD 7 on one device)", len(links))
+	}
+	if links[0].osdID != firstOSD || links[1].osdID != secondOSD {
+		t.Fatalf("history OSD IDs = [%d, %d], want [%d, %d]", links[0].osdID, links[1].osdID, firstOSD, secondOSD)
+	}
+	if !links[0].firstObserved.Equal(first.ObservedAt) || !links[0].lastObserved.Equal(first.ObservedAt) {
+		t.Fatalf("first link observed range = [%s, %s], want [%s, %s]", links[0].firstObserved, links[0].lastObserved, first.ObservedAt, first.ObservedAt)
+	}
+	if !links[1].firstObserved.Equal(second.ObservedAt) || !links[1].lastObserved.Equal(second.ObservedAt) {
+		t.Fatalf("second link observed range = [%s, %s], want [%s, %s]", links[1].firstObserved, links[1].lastObserved, second.ObservedAt, second.ObservedAt)
 	}
 }
 
