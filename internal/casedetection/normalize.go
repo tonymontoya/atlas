@@ -10,6 +10,7 @@ import (
 )
 
 type CaseInput struct {
+	Name         string                    `json:"name"`
 	Title        string                    `json:"title"`
 	Summary      string                    `json:"summary"`
 	Severity     cases.CaseSeverity        `json:"severity"`
@@ -21,6 +22,7 @@ type CaseInput struct {
 
 func Normalize(alert observability.Alert) CaseInput {
 	return CaseInput{
+		Name:         alert.Name,
 		Title:        Title(alert),
 		Summary:      Summary(alert),
 		Severity:     MapSeverity(alert.Severity),

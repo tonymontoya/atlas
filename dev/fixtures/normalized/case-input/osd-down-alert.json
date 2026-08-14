@@ -1,4 +1,5 @@
 {
+  "name": "CephOSDDown",
   "title": "CephOSDDown on osd=1",
   "summary": "OSD 1 is down",
   "severity": "high",
