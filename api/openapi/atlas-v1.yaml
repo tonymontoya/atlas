@@ -744,6 +744,31 @@ components:
         closedAt:
           type: string
           format: date-time
+        detectedBy:
+          $ref: "#/components/schemas/CaseDetectionLink"
+    CaseDetectionLink:
+      type: object
+      additionalProperties: false
+      required:
+        - source
+        - alertName
+        - firstSeenAt
+        - lastSeenAt
+      properties:
+        source:
+          $ref: "#/components/schemas/CaseSource"
+        alertName:
+          type: string
+          description: Normalized alert name that detected the case, e.g. CephOSDDown.
+        signal:
+          type: string
+          description: Normalized signal identifier, e.g. CEPH_OSD_DOWN.
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
     CaseStatus:
       type: string
       enum:

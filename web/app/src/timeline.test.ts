@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import type { TimelineEvent, TimelineEventType } from "./api";
-import { labelForTimelineEventType, timelinePayloadLabels } from "./timeline";
+import type { CaseDetectionLink, TimelineEvent, TimelineEventType } from "./api";
+import { detectionLabel, labelForTimelineEventType, timelinePayloadLabels } from "./timeline";
+
+describe("detectionLabel", () => {
+  it("renders a normalized detection source and alert name", () => {
+    const detectedBy: CaseDetectionLink = {
+      source: "prometheus",
+      alertName: "CephOSDDown",
+      signal: "CEPH_OSD_DOWN",
+      firstSeenAt: "2026-08-14T09:20:00Z",
+      lastSeenAt: "2026-08-14T09:25:00Z",
+    };
+    expect(detectionLabel(detectedBy)).toBe("Detected by Prometheus · CephOSDDown");
+  });
+});
 
 describe("labelForTimelineEventType", () => {
   it("returns operator-readable labels for timeline event types", () => {

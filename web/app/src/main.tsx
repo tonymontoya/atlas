@@ -14,7 +14,7 @@ import {
   type TimelineEvent,
 } from "./api";
 import { poolRedundancyLabel, stoppedDaemonCount, storageDeviceOSDLabel } from "./inventory";
-import { labelForTimelineEventType, timelinePayloadLabels } from "./timeline";
+import { detectionLabel, labelForTimelineEventType, timelinePayloadLabels } from "./timeline";
 import "./styles.css";
 
 function App() {
@@ -443,12 +443,21 @@ function CaseDetailPanel({
               <span>{detail.source}</span>
             </div>
           </div>
+          {detail.detectedBy ? (
+            <p className="detection-link">{detectionLabel(detail.detectedBy)}</p>
+          ) : null}
           <div className="detail-grid">
             <DetailField label="Case ID" value={`#${detail.id}`} />
             <DetailField label="Cluster FSID" value={detail.clusterFsid ?? "unassigned"} />
             <DetailField label="Created" value={formatDate(detail.createdAt)} />
             <DetailField label="Updated" value={formatDate(detail.updatedAt)} />
             <DetailField label="Closed" value={detail.closedAt ? formatDate(detail.closedAt) : "open"} />
+            {detail.detectedBy ? (
+              <DetailField
+                label="Alert first seen"
+                value={formatDate(detail.detectedBy.firstSeenAt)}
+              />
+            ) : null}
           </div>
           <CaseTimeline
             error={timelineError}

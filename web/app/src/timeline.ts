@@ -1,4 +1,4 @@
-import type { TimelineEvent, TimelineEventType } from "./api";
+import type { CaseDetectionLink, TimelineEvent, TimelineEventType } from "./api";
 
 export function labelForTimelineEventType(type: TimelineEventType): string {
   switch (type) {
@@ -41,4 +41,9 @@ export function timelinePayloadLabels(event: TimelineEvent): string[] {
   }
 
   return labels;
+}
+
+export function detectionLabel(detectedBy: CaseDetectionLink): string {
+  const source = detectedBy.source.charAt(0).toUpperCase() + detectedBy.source.slice(1);
+  return `Detected by ${source} · ${detectedBy.alertName}`;
 }

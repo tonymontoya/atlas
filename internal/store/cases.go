@@ -49,16 +49,85 @@ func (s *PostgresStore) GetCase(ctx context.Context, id int64) (cases.Case, erro
 	}
 
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, title, summary, status, severity, source, cluster_fsid::text, created_at, updated_at, closed_at
+		SELECT cases.id, cases.title, cases.summary, cases.status, cases.severity, cases.source,
+			cases.cluster_fsid::text, cases.created_at, cases.updated_at, cases.closed_at,
+			dedup.alert_name, dedup.first_seen_at, dedup.last_seen_at,
+			(
+				SELECT payload->>'source'
+				FROM case_timeline_events
+				WHERE case_id = cases.id AND event_type = 'case_detected'
+				ORDER BY occurred_at DESC, id DESC
+				LIMIT 1
+			),
+			(
+				SELECT payload->>'signal'
+				FROM case_timeline_events
+				WHERE case_id = cases.id AND event_type = 'case_detected'
+				ORDER BY occurred_at DESC, id DESC
+				LIMIT 1
+			)
 		FROM cases
-		WHERE id = $1
+		LEFT JOIN case_alert_dedup AS dedup ON dedup.case_id = cases.id
+		WHERE cases.id = $1
 	`, id)
-	item, err := scanCase(row)
+	item, err := scanCaseDetail(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return cases.Case{}, notFound("case not found")
 	}
 	if err != nil {
 		return cases.Case{}, err
+	}
+	return item, nil
+}
+
+func scanCaseDetail(scanner rowScanner) (cases.Case, error) {
+	var item cases.Case
+	var clusterFSID sql.NullString
+	var closedAt sql.NullTime
+	var alertName sql.NullString
+	var firstSeenAt sql.NullTime
+	var lastSeenAt sql.NullTime
+	var detectedSource sql.NullString
+	var detectedSignal sql.NullString
+	if err := scanner.Scan(
+		&item.ID,
+		&item.Title,
+		&item.Summary,
+		&item.Status,
+		&item.Severity,
+		&item.Source,
+		&clusterFSID,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&closedAt,
+		&alertName,
+		&firstSeenAt,
+		&lastSeenAt,
+		&detectedSource,
+		&detectedSignal,
+	); err != nil {
+		return cases.Case{}, err
+	}
+	if clusterFSID.Valid {
+		item.ClusterFSID = clusterFSID.String
+	}
+	if closedAt.Valid {
+		item.ClosedAt = &closedAt.Time
+	}
+	if alertName.Valid && firstSeenAt.Valid && lastSeenAt.Valid {
+		detectedBy := cases.DetectionLink{
+			Source:      string(item.Source),
+			AlertName:   alertName.String,
+			FirstSeenAt: firstSeenAt.Time,
+			LastSeenAt:  lastSeenAt.Time,
+		}
+		if detectedSource.Valid {
+			detectedBy.Source = detectedSource.String
+		}
+		if detectedSignal.Valid {
+			detectedBy.Signal = detectedSignal.String
+		}
+		item.DetectedBy = &detectedBy
 	}
 	return item, nil
 }

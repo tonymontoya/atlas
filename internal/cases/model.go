@@ -31,16 +31,25 @@ const (
 )
 
 type Case struct {
-	ID          int64        `json:"id"`
-	Title       string       `json:"title"`
-	Summary     string       `json:"summary"`
-	Status      CaseStatus   `json:"status"`
-	Severity    CaseSeverity `json:"severity"`
-	Source      CaseSource   `json:"source"`
-	ClusterFSID string       `json:"clusterFsid,omitempty"`
-	CreatedAt   time.Time    `json:"createdAt"`
-	UpdatedAt   time.Time    `json:"updatedAt"`
-	ClosedAt    *time.Time   `json:"closedAt,omitempty"`
+	ID          int64          `json:"id"`
+	Title       string         `json:"title"`
+	Summary     string         `json:"summary"`
+	Status      CaseStatus     `json:"status"`
+	Severity    CaseSeverity   `json:"severity"`
+	Source      CaseSource     `json:"source"`
+	ClusterFSID string         `json:"clusterFsid,omitempty"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
+	ClosedAt    *time.Time     `json:"closedAt,omitempty"`
+	DetectedBy  *DetectionLink `json:"detectedBy,omitempty"`
+}
+
+type DetectionLink struct {
+	Source      string    `json:"source"`
+	AlertName   string    `json:"alertName"`
+	Signal      string    `json:"signal,omitempty"`
+	FirstSeenAt time.Time `json:"firstSeenAt"`
+	LastSeenAt  time.Time `json:"lastSeenAt"`
 }
 
 type TimelineEventType string

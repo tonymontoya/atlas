@@ -156,6 +156,23 @@ func TestDetectFromAlertsCreatesCaseTimelineAndDedupRow(t *testing.T) {
 	if linkedID != caseID || dedupState != "open" || dedupName != "CephOSDDown" {
 		t.Fatalf("dedup row = %d/%q/%q, want case %d open CephOSDDown", linkedID, dedupState, dedupName, caseID)
 	}
+
+	detailed, err := store.GetCase(ctx, caseID)
+	if err != nil {
+		t.Fatalf("GetCase for detected case: %v", err)
+	}
+	if detailed.DetectedBy == nil {
+		t.Fatal("detected case has no detection link")
+	}
+	if detailed.DetectedBy.Source != "prometheus" || detailed.DetectedBy.AlertName != "CephOSDDown" {
+		t.Fatalf("detection link = %+v, want prometheus CephOSDDown", detailed.DetectedBy)
+	}
+	if detailed.DetectedBy.Signal != "CEPH_OSD_DOWN" {
+		t.Fatalf("detection link signal = %q, want CEPH_OSD_DOWN", detailed.DetectedBy.Signal)
+	}
+	if !detailed.DetectedBy.FirstSeenAt.Equal(evaluatedAt) || !detailed.DetectedBy.LastSeenAt.Equal(evaluatedAt) {
+		t.Fatalf("detection link seen at = %v..%v, want %v", detailed.DetectedBy.FirstSeenAt, detailed.DetectedBy.LastSeenAt, evaluatedAt)
+	}
 }
 
 func TestDetectFromAlertsIsIdempotentForFiringAlerts(t *testing.T) {

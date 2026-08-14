@@ -71,6 +71,14 @@ export type InventorySyncRun = {
   errorMessage?: string;
 };
 
+export type CaseDetectionLink = {
+  source: CaseRecord["source"];
+  alertName: string;
+  signal?: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
 export type CaseRecord = {
   id: number;
   title: string;
@@ -82,6 +90,7 @@ export type CaseRecord = {
   createdAt: string;
   updatedAt: string;
   closedAt?: string;
+  detectedBy?: CaseDetectionLink;
 };
 
 export type TimelineEventType =

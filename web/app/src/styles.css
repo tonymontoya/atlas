@@ -358,6 +358,12 @@ th {
   margin: 0;
 }
 
+.detection-link {
+  color: #51636e;
+  font-size: 13px;
+  margin: 0;
+}
+
 .detail-grid {
   display: grid;
   gap: 10px;
