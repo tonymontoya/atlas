@@ -108,7 +108,7 @@ func (s *PostgresStore) ListCases(ctx context.Context, limit int) ([]cases.Case,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make([]cases.Case, 0)
 	for rows.Next() {
@@ -173,7 +173,7 @@ func (s *PostgresStore) ListCaseTimeline(ctx context.Context, caseID int64) ([]c
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make([]cases.TimelineEvent, 0)
 	for rows.Next() {
@@ -271,7 +271,7 @@ func (s *PostgresStore) ListInventorySyncRuns(ctx context.Context, limit int) ([
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	runs := make([]InventorySyncRun, 0)
 	for rows.Next() {
@@ -369,7 +369,7 @@ func (s *PostgresStore) OSDs(ctx context.Context) ([]inventory.OSD, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var osds []inventory.OSD
 	for rows.Next() {
@@ -401,7 +401,7 @@ func (s *PostgresStore) Hosts(ctx context.Context) ([]inventory.Host, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var hosts []inventory.Host
 	for rows.Next() {
@@ -452,7 +452,7 @@ func (s *PostgresStore) HostDevices(ctx context.Context, host string) ([]invento
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	devices := make([]inventory.StorageDevice, 0)
 	for rows.Next() {
@@ -477,7 +477,7 @@ func (s *PostgresStore) Daemons(ctx context.Context) ([]inventory.Daemon, error)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var daemons []inventory.Daemon
 	for rows.Next() {
@@ -509,7 +509,7 @@ func (s *PostgresStore) Pools(ctx context.Context) ([]inventory.Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var pools []inventory.Pool
 	for rows.Next() {

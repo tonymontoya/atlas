@@ -15,7 +15,7 @@ func TestPostgresStoreListsAndGetsSeedCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	store := NewPostgres(db)
 	listed, err := store.ListCases(ctx, 50)
@@ -45,7 +45,7 @@ func TestPostgresStoreListsSeedCaseTimeline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	store := NewPostgres(db)
 	listed, err := store.ListCases(ctx, 50)
@@ -87,7 +87,7 @@ func TestPostgresStoreReturnsNotFoundForMissingCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	_, err = NewPostgres(db).GetCase(ctx, 999999)
 	if err == nil {
@@ -102,7 +102,7 @@ func TestPostgresStoreReturnsNotFoundForMissingCaseTimeline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	_, err = NewPostgres(db).ListCaseTimeline(ctx, 999999)
 	if err == nil {

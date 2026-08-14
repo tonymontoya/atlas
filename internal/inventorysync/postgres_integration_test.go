@@ -22,7 +22,7 @@ func TestRunOncePersistsFakeProviderObservationToPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	const fsid = "00000000-0000-4000-8000-000000000102"
 	if _, err := db.ExecContext(ctx, `DELETE FROM inventory_sync_runs WHERE provider = 'fake'`); err != nil {
@@ -166,7 +166,7 @@ func TestSaveInventoryObservationPreservesDeviceOSDHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	const fsid = "00000000-0000-4000-8000-000000000201"
 	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid); err != nil {
@@ -219,7 +219,7 @@ func TestSaveInventoryObservationPreservesDeviceOSDHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query device OSD history: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type link struct {
 		osdID         int
@@ -262,7 +262,7 @@ func TestCurrentViewsReflectOnlyLatestSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	const fsid = "00000000-0000-4000-8000-000000000202"
 	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid); err != nil {
@@ -349,7 +349,7 @@ func TestRunOnceRecordsFailedSyncRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if _, err := db.ExecContext(ctx, `DELETE FROM inventory_sync_runs WHERE provider = 'fake' AND scenario = 'missing'`); err != nil {
 		t.Fatalf("delete existing failed sync runs: %v", err)

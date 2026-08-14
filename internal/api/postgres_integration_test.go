@@ -26,7 +26,7 @@ func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
 	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
 	db := openTestDB(t, ctx, databaseURL)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	resetInventoryTables(t, ctx, db)
 
 	if _, err := inventorysync.RunFakeOnce(ctx, store.NewPostgres(db), inventorysync.Options{
@@ -88,7 +88,7 @@ func TestPostgresReadSourceReturnsNotFoundForEmptyReadModel(t *testing.T) {
 	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
 	db := openTestDB(t, ctx, databaseURL)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	resetInventoryTables(t, ctx, db)
 
 	application, err := app.NewFromConfig(ctx, config.Config{
@@ -131,7 +131,7 @@ func TestPostgresReadSourceListsEmptySyncRuns(t *testing.T) {
 	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
 	db := openTestDB(t, ctx, databaseURL)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	resetInventoryTables(t, ctx, db)
 
 	server := newPostgresServer(t, ctx, databaseURL)
@@ -155,7 +155,7 @@ func TestPostgresReadSourceListsSucceededAndFailedSyncRuns(t *testing.T) {
 	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
 	db := openTestDB(t, ctx, databaseURL)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	resetInventoryTables(t, ctx, db)
 
 	writer := store.NewPostgres(db)
