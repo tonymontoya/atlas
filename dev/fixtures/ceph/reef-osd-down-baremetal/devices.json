@@ -1,0 +1,25 @@
+[
+  {
+    "host": "host-a.example.invalid",
+    "serial": "nvme-serial-a",
+    "type": "nvme",
+    "path": "/dev/nvme0n1",
+    "health": "ok",
+    "osdId": 0
+  },
+  {
+    "host": "host-b.example.invalid",
+    "serial": "nvme-serial-b",
+    "type": "nvme",
+    "path": "/dev/nvme0n1",
+    "health": "error",
+    "osdId": 1
+  },
+  {
+    "host": "host-c.example.invalid",
+    "serial": "spare-serial-c",
+    "type": "ssd",
+    "path": "/dev/sdb",
+    "health": "ok"
+  }
+]

@@ -1,0 +1,11 @@
+[
+  {
+    "name": "host-a.example.invalid"
+  },
+  {
+    "name": "host-b.example.invalid"
+  },
+  {
+    "name": "host-c.example.invalid"
+  }
+]

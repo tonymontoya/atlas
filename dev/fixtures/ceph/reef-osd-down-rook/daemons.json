@@ -1,0 +1,51 @@
+[
+  {
+    "type": "mon",
+    "name": "mon.a",
+    "host": "host-a.example.invalid",
+    "status": "running",
+    "version": "18.2.x"
+  },
+  {
+    "type": "mon",
+    "name": "mon.b",
+    "host": "host-b.example.invalid",
+    "status": "running",
+    "version": "18.2.x"
+  },
+  {
+    "type": "mon",
+    "name": "mon.c",
+    "host": "host-c.example.invalid",
+    "status": "running",
+    "version": "18.2.x"
+  },
+  {
+    "type": "mgr",
+    "name": "mgr.a",
+    "host": "host-a.example.invalid",
+    "status": "running",
+    "version": "18.2.x"
+  },
+  {
+    "type": "mgr",
+    "name": "mgr.b",
+    "host": "host-b.example.invalid",
+    "status": "running",
+    "version": "18.2.x"
+  },
+  {
+    "type": "osd",
+    "name": "osd.0",
+    "host": "host-a.example.invalid",
+    "status": "running",
+    "version": "18.2.x"
+  },
+  {
+    "type": "osd",
+    "name": "osd.1",
+    "host": "host-b.example.invalid",
+    "status": "stopped",
+    "version": "18.2.x"
+  }
+]

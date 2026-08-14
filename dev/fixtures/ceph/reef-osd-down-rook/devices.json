@@ -1,0 +1,16 @@
+[
+  {
+    "host": "host-a.example.invalid",
+    "serial": "nvme-serial-a",
+    "type": "nvme",
+    "health": "ok",
+    "osdId": 0
+  },
+  {
+    "host": "host-b.example.invalid",
+    "serial": "nvme-serial-b",
+    "type": "nvme",
+    "health": "error",
+    "osdId": 1
+  }
+]

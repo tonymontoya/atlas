@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
@@ -19,9 +20,21 @@ const (
 	ScenarioPartial      Scenario = "partial"
 )
 
-type CephReadProviderFactory func(t *testing.T, scenario Scenario) providers.CephReadProvider
+// ReadProvider is the full read surface the suite validates. It mirrors the
+// intended providers.CephReadProvider shape.
+type ReadProvider interface {
+	ClusterIdentity(ctx context.Context) (fleet.ClusterIdentity, error)
+	Health(ctx context.Context) (inventory.Health, error)
+	OSDs(ctx context.Context) ([]inventory.OSD, error)
+	Hosts(ctx context.Context) ([]inventory.Host, error)
+	HostDevices(ctx context.Context, host string) ([]inventory.StorageDevice, error)
+	Daemons(ctx context.Context) ([]inventory.Daemon, error)
+	Pools(ctx context.Context) ([]inventory.Pool, error)
+}
 
-func RunCephReadProviderSuite(t *testing.T, factory CephReadProviderFactory) {
+type ReadProviderFactory func(t *testing.T, scenario Scenario) ReadProvider
+
+func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 	errorScenarios := []struct {
 		scenario Scenario
 		class    providers.ErrorClass
@@ -33,16 +46,16 @@ func RunCephReadProviderSuite(t *testing.T, factory CephReadProviderFactory) {
 	}
 	methods := []struct {
 		name          string
-		call          func(ctx context.Context, p providers.CephReadProvider) error
-		verifySuccess func(t *testing.T, p providers.CephReadProvider)
+		call          func(ctx context.Context, p ReadProvider) error
+		verifySuccess func(t *testing.T, p ReadProvider)
 	}{
 		{
 			name: "ClusterIdentity",
-			call: func(ctx context.Context, p providers.CephReadProvider) error {
+			call: func(ctx context.Context, p ReadProvider) error {
 				_, err := p.ClusterIdentity(ctx)
 				return err
 			},
-			verifySuccess: func(t *testing.T, p providers.CephReadProvider) {
+			verifySuccess: func(t *testing.T, p ReadProvider) {
 				identity, err := p.ClusterIdentity(context.Background())
 				if err != nil {
 					t.Fatalf("ClusterIdentity returned error: %v", err)
@@ -54,11 +67,11 @@ func RunCephReadProviderSuite(t *testing.T, factory CephReadProviderFactory) {
 		},
 		{
 			name: "Health",
-			call: func(ctx context.Context, p providers.CephReadProvider) error {
+			call: func(ctx context.Context, p ReadProvider) error {
 				_, err := p.Health(ctx)
 				return err
 			},
-			verifySuccess: func(t *testing.T, p providers.CephReadProvider) {
+			verifySuccess: func(t *testing.T, p ReadProvider) {
 				health, err := p.Health(context.Background())
 				if err != nil {
 					t.Fatalf("Health returned error: %v", err)
@@ -72,17 +85,108 @@ func RunCephReadProviderSuite(t *testing.T, factory CephReadProviderFactory) {
 		},
 		{
 			name: "OSDs",
-			call: func(ctx context.Context, p providers.CephReadProvider) error {
+			call: func(ctx context.Context, p ReadProvider) error {
 				_, err := p.OSDs(ctx)
 				return err
 			},
-			verifySuccess: func(t *testing.T, p providers.CephReadProvider) {
+			verifySuccess: func(t *testing.T, p ReadProvider) {
 				osds, err := p.OSDs(context.Background())
 				if err != nil {
 					t.Fatalf("OSDs returned error: %v", err)
 				}
 				if len(osds) == 0 {
 					t.Fatal("OSDs returned empty inventory for a success scenario")
+				}
+			},
+		},
+		{
+			name: "Hosts",
+			call: func(ctx context.Context, p ReadProvider) error {
+				_, err := p.Hosts(ctx)
+				return err
+			},
+			verifySuccess: func(t *testing.T, p ReadProvider) {
+				hosts, err := p.Hosts(context.Background())
+				if err != nil {
+					t.Fatalf("Hosts returned error: %v", err)
+				}
+				if len(hosts) == 0 {
+					t.Fatal("Hosts returned empty inventory for a success scenario")
+				}
+				for _, host := range hosts {
+					if host.Name == "" {
+						t.Fatal("Hosts returned a host with an empty name")
+					}
+				}
+			},
+		},
+		{
+			name: "HostDevices",
+			call: func(ctx context.Context, p ReadProvider) error {
+				_, err := p.HostDevices(ctx, "host-device-probe.example.invalid")
+				return err
+			},
+			verifySuccess: func(t *testing.T, p ReadProvider) {
+				hosts, err := p.Hosts(context.Background())
+				if err != nil {
+					t.Fatalf("Hosts returned error: %v", err)
+				}
+				if len(hosts) == 0 {
+					t.Fatal("Hosts returned empty inventory; cannot probe HostDevices")
+				}
+				devices, err := p.HostDevices(context.Background(), hosts[0].Name)
+				if err != nil {
+					t.Fatalf("HostDevices returned error: %v", err)
+				}
+				for _, device := range devices {
+					if device.Serial == "" {
+						t.Fatal("HostDevices returned a Storage Device with an empty serial")
+					}
+					if device.Host != hosts[0].Name {
+						t.Fatalf("HostDevices returned device for host %q, want %q", device.Host, hosts[0].Name)
+					}
+				}
+			},
+		},
+		{
+			name: "Daemons",
+			call: func(ctx context.Context, p ReadProvider) error {
+				_, err := p.Daemons(ctx)
+				return err
+			},
+			verifySuccess: func(t *testing.T, p ReadProvider) {
+				daemons, err := p.Daemons(context.Background())
+				if err != nil {
+					t.Fatalf("Daemons returned error: %v", err)
+				}
+				if len(daemons) == 0 {
+					t.Fatal("Daemons returned empty inventory for a success scenario")
+				}
+				for _, daemon := range daemons {
+					if daemon.Type == "" || daemon.Name == "" {
+						t.Fatalf("Daemons returned a Ceph Daemon with an empty type or name: %+v", daemon)
+					}
+				}
+			},
+		},
+		{
+			name: "Pools",
+			call: func(ctx context.Context, p ReadProvider) error {
+				_, err := p.Pools(ctx)
+				return err
+			},
+			verifySuccess: func(t *testing.T, p ReadProvider) {
+				pools, err := p.Pools(context.Background())
+				if err != nil {
+					t.Fatalf("Pools returned error: %v", err)
+				}
+				if len(pools) == 0 {
+					t.Fatal("Pools returned empty inventory for a success scenario")
+				}
+				for _, pool := range pools {
+					if pool.Name == "" {
+						t.Fatal("Pools returned a Pool with an empty name")
+					}
 				}
 			},
 		},
@@ -100,6 +204,11 @@ func RunCephReadProviderSuite(t *testing.T, factory CephReadProviderFactory) {
 			}
 		})
 	}
+	t.Run("HostDevicesUnknownHost", func(t *testing.T) {
+		provider := factory(t, ScenarioSuccess)
+		_, err := provider.HostDevices(context.Background(), "host-device-probe.example.invalid")
+		assertErrorClass(t, err, providers.ErrorNotFound)
+	})
 	t.Run("ContextCancellation", func(t *testing.T) {
 		provider := factory(t, ScenarioSuccess)
 		ctx, cancel := context.WithCancel(context.Background())

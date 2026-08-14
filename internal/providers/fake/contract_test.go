@@ -3,15 +3,14 @@ package fake
 import (
 	"testing"
 
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/contracttest"
 )
 
 func TestCephReadProviderContract(t *testing.T) {
-	contracttest.RunCephReadProviderSuite(t, scenarioFactory)
+	contracttest.RunReadProviderSuite(t, scenarioFactory)
 }
 
-func scenarioFactory(t *testing.T, scenario contracttest.Scenario) providers.CephReadProvider {
+func scenarioFactory(t *testing.T, scenario contracttest.Scenario) contracttest.ReadProvider {
 	switch scenario {
 	case contracttest.ScenarioSuccess:
 		return New(DefaultFixtureRoot(), "reef-healthy-baremetal")

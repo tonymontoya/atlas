@@ -63,6 +63,58 @@ func (p *Provider) OSDs(ctx context.Context) ([]inventory.OSD, error) {
 	return result, nil
 }
 
+func (p *Provider) Hosts(ctx context.Context) ([]inventory.Host, error) {
+	var result []inventory.Host
+	if err := p.load(ctx, "hosts.json", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (p *Provider) HostDevices(ctx context.Context, host string) ([]inventory.StorageDevice, error) {
+	hosts, err := p.Hosts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	known := false
+	for _, candidate := range hosts {
+		if candidate.Name == host {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return nil, providers.ProviderError{Class: providers.ErrorNotFound, Message: fmt.Sprintf("host %q not found in scenario %q", host, p.scenario)}
+	}
+	var all []inventory.StorageDevice
+	if err := p.load(ctx, "devices.json", &all); err != nil {
+		return nil, err
+	}
+	devices := make([]inventory.StorageDevice, 0, len(all))
+	for _, device := range all {
+		if device.Host == host {
+			devices = append(devices, device)
+		}
+	}
+	return devices, nil
+}
+
+func (p *Provider) Daemons(ctx context.Context) ([]inventory.Daemon, error) {
+	var result []inventory.Daemon
+	if err := p.load(ctx, "daemons.json", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (p *Provider) Pools(ctx context.Context) ([]inventory.Pool, error) {
+	var result []inventory.Pool
+	if err := p.load(ctx, "pools.json", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (p *Provider) load(ctx context.Context, name string, target any) error {
 	select {
 	case <-ctx.Done():

@@ -1,0 +1,10 @@
+[
+  {
+    "host": "legacy-host-a.example.invalid",
+    "serial": "legacy-disk-a",
+    "type": "hdd",
+    "path": "/dev/sda",
+    "health": "ok",
+    "osdId": 0
+  }
+]

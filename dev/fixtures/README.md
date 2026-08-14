@@ -12,7 +12,21 @@ Rules:
 ## Ceph fake scenarios
 
 Each scenario under `ceph/<scenario>/` holds one JSON file per read method:
-`cluster_identity.json`, `health.json`, `osds.json`.
+`cluster_identity.json`, `health.json`, `osds.json`, `hosts.json`,
+`devices.json`, `daemons.json`, `pools.json`.
+
+`devices.json` holds every scenario's Storage Devices (each row names its
+Host); the provider filters per Host for HostDevices reads. `osdId` is the
+currently backing OSD identity where one exists; absence means the device is
+not backing an OSD. A Storage Device's serial number is its normalized
+identity — OSD identities may change over a device's lifetime while the
+serial persists.
+
+Cluster-state scenarios (all read methods return normalized data):
+
+- `reef-healthy-baremetal` / `reef-osd-down-baremetal` (Ceph 18, bare-metal)
+- `reef-healthy-rook` / `reef-osd-down-rook` (Ceph 18, Rook-managed)
+- `pacific-readonly` (Ceph 16, read-only)
 
 Error scenarios simulate upstream failure modes instead of cluster states:
 

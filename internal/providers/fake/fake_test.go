@@ -73,6 +73,70 @@ func TestFixturesReturnProviderErrorForMissingScenario(t *testing.T) {
 	}
 }
 
+func TestFixturesLoadExtendedInventory(t *testing.T) {
+	scenarios := []string{
+		"reef-healthy-baremetal",
+		"reef-osd-down-baremetal",
+		"reef-healthy-rook",
+		"reef-osd-down-rook",
+		"pacific-readonly",
+	}
+	ctx := context.Background()
+	for _, scenario := range scenarios {
+		t.Run(scenario, func(t *testing.T) {
+			provider := New(DefaultFixtureRoot(), scenario)
+
+			hosts, err := provider.Hosts(ctx)
+			if err != nil {
+				t.Fatalf("Hosts returned error: %v", err)
+			}
+			if len(hosts) == 0 {
+				t.Fatal("Hosts is empty")
+			}
+
+			devices, err := provider.HostDevices(ctx, hosts[0].Name)
+			if err != nil {
+				t.Fatalf("HostDevices returned error: %v", err)
+			}
+			if len(devices) == 0 {
+				t.Fatalf("HostDevices for first host %q is empty", hosts[0].Name)
+			}
+
+			daemons, err := provider.Daemons(ctx)
+			if err != nil {
+				t.Fatalf("Daemons returned error: %v", err)
+			}
+			if len(daemons) == 0 {
+				t.Fatal("Daemons is empty")
+			}
+
+			pools, err := provider.Pools(ctx)
+			if err != nil {
+				t.Fatalf("Pools returned error: %v", err)
+			}
+			if len(pools) == 0 {
+				t.Fatal("Pools is empty")
+			}
+		})
+	}
+}
+
+func TestFixturesReturnNotFoundForUnknownHost(t *testing.T) {
+	provider := New(DefaultFixtureRoot(), "reef-healthy-baremetal")
+
+	_, err := provider.HostDevices(context.Background(), "missing-host.example.invalid")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var providerErr providers.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("error type = %T, want ProviderError", err)
+	}
+	if providerErr.Class != providers.ErrorNotFound {
+		t.Fatalf("error class = %q, want %q", providerErr.Class, providers.ErrorNotFound)
+	}
+}
+
 func TestFixturesRejectUnknownErrorClass(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "ceph", "synthetic")

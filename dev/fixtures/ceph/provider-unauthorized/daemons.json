@@ -1,0 +1,6 @@
+{
+  "error": {
+    "class": "Unauthorized",
+    "message": "simulated upstream rejected provider credentials"
+  }
+}

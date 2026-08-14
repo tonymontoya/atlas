@@ -1,0 +1,6 @@
+{
+  "fsid": "00000000-0000-4000-8000-000000000104",
+  "name": "reef-rook-healthy",
+  "cephVersion": "18.2.x",
+  "type": "rook"
+}

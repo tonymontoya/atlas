@@ -1,0 +1,9 @@
+[
+  {
+    "id": 1,
+    "name": "device_health_metrics",
+    "type": "replicated",
+    "size": 3,
+    "minSize": 2
+  }
+]

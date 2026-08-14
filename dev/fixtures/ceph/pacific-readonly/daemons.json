@@ -1,0 +1,23 @@
+[
+  {
+    "type": "mon",
+    "name": "mon.a",
+    "host": "legacy-host-a.example.invalid",
+    "status": "running",
+    "version": "16.2.x"
+  },
+  {
+    "type": "mgr",
+    "name": "mgr.a",
+    "host": "legacy-host-a.example.invalid",
+    "status": "running",
+    "version": "16.2.x"
+  },
+  {
+    "type": "osd",
+    "name": "osd.0",
+    "host": "legacy-host-a.example.invalid",
+    "status": "running",
+    "version": "16.2.x"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "host-a.example.invalid",
+    "address": "192.0.2.11"
+  },
+  {
+    "name": "host-b.example.invalid",
+    "address": "192.0.2.12"
+  },
+  {
+    "name": "host-c.example.invalid",
+    "address": "192.0.2.13"
+  }
+]
