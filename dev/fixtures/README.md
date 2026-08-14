@@ -37,6 +37,24 @@ Error scenarios simulate upstream failure modes instead of cluster states:
   what the simulated upstream could not collect.
 - a missing scenario directory exercises `Unavailable`.
 
+## Prometheus fake scenarios
+
+Each scenario under `prometheus/<scenario>/` holds `alerts.json`: an array of
+normalized alerts (name, severity, labels, annotations, startedAt, state,
+source). Alert states are `firing`, `pending`, or `resolved`.
+
+Cluster-state scenarios:
+
+- `osd-down-alert`: one firing `CephOSDDown` warning against the
+  `reef-baremetal-osd-down` cluster (Ceph 18, bare-metal).
+
+Error scenarios simulate observability-source failure modes:
+
+- `provider-unauthorized`: an error directive (see below).
+- `provider-malformed`: deliberately wrong-shaped JSON; the fake provider
+  normalizes this to `MalformedResponse`.
+- a missing scenario directory exercises `Unavailable`.
+
 ### Error directives
 
 A fixture may be an error envelope instead of normalized data:

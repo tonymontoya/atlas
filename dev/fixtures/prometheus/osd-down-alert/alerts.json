@@ -1,0 +1,16 @@
+[
+  {
+    "name": "CephOSDDown",
+    "severity": "warning",
+    "labels": {
+      "cluster": "reef-baremetal-osd-down",
+      "osd": "1"
+    },
+    "annotations": {
+      "summary": "OSD 1 is down"
+    },
+    "startedAt": "2026-08-14T09:15:00Z",
+    "state": "firing",
+    "source": "prometheus"
+  }
+]

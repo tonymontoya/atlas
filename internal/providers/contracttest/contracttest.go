@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
@@ -225,4 +226,70 @@ func assertErrorClass(t *testing.T, err error, want providers.ErrorClass) {
 	if providerErr.Class != want {
 		t.Fatalf("error class = %q, want %q (message: %s)", providerErr.Class, want, providerErr.Message)
 	}
+}
+
+// ObservabilityProvider is the alert surface the suite validates.
+type ObservabilityProvider interface {
+	providers.ObservabilityProvider
+}
+
+type ObservabilityProviderFactory func(t *testing.T, scenario Scenario) ObservabilityProvider
+
+func RunObservabilityProviderSuite(t *testing.T, factory ObservabilityProviderFactory) {
+	errorScenarios := []struct {
+		scenario Scenario
+		class    providers.ErrorClass
+	}{
+		{ScenarioUnavailable, providers.ErrorUnavailable},
+		{ScenarioUnauthorized, providers.ErrorUnauthorized},
+		{ScenarioMalformed, providers.ErrorMalformedResponse},
+	}
+	call := func(ctx context.Context, p ObservabilityProvider) error {
+		_, err := p.CurrentAlerts(ctx)
+		return err
+	}
+	t.Run("CurrentAlerts", func(t *testing.T) {
+		t.Run("Success", func(t *testing.T) {
+			p := factory(t, ScenarioSuccess)
+			alerts, err := p.CurrentAlerts(context.Background())
+			if err != nil {
+				t.Fatalf("CurrentAlerts returned error: %v", err)
+			}
+			if len(alerts) == 0 {
+				t.Fatal("CurrentAlerts returned empty alerts for a success scenario")
+			}
+			for _, alert := range alerts {
+				if alert.Name == "" {
+					t.Fatalf("CurrentAlerts returned an alert with an empty name: %+v", alert)
+				}
+				if alert.Severity == "" {
+					t.Fatalf("CurrentAlerts returned an alert with an empty severity: %+v", alert)
+				}
+				switch alert.State {
+				case observability.AlertStateFiring, observability.AlertStatePending, observability.AlertStateResolved:
+				default:
+					t.Fatalf("CurrentAlerts alert state = %q, want a known AlertState", alert.State)
+				}
+				if alert.StartedAt.IsZero() {
+					t.Fatalf("CurrentAlerts returned an alert with a zero StartedAt: %+v", alert)
+				}
+				if alert.Source == "" {
+					t.Fatalf("CurrentAlerts returned an alert with an empty source: %+v", alert)
+				}
+			}
+		})
+		for _, s := range errorScenarios {
+			t.Run(string(s.scenario), func(t *testing.T) {
+				assertErrorClass(t, call(context.Background(), factory(t, s.scenario)), s.class)
+			})
+		}
+	})
+	t.Run("ContextCancellation", func(t *testing.T) {
+		provider := factory(t, ScenarioSuccess)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		t.Run("CurrentAlerts", func(t *testing.T) {
+			assertErrorClass(t, call(ctx, provider), providers.ErrorTimeout)
+		})
+	})
 }

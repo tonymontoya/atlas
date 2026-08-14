@@ -5,6 +5,7 @@ import (
 
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/observability"
 )
 
 type ErrorClass string
@@ -60,6 +61,10 @@ type CephReadProvider interface {
 	HostDevices(ctx context.Context, host string) ([]inventory.StorageDevice, error)
 	Daemons(ctx context.Context) ([]inventory.Daemon, error)
 	Pools(ctx context.Context) ([]inventory.Pool, error)
+}
+
+type ObservabilityProvider interface {
+	CurrentAlerts(ctx context.Context) ([]observability.Alert, error)
 }
 
 func AllHostDevices(ctx context.Context, provider CephReadProvider, hosts []inventory.Host) ([]inventory.StorageDevice, error) {

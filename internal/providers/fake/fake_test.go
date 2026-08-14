@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
@@ -70,6 +71,28 @@ func TestFixturesReturnProviderErrorForMissingScenario(t *testing.T) {
 	}
 	if providerErr.Class != providers.ErrorUnavailable {
 		t.Fatalf("error class = %q, want %q", providerErr.Class, providers.ErrorUnavailable)
+	}
+}
+
+func TestFixturesLoadOSDDownAlert(t *testing.T) {
+	provider := NewObservability(DefaultFixtureRoot(), "osd-down-alert")
+
+	alerts, err := provider.CurrentAlerts(context.Background())
+	if err != nil {
+		t.Fatalf("CurrentAlerts returned error: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("CurrentAlerts returned %d alerts, want 1", len(alerts))
+	}
+	alert := alerts[0]
+	if alert.Name != "CephOSDDown" {
+		t.Fatalf("alert name = %q, want %q", alert.Name, "CephOSDDown")
+	}
+	if alert.State != observability.AlertStateFiring {
+		t.Fatalf("alert state = %q, want %q", alert.State, observability.AlertStateFiring)
+	}
+	if alert.Labels["osd"] != "1" {
+		t.Fatalf("alert osd label = %q, want %q", alert.Labels["osd"], "1")
 	}
 }
 

@@ -1,0 +1,6 @@
+{
+  "error": {
+    "class": "Unauthorized",
+    "message": "simulated observability source rejected provider credentials"
+  }
+}

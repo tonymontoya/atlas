@@ -9,6 +9,7 @@ import (
 
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
@@ -19,6 +20,15 @@ type Provider struct {
 
 func New(fixtureRoot, scenario string) *Provider {
 	return &Provider{fixtureRoot: fixtureRoot, scenario: scenario}
+}
+
+type Observability struct {
+	fixtureRoot string
+	scenario    string
+}
+
+func NewObservability(fixtureRoot, scenario string) *Observability {
+	return &Observability{fixtureRoot: fixtureRoot, scenario: scenario}
 }
 
 func DefaultFixtureRoot() string {
@@ -115,14 +125,30 @@ func (p *Provider) Pools(ctx context.Context) ([]inventory.Pool, error) {
 	return result, nil
 }
 
+func (p *Observability) CurrentAlerts(ctx context.Context) ([]observability.Alert, error) {
+	var result []observability.Alert
+	if err := p.load(ctx, "alerts.json", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (p *Observability) load(ctx context.Context, name string, target any) error {
+	return loadFixture(ctx, p.fixtureRoot, "prometheus", p.scenario, name, target)
+}
+
 func (p *Provider) load(ctx context.Context, name string, target any) error {
+	return loadFixture(ctx, p.fixtureRoot, "ceph", p.scenario, name, target)
+}
+
+func loadFixture(ctx context.Context, fixtureRoot, family, scenario, name string, target any) error {
 	select {
 	case <-ctx.Done():
 		return providers.ProviderError{Class: providers.ErrorTimeout, Message: ctx.Err().Error()}
 	default:
 	}
 
-	path := filepath.Join(p.fixtureRoot, "ceph", p.scenario, name)
+	path := filepath.Join(fixtureRoot, family, scenario, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return providers.ProviderError{Class: providers.ErrorUnavailable, Message: fmt.Sprintf("read fixture %s: %v", path, err)}

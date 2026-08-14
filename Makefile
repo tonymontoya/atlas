@@ -62,7 +62,7 @@ fixtures-check:
 	go test ./internal/providers/fake -run TestFixtures
 
 provider-contract-test:
-	go test ./internal/providers/... -run TestCephReadProviderContract -count=1
+	go test ./internal/providers/... -run 'ProviderContract' -count=1
 
 migrations-check:
 	sh scripts/check_migrations.sh
