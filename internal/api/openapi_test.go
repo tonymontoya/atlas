@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -40,12 +41,13 @@ func TestOpenAPISpecMatchesRegisteredRoutes(t *testing.T) {
 	specRoutes := make(map[string]bool)
 	for path, operations := range spec.Paths {
 		for method, operation := range operations {
-			if method == "get" {
-				if operation.OperationID == "" {
-					t.Fatalf("path %s has a get operation without operationId", path)
-				}
-				specRoutes["GET "+path] = true
+			if method != "get" && method != "post" {
+				continue
 			}
+			if operation.OperationID == "" {
+				t.Fatalf("path %s has a %s operation without operationId", path, method)
+			}
+			specRoutes[strings.ToUpper(method)+" "+path] = true
 		}
 	}
 

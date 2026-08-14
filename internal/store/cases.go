@@ -19,7 +19,7 @@ func (s *PostgresStore) ListCases(ctx context.Context, limit int) ([]cases.Case,
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, title, summary, status, severity, source, cluster_fsid::text, created_at, updated_at, closed_at
+		SELECT id, title, summary, status, severity, source, cluster_fsid::text, assignee, assignee_display_name, created_at, updated_at, closed_at
 		FROM cases
 		ORDER BY updated_at DESC, id DESC
 		LIMIT $1
@@ -50,7 +50,7 @@ func (s *PostgresStore) GetCase(ctx context.Context, id int64) (cases.Case, erro
 
 	row := s.db.QueryRowContext(ctx, `
 		SELECT cases.id, cases.title, cases.summary, cases.status, cases.severity, cases.source,
-			cases.cluster_fsid::text, cases.created_at, cases.updated_at, cases.closed_at,
+			cases.cluster_fsid::text, cases.assignee, cases.assignee_display_name, cases.created_at, cases.updated_at, cases.closed_at,
 			dedup.alert_name, dedup.first_seen_at, dedup.last_seen_at,
 			(
 				SELECT payload->>'source'
@@ -84,6 +84,8 @@ func scanCaseDetail(scanner rowScanner) (cases.Case, error) {
 	var item cases.Case
 	var clusterFSID sql.NullString
 	var closedAt sql.NullTime
+	var assignee sql.NullString
+	var assigneeDisplayName sql.NullString
 	var alertName sql.NullString
 	var firstSeenAt sql.NullTime
 	var lastSeenAt sql.NullTime
@@ -97,6 +99,8 @@ func scanCaseDetail(scanner rowScanner) (cases.Case, error) {
 		&item.Severity,
 		&item.Source,
 		&clusterFSID,
+		&assignee,
+		&assigneeDisplayName,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 		&closedAt,
@@ -110,6 +114,12 @@ func scanCaseDetail(scanner rowScanner) (cases.Case, error) {
 	}
 	if clusterFSID.Valid {
 		item.ClusterFSID = clusterFSID.String
+	}
+	if assignee.Valid {
+		item.Assignee = assignee.String
+	}
+	if assigneeDisplayName.Valid {
+		item.AssigneeDisplayName = assigneeDisplayName.String
 	}
 	if closedAt.Valid {
 		item.ClosedAt = &closedAt.Time
@@ -181,6 +191,8 @@ func scanCase(scanner rowScanner) (cases.Case, error) {
 	var item cases.Case
 	var clusterFSID sql.NullString
 	var closedAt sql.NullTime
+	var assignee sql.NullString
+	var assigneeDisplayName sql.NullString
 	if err := scanner.Scan(
 		&item.ID,
 		&item.Title,
@@ -189,6 +201,8 @@ func scanCase(scanner rowScanner) (cases.Case, error) {
 		&item.Severity,
 		&item.Source,
 		&clusterFSID,
+		&assignee,
+		&assigneeDisplayName,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 		&closedAt,
@@ -197,6 +211,12 @@ func scanCase(scanner rowScanner) (cases.Case, error) {
 	}
 	if clusterFSID.Valid {
 		item.ClusterFSID = clusterFSID.String
+	}
+	if assignee.Valid {
+		item.Assignee = assignee.String
+	}
+	if assigneeDisplayName.Valid {
+		item.AssigneeDisplayName = assigneeDisplayName.String
 	}
 	if closedAt.Valid {
 		item.ClosedAt = &closedAt.Time

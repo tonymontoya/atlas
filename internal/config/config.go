@@ -9,6 +9,9 @@ type Config struct {
 	FakeScenario      string
 	FakeAlertScenario string
 	ReadSource        string
+	OIDCIssuer        string
+	OIDCAudience      string
+	OIDCJWKSURL       string
 }
 
 func Load() Config {
@@ -19,6 +22,9 @@ func Load() Config {
 		FakeScenario:      env("ATLAS_FAKE_SCENARIO", "reef-healthy-baremetal"),
 		FakeAlertScenario: env("ATLAS_FAKE_ALERT_SCENARIO", "osd-down-alert"),
 		ReadSource:        env("ATLAS_READ_SOURCE", "provider"),
+		OIDCIssuer:        env("ATLAS_OIDC_ISSUER", ""),
+		OIDCAudience:      env("ATLAS_OIDC_AUDIENCE", ""),
+		OIDCJWKSURL:       env("ATLAS_OIDC_JWKS_URL", ""),
 	}
 }
 

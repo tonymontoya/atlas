@@ -88,6 +88,22 @@ services:
       - atlas-go-mod-cache:/go/pkg/mod
     command: ["go", "run", "./cmd/atlas-alert-eval"]
 
+  dev-issuer:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.api
+    profiles:
+      - stack
+    environment:
+      ATLAS_HTTP_ADDR: :8090
+    ports:
+      - "127.0.0.1:${ATLAS_DEV_ISSUER_PORT:-18090}:8090"
+    volumes:
+      - ..:/workspace
+      - atlas-go-build-cache:/root/.cache/go-build
+      - atlas-go-mod-cache:/go/pkg/mod
+    command: ["go", "run", "./cmd/atlas-dev-issuer", "-addr", ":8090", "-issuer", "http://dev-issuer:8090", "-audience", "atlas-api"]
+
   api:
     build:
       context: ..
@@ -97,11 +113,16 @@ services:
     depends_on:
       alert-eval:
         condition: service_completed_successfully
+      dev-issuer:
+        condition: service_started
     environment:
       ATLAS_HTTP_ADDR: :8080
       ATLAS_DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
       ATLAS_PROVIDER_MODE: fake
       ATLAS_READ_SOURCE: postgres
+      ATLAS_OIDC_ISSUER: http://dev-issuer:8090
+      ATLAS_OIDC_AUDIENCE: atlas-api
+      ATLAS_OIDC_JWKS_URL: http://dev-issuer:8090/.well-known/jwks.json
     ports:
       - "127.0.0.1:${ATLAS_API_PORT:-8080}:8080"
     volumes:

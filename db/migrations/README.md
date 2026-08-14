@@ -72,3 +72,19 @@ with `make db-migrate`.
 
 `make db-migrate` records applied files in `atlas_schema_migrations`, so it can
 be rerun during local development without reapplying successful migrations.
+
+## Manual Case Writes
+
+`000007_manual_case_writes.up.sql` adds:
+
+- `cases.assignee` and `cases.assignee_display_name` with a consistency
+  constraint (both set or both clear) and an assignee-scoped partial index.
+- `case_assigned` to the Case Timeline event type vocabulary (CHECK
+  replacement).
+- `case_notes`: durable, addressable Case Notes with author subject and
+  display-name snapshots, ordered per case.
+
+Manual writes arrive through the authenticated write API (ADR-0016): manual
+Case creation, status transitions (closed is terminal; reopen means a new
+Case, mirroring ADR-0015), assignment, and notes. Each write records its
+matching Timeline Event with the acting operator as a user actor.

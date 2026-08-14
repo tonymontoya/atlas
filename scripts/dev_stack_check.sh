@@ -4,10 +4,12 @@ set -eu
 compose_file="${ATLAS_COMPOSE_FILE:-dev/docker-compose.yml}"
 api_port="${ATLAS_API_PORT:-8080}"
 web_port="${ATLAS_WEB_PORT:-5173}"
+dev_issuer_port="${ATLAS_DEV_ISSUER_PORT:-18090}"
 timeout_seconds="${ATLAS_DEV_STACK_CHECK_TIMEOUT_SECONDS:-180}"
 
 api_base="http://127.0.0.1:${api_port}"
 web_base="http://127.0.0.1:${web_port}"
+dev_issuer_base="http://127.0.0.1:${dev_issuer_port}"
 
 compose() {
     docker compose -f "$compose_file" --profile stack "$@"
@@ -42,10 +44,15 @@ wait_for_json() {
     name="$1"
     url="$2"
     jq_filter="$3"
+    auth_header="${4:-}"
     deadline=$(( $(date +%s) + timeout_seconds ))
 
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        body="$(curl -fsS "$url" 2>/dev/null || true)"
+        if [ -n "$auth_header" ]; then
+            body="$(curl -fsS -H "Authorization: Bearer $auth_header" "$url" 2>/dev/null || true)"
+        else
+            body="$(curl -fsS "$url" 2>/dev/null || true)"
+        fi
         if [ -n "$body" ] && printf '%s' "$body" | jq -e "$jq_filter" >/dev/null 2>&1; then
             echo "ok: $name"
             return 0
@@ -57,6 +64,32 @@ wait_for_json() {
     if [ -n "${body:-}" ]; then
         echo "last response: $body" >&2
     fi
+    return 1
+}
+
+expect_status() {
+    name="$1"
+    url="$2"
+    want_status="$3"
+    status="$(curl -s -o /dev/null -w '%{http_code}' "$url")"
+    if [ "$status" != "$want_status" ]; then
+        echo "failed: $name: status $status, want $want_status" >&2
+        return 1
+    fi
+    echo "ok: $name"
+}
+
+wait_for_dev_issuer_token() {
+    deadline=$(( $(date +%s) + timeout_seconds ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        token="$(curl -fsS -X POST "$dev_issuer_base/token" 2>/dev/null | jq -r '.token // empty' 2>/dev/null || true)"
+        if [ -n "$token" ]; then
+            echo "$token"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "timed out waiting for a dev issuer token at $dev_issuer_base/token" >&2
     return 1
 }
 
@@ -121,5 +154,10 @@ wait_for_json "seed case timeline" "$api_base/api/v1/cases/${seed_case_id}/timel
 
 wait_for_text "web UI" "$web_base/" '<title>Atlas</title>'
 wait_for_json "web API proxy" "$web_base/healthz" '.status == "ok"'
+
+dev_token="$(wait_for_dev_issuer_token)"
+expect_status "me without token is rejected" "$api_base/api/v1/me" 401
+wait_for_json "me with dev token" "$api_base/api/v1/me" \
+    '.subject == "dev-operator" and .displayName == "Dev Operator"' "$dev_token"
 
 echo "Atlas dev stack smoke check passed"

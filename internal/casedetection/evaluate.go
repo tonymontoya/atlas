@@ -75,7 +75,10 @@ func runFakeOnce(ctx context.Context, writer Writer, opts Options) (store.Detect
 func candidatesFromAlerts(alerts []observability.Alert) []store.AlertCandidate {
 	candidates := make([]store.AlertCandidate, 0, len(alerts))
 	for _, alert := range alerts {
-		if alert.Name == "" || !validCaseSource(alert.Source) {
+		if alert.Name == "" {
+			continue
+		}
+		if _, err := cases.ParseCaseSource(alert.Source); err != nil {
 			continue
 		}
 		input := Normalize(alert)
@@ -94,14 +97,6 @@ func candidatesFromAlerts(alerts []observability.Alert) []store.AlertCandidate {
 		})
 	}
 	return candidates
-}
-
-func validCaseSource(source string) bool {
-	switch cases.CaseSource(source) {
-	case cases.CaseSourceManual, cases.CaseSourcePrometheus, cases.CaseSourceCeph, cases.CaseSourceRook, cases.CaseSourceAtlas:
-		return true
-	}
-	return false
 }
 
 func failureFromError(runID int64, err error) store.EvaluationRunFailure {

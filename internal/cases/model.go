@@ -31,17 +31,19 @@ const (
 )
 
 type Case struct {
-	ID          int64          `json:"id"`
-	Title       string         `json:"title"`
-	Summary     string         `json:"summary"`
-	Status      CaseStatus     `json:"status"`
-	Severity    CaseSeverity   `json:"severity"`
-	Source      CaseSource     `json:"source"`
-	ClusterFSID string         `json:"clusterFsid,omitempty"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
-	ClosedAt    *time.Time     `json:"closedAt,omitempty"`
-	DetectedBy  *DetectionLink `json:"detectedBy,omitempty"`
+	ID                  int64          `json:"id"`
+	Title               string         `json:"title"`
+	Summary             string         `json:"summary"`
+	Status              CaseStatus     `json:"status"`
+	Severity            CaseSeverity   `json:"severity"`
+	Source              CaseSource     `json:"source"`
+	ClusterFSID         string         `json:"clusterFsid,omitempty"`
+	Assignee            string         `json:"assignee,omitempty"`
+	AssigneeDisplayName string         `json:"assigneeDisplayName,omitempty"`
+	CreatedAt           time.Time      `json:"createdAt"`
+	UpdatedAt           time.Time      `json:"updatedAt"`
+	ClosedAt            *time.Time     `json:"closedAt,omitempty"`
+	DetectedBy          *DetectionLink `json:"detectedBy,omitempty"`
 }
 
 type DetectionLink struct {
@@ -59,6 +61,7 @@ const (
 	TimelineEventCaseTriaged          TimelineEventType = "case_triaged"
 	TimelineEventCaseStatusChanged    TimelineEventType = "case_status_changed"
 	TimelineEventCaseNoteAdded        TimelineEventType = "case_note_added"
+	TimelineEventCaseAssigned         TimelineEventType = "case_assigned"
 	TimelineEventWorkflowAttached     TimelineEventType = "workflow_attached"
 	TimelineEventWorkflowStateChanged TimelineEventType = "workflow_state_changed"
 )
@@ -86,4 +89,13 @@ type TimelineEvent struct {
 	OccurredAt time.Time         `json:"occurredAt"`
 	Actor      TimelineActor     `json:"actor"`
 	Payload    map[string]any    `json:"payload"`
+}
+
+type CaseNote struct {
+	ID                int64     `json:"id"`
+	CaseID            int64     `json:"caseId"`
+	AuthorID          string    `json:"authorId"`
+	AuthorDisplayName string    `json:"authorDisplayName"`
+	Body              string    `json:"body"`
+	CreatedAt         time.Time `json:"createdAt"`
 }

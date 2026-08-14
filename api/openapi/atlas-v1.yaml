@@ -1,12 +1,14 @@
 openapi: 3.1.0
 info:
   title: Atlas API
-  version: 0.3.0
+  version: 0.4.0
   description: >
-    Read-only Atlas REST API contract for the fake-provider scaffold. Covers
-    local health, current-cluster inventory reads (identity, health, OSDs,
-    Hosts, Storage Devices, Ceph Daemons, Pools), explicit inventory sync run
-    history, and read-only case records.
+    Atlas REST API contract for the fake-provider scaffold. Covers local
+    health, current-cluster inventory reads (identity, health, OSDs, Hosts,
+    Storage Devices, Ceph Daemons, Pools), explicit inventory sync run
+    history, read-only case records, and the authenticated operator identity
+    probe. Write endpoints arriving in 0.4.0 carry a bearer-token security
+    scheme; existing read endpoints remain public.
 servers:
   - url: http://127.0.0.1:8080
     description: Local development
@@ -15,6 +17,7 @@ tags:
   - name: Clusters
   - name: Inventory
   - name: Cases
+  - name: Identity
 paths:
   /healthz:
     get:
@@ -33,6 +36,38 @@ paths:
                 ok:
                   value:
                     status: ok
+  /api/v1/me:
+    get:
+      tags:
+        - Identity
+      operationId: getMe
+      summary: Get the authenticated operator identity
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Identity of the operator whose bearer token was verified.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+              examples:
+                operator:
+                  value:
+                    subject: operator-1
+                    displayName: Storage Operator
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unauthorized:
+                  value:
+                    error:
+                      class: Unauthorized
+                      message: missing bearer token
   /api/v1/clusters/current:
     get:
       tags:
@@ -344,6 +379,57 @@ paths:
                       updatedAt: "2026-08-13T12:00:00Z"
         default:
           $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - Cases
+      operationId: createCase
+      summary: Create a manual case
+      description: >
+        Creates a Case in the detected status with source forced to manual and
+        records a case_detected Timeline Event attributed to the verified
+        operator.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCaseRequest"
+            examples:
+              capacityReview:
+                value:
+                  title: Manual review of slow OSD warnings
+                  summary: Operator noticed slow OSD alerts outside automated detection.
+                  severity: medium
+                  clusterFsid: 00000000-0000-4000-8000-000000000101
+      responses:
+        "201":
+          description: Created case.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "400":
+          description: Request body failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Case writes require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
   /api/v1/cases/{id}:
     get:
       tags:
@@ -417,7 +503,249 @@ paths:
                         newStatus: triaged
         default:
           $ref: "#/components/responses/Error"
+  /api/v1/cases/{id}/transitions:
+    post:
+      tags:
+        - Cases
+      operationId: transitionCase
+      summary: Transition a case status
+      description: >
+        Applies a manual lifecycle transition and records the matching
+        Timeline Event (case_triaged or case_status_changed). Allowed edges
+        are detected -> triaged, detected -> closed, and triaged -> closed;
+        closed is terminal and reopening means creating a new case.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransitionCaseRequest"
+            examples:
+              triage:
+                value:
+                  status: triaged
+      responses:
+        "200":
+          description: Updated case.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "400":
+          description: Unknown target status or malformed body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Case not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The requested transition is not allowed from the current status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Case writes require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/cases/{id}/assignment:
+    post:
+      tags:
+        - Cases
+      operationId: assignCase
+      summary: Assign or unassign a case
+      description: >
+        Sets the Operator responsible for a Case and records a case_assigned
+        Timeline Event. An empty assignee unassigns. Assigning the current
+        assignee is an idempotent no-op. Closed Cases cannot be reassigned.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignCaseRequest"
+            examples:
+              assign:
+                value:
+                  assignee: operator-2
+                  assigneeDisplayName: Second Operator
+              unassign:
+                value:
+                  assignee: ""
+                  assigneeDisplayName: ""
+      responses:
+        "200":
+          description: Updated case.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        "400":
+          description: Malformed body or inconsistent assignee fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Case not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The case is closed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Case writes require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/cases/{id}/notes:
+    get:
+      tags:
+        - Cases
+      operationId: listCaseNotes
+      summary: List case notes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "200":
+          description: Case Notes ordered oldest to newest.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CaseNote"
+        "404":
+          description: Case not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - Cases
+      operationId: addCaseNote
+      summary: Add a note to a case
+      description: Records a durable Case Note and a case_note_added Timeline Event.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCaseNoteRequest"
+            examples:
+              note:
+                value:
+                  body: Investigated; replacement device scheduled for the next maintenance window.
+      responses:
+        "201":
+          description: Created note.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseNote"
+        "400":
+          description: Malformed body or empty note text.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Case not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Case writes require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        RS256 JWT issued by the configured OIDC issuer, verified against its
+        JWKS. Required on write endpoints; read endpoints stay public.
   responses:
     Error:
       description: Request failed before a valid resource response could be produced.
@@ -442,6 +770,19 @@ components:
           type: string
           enum:
             - ok
+    MeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - subject
+        - displayName
+      properties:
+        subject:
+          type: string
+          description: Verified OIDC subject of the operator.
+        displayName:
+          type: string
+          description: Display name resolved from token claims, falling back to the subject.
     ClusterIdentity:
       type: object
       additionalProperties: false
@@ -735,6 +1076,12 @@ components:
         clusterFsid:
           type: string
           description: Ceph cluster FSID associated with the case when known.
+        assignee:
+          type: string
+          description: OIDC subject of the assigned Operator, when one is assigned.
+        assigneeDisplayName:
+          type: string
+          description: Display name snapshot of the assigned Operator.
         createdAt:
           type: string
           format: date-time
@@ -746,6 +1093,81 @@ components:
           format: date-time
         detectedBy:
           $ref: "#/components/schemas/CaseDetectionLink"
+    CreateCaseRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - title
+        - summary
+        - severity
+      properties:
+        title:
+          type: string
+          minLength: 1
+        summary:
+          type: string
+          minLength: 1
+        severity:
+          $ref: "#/components/schemas/CaseSeverity"
+        clusterFsid:
+          type: string
+          format: uuid
+          description: Cluster FSID to associate with the case, when known.
+    TransitionCaseRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+    AssignCaseRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        assignee:
+          type: string
+          description: OIDC subject to assign; empty unassigns.
+        assigneeDisplayName:
+          type: string
+          description: Display name snapshot; required when assignee is set, empty when unassigning.
+    AddCaseNoteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - body
+      properties:
+        body:
+          type: string
+          minLength: 1
+    CaseNote:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - caseId
+        - authorId
+        - authorDisplayName
+        - body
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        caseId:
+          type: integer
+          format: int64
+        authorId:
+          type: string
+          description: OIDC subject of the Operator who wrote the note.
+        authorDisplayName:
+          type: string
+          description: Display name snapshot of the note author.
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
     CaseDetectionLink:
       type: object
       additionalProperties: false
@@ -829,6 +1251,7 @@ components:
         - case_triaged
         - case_status_changed
         - case_note_added
+        - case_assigned
         - workflow_attached
         - workflow_state_changed
     TimelineActor:
@@ -874,6 +1297,7 @@ components:
       type: string
       enum:
         - Internal
+        - InvalidRequest
         - Unavailable
         - Unauthorized
         - Unsupported

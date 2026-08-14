@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
@@ -27,6 +29,7 @@ type route struct {
 func (s *Server) routes() []route {
 	return []route{
 		{"GET", "/healthz", s.healthz},
+		{"GET", "/api/v1/me", s.requireIdentity(s.me)},
 		{"GET", "/api/v1/clusters/current", s.cluster},
 		{"GET", "/api/v1/clusters/current/health", s.clusterHealth},
 		{"GET", "/api/v1/clusters/current/osds", s.osds},
@@ -37,8 +40,13 @@ func (s *Server) routes() []route {
 		{"GET", "/api/v1/inventory-sync-runs", s.inventorySyncRuns},
 		{"GET", "/api/v1/alert-evaluation-runs", s.alertEvaluationRuns},
 		{"GET", "/api/v1/cases", s.cases},
+		{"POST", "/api/v1/cases", s.requireIdentity(s.createCase)},
 		{"GET", "/api/v1/cases/{id}", s.caseByID},
 		{"GET", "/api/v1/cases/{id}/timeline", s.caseTimeline},
+		{"POST", "/api/v1/cases/{id}/transitions", s.requireIdentity(s.transitionCase)},
+		{"POST", "/api/v1/cases/{id}/assignment", s.requireIdentity(s.assignCase)},
+		{"POST", "/api/v1/cases/{id}/notes", s.requireIdentity(s.addCaseNote)},
+		{"GET", "/api/v1/cases/{id}/notes", s.caseNotes},
 	}
 }
 
@@ -52,6 +60,43 @@ func (s *Server) Routes() http.Handler {
 
 func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) me(w http.ResponseWriter, r *http.Request) {
+	id, _ := identity.FromContext(r.Context())
+	writeJSON(w, http.StatusOK, map[string]string{
+		"subject":     id.Subject,
+		"displayName": id.DisplayName,
+	})
+}
+
+func (s *Server) requireIdentity(next func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.app.Verifier == nil {
+			writeError(w, providers.ProviderError{
+				Class:   providers.ErrorUnauthorized,
+				Message: "authentication is not configured",
+			})
+			return
+		}
+		header := r.Header.Get("Authorization")
+		if !strings.HasPrefix(header, "Bearer ") {
+			writeError(w, providers.ProviderError{
+				Class:   providers.ErrorUnauthorized,
+				Message: "missing bearer token",
+			})
+			return
+		}
+		id, err := s.app.Verifier.Verify(r.Context(), strings.TrimPrefix(header, "Bearer "))
+		if err != nil {
+			writeError(w, providers.ProviderError{
+				Class:   providers.ErrorUnauthorized,
+				Message: "invalid or expired token",
+			})
+			return
+		}
+		next(w, r.WithContext(identity.WithContext(r.Context(), id)))
+	}
 }
 
 func (s *Server) cluster(w http.ResponseWriter, r *http.Request) {
@@ -238,6 +283,16 @@ func writeError(w http.ResponseWriter, err error) {
 			"error": {
 				Class:   string(providerErr.Class),
 				Message: providerErr.Message,
+			},
+		})
+		return
+	}
+	var invalidRequest invalidRequestError
+	if errors.As(err, &invalidRequest) {
+		writeJSON(w, http.StatusBadRequest, map[string]apiError{
+			"error": {
+				Class:   "InvalidRequest",
+				Message: invalidRequest.Message,
 			},
 		})
 		return
