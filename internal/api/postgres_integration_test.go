@@ -375,8 +375,9 @@ func TestPostgresReadSourceListsAlertEvaluationRuns(t *testing.T) {
 	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
 	db := openTestDB(t, ctx, databaseURL)
-	defer func() { _ = db.Close() }()
+	t.Cleanup(func() { _ = db.Close() })
 	resetDetectionTables(t, ctx, db)
+	t.Cleanup(func() { resetDetectionTables(t, ctx, db) })
 
 	writer := store.NewPostgres(db)
 	if _, err := casedetection.RunFakeOnce(ctx, writer, casedetection.Options{
