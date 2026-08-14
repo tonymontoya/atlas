@@ -1,0 +1,27 @@
+# Go
+.cache/
+*.test
+*.out
+
+# Node / web UI
+node_modules/
+web/app/dist/
+web/app/tsconfig.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+*.local
+
+# Editor and OS artifacts
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local LLM/agent tooling state (guidance docs like AGENTS.md stay tracked)
+.opencode/
+.claude/
+.cursor/
+.codex/
+.aider*

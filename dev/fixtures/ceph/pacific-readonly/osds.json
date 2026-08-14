@@ -1,0 +1,9 @@
+[
+  {
+    "id": 0,
+    "host": "legacy-host-a.example.invalid",
+    "up": true,
+    "in": true,
+    "device": "legacy-disk-a"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "status": "HEALTH_WARN",
+  "summary": "1 osd down",
+  "checks": [
+    {
+      "name": "OSD_DOWN",
+      "severity": "HEALTH_WARN",
+      "summary": "1 osd down"
+    }
+  ]
+}

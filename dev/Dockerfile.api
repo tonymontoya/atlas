@@ -1,0 +1,5 @@
+FROM golang:1.26-bookworm
+
+WORKDIR /workspace
+
+EXPOSE 8080

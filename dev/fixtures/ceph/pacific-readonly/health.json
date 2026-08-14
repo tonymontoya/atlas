@@ -1,0 +1,11 @@
+{
+  "status": "HEALTH_WARN",
+  "summary": "compatibility target is read-only",
+  "checks": [
+    {
+      "name": "ATLAS_READONLY_COMPATIBILITY",
+      "severity": "HEALTH_WARN",
+      "summary": "Ceph 16 fixture is for read-only compatibility"
+    }
+  ]
+}

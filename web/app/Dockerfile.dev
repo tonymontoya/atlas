@@ -1,0 +1,5 @@
+FROM node:22-bookworm
+
+WORKDIR /workspace/web/app
+
+EXPOSE 5173

@@ -1,0 +1,5 @@
+{
+  "status": "HEALTH_OK",
+  "summary": "cluster is healthy",
+  "checks": []
+}

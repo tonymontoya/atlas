@@ -1,0 +1,96 @@
+name: atlas-dev
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: atlas
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: atlas_dev
+    ports:
+      - "127.0.0.1:15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - atlas-postgres-data:/var/lib/postgresql
+
+  migrate:
+    image: postgres:18
+    profiles:
+      - stack
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+    command: ["sh", "scripts/apply_migrations.sh"]
+
+  inventory-sync:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.api
+    profiles:
+      - stack
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ATLAS_DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
+      ATLAS_PROVIDER_MODE: fake
+      ATLAS_FAKE_SCENARIO: reef-healthy-baremetal
+    volumes:
+      - ..:/workspace
+      - atlas-go-build-cache:/root/.cache/go-build
+      - atlas-go-mod-cache:/go/pkg/mod
+    command: ["go", "run", "./cmd/atlas-inventory-sync"]
+
+  api:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.api
+    profiles:
+      - stack
+    depends_on:
+      inventory-sync:
+        condition: service_completed_successfully
+    environment:
+      ATLAS_HTTP_ADDR: :8080
+      ATLAS_DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
+      ATLAS_PROVIDER_MODE: fake
+      ATLAS_READ_SOURCE: postgres
+    ports:
+      - "127.0.0.1:${ATLAS_API_PORT:-8080}:8080"
+    volumes:
+      - ..:/workspace
+      - atlas-go-build-cache:/root/.cache/go-build
+      - atlas-go-mod-cache:/go/pkg/mod
+    command: ["go", "run", "./cmd/atlas-api"]
+
+  web:
+    build:
+      context: ..
+      dockerfile: web/app/Dockerfile.dev
+    profiles:
+      - stack
+    depends_on:
+      - api
+    environment:
+      ATLAS_API_PROXY_TARGET: http://api:8080
+    ports:
+      - "127.0.0.1:${ATLAS_WEB_PORT:-5173}:5173"
+    volumes:
+      - ..:/workspace
+      - atlas-web-node-modules:/workspace/web/app/node_modules
+    command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0"]
+
+volumes:
+  atlas-postgres-data:
+  atlas-go-build-cache:
+  atlas-go-mod-cache:
+  atlas-web-node-modules:

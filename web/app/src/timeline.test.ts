@@ -1,0 +1,73 @@
+import { describe, expect, it } from "vitest";
+
+import type { TimelineEvent, TimelineEventType } from "./api";
+import { labelForTimelineEventType, timelinePayloadLabels } from "./timeline";
+
+describe("labelForTimelineEventType", () => {
+  it("returns operator-readable labels for timeline event types", () => {
+    const cases: Array<[TimelineEventType, string]> = [
+      ["case_detected", "Case detected"],
+      ["case_triaged", "Case triaged"],
+      ["case_status_changed", "Status changed"],
+      ["case_note_added", "Note added"],
+      ["workflow_attached", "Workflow attached"],
+      ["workflow_state_changed", "Workflow state changed"],
+    ];
+
+    for (const [type, label] of cases) {
+      expect(labelForTimelineEventType(type)).toBe(label);
+    }
+  });
+});
+
+describe("timelinePayloadLabels", () => {
+  it("returns normalized context labels without exposing raw payload JSON", () => {
+    expect(
+      timelinePayloadLabels(
+        timelineEvent({
+          source: "manual",
+          previousStatus: "detected",
+          newStatus: "triaged",
+          workflowId: "replace-osd",
+          workflowInstanceId: 101,
+          noteId: 17,
+        }),
+      ),
+    ).toEqual([
+      "manual",
+      "detected to triaged",
+      "replace-osd",
+      "Workflow #101",
+      "Note #17",
+    ]);
+  });
+
+  it("ignores payload values with unexpected shapes", () => {
+    expect(
+      timelinePayloadLabels(
+        timelineEvent({
+          source: 12,
+          signal: ["OSD_DOWN"],
+          previousStatus: "detected",
+          newStatus: null,
+          workflowInstanceId: "101",
+        }),
+      ),
+    ).toEqual([]);
+  });
+});
+
+function timelineEvent(payload: Record<string, unknown>): TimelineEvent {
+  return {
+    id: 1,
+    caseId: 2,
+    type: "case_detected",
+    message: "Case detected.",
+    occurredAt: "2026-08-13T12:00:00Z",
+    actor: {
+      type: "system",
+      displayName: "Atlas",
+    },
+    payload,
+  };
+}

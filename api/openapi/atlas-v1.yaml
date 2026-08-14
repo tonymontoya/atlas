@@ -1,0 +1,555 @@
+openapi: 3.1.0
+info:
+  title: Atlas API
+  version: 0.1.0
+  description: >
+    Initial read-only Atlas REST API contract for the Mode 1 fake-provider
+    scaffold. This contract is intentionally limited to local health,
+    current-cluster inventory reads, explicit inventory sync run history, and
+    read-only case records.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local development
+tags:
+  - name: Platform
+  - name: Clusters
+  - name: Inventory
+  - name: Cases
+paths:
+  /healthz:
+    get:
+      tags:
+        - Platform
+      operationId: getHealthz
+      summary: Check API process health
+      responses:
+        "200":
+          description: API process is serving requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthzResponse"
+              examples:
+                ok:
+                  value:
+                    status: ok
+  /api/v1/clusters/current:
+    get:
+      tags:
+        - Clusters
+      operationId: getCurrentCluster
+      summary: Get the current cluster identity
+      responses:
+        "200":
+          description: Current cluster identity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterIdentity"
+              examples:
+                reefBareMetal:
+                  value:
+                    fsid: 00000000-0000-4000-8000-000000000101
+                    name: reef-baremetal-healthy
+                    cephVersion: 18.2.x
+                    type: bare-metal
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/clusters/current/health:
+    get:
+      tags:
+        - Clusters
+      operationId: getCurrentClusterHealth
+      summary: Get the current cluster health
+      responses:
+        "200":
+          description: Current cluster health summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterHealth"
+              examples:
+                healthWarn:
+                  value:
+                    status: HEALTH_WARN
+                    summary: 1 osd down
+                    checks:
+                      - name: OSD_DOWN
+                        severity: HEALTH_WARN
+                        summary: 1 osd down
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/clusters/current/osds:
+    get:
+      tags:
+        - Clusters
+      operationId: listCurrentClusterOSDs
+      summary: List OSD inventory for the current cluster
+      responses:
+        "200":
+          description: Current cluster OSD inventory.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OSD"
+              examples:
+                osds:
+                  value:
+                    - id: 0
+                      host: ceph-node-01
+                      up: true
+                      in: true
+                      device: /dev/sdb
+                    - id: 1
+                      host: ceph-node-02
+                      up: false
+                      in: true
+                      device: /dev/sdb
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/inventory-sync-runs:
+    get:
+      tags:
+        - Inventory
+      operationId: listInventorySyncRuns
+      summary: List recent inventory sync runs
+      responses:
+        "200":
+          description: Recent inventory sync run history.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventorySyncRun"
+              examples:
+                runs:
+                  value:
+                    - id: 2
+                      provider: fake
+                      scenario: missing
+                      status: failed
+                      startedAt: "2026-08-13T12:01:00Z"
+                      finishedAt: "2026-08-13T12:01:01Z"
+                      errorClass: Unavailable
+                      errorMessage: "Unavailable: read fixture"
+                    - id: 1
+                      provider: fake
+                      scenario: reef-osd-down-baremetal
+                      status: succeeded
+                      startedAt: "2026-08-13T12:00:00Z"
+                      finishedAt: "2026-08-13T12:00:01Z"
+                      snapshotId: 1
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/cases:
+    get:
+      tags:
+        - Cases
+      operationId: listCases
+      summary: List cases
+      responses:
+        "200":
+          description: Recent cases ordered by most recent update.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Case"
+              examples:
+                seededCases:
+                  value:
+                    - id: 2
+                      title: Review weekly capacity trend
+                      summary: Local seed case for capacity review without an automation workflow attached.
+                      status: triaged
+                      severity: medium
+                      source: manual
+                      clusterFsid: 00000000-0000-4000-8000-000000000101
+                      createdAt: "2026-08-13T12:05:00Z"
+                      updatedAt: "2026-08-13T12:10:00Z"
+                    - id: 1
+                      title: OSD down requires triage
+                      summary: Local seed case representing an OSD_DOWN health check that needs operator triage.
+                      status: detected
+                      severity: high
+                      source: prometheus
+                      clusterFsid: 00000000-0000-4000-8000-000000000101
+                      createdAt: "2026-08-13T12:00:00Z"
+                      updatedAt: "2026-08-13T12:00:00Z"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/cases/{id}:
+    get:
+      tags:
+        - Cases
+      operationId: getCase
+      summary: Get a case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "200":
+          description: Case detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Case"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/cases/{id}/timeline:
+    get:
+      tags:
+        - Cases
+      operationId: listCaseTimeline
+      summary: List a case timeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "200":
+          description: Case Timeline Events ordered oldest to newest.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimelineEvent"
+              examples:
+                seededTimeline:
+                  value:
+                    - id: 2
+                      caseId: 2
+                      type: case_detected
+                      message: Manual capacity review case created.
+                      occurredAt: "2026-08-13T12:05:00Z"
+                      actor:
+                        type: user
+                        displayName: Storage Operator
+                      payload:
+                        source: manual
+                        clusterFsid: 00000000-0000-4000-8000-000000000101
+                    - id: 3
+                      caseId: 2
+                      type: case_triaged
+                      message: Capacity review case triaged.
+                      occurredAt: "2026-08-13T12:10:00Z"
+                      actor:
+                        type: user
+                        displayName: Storage Operator
+                      payload:
+                        previousStatus: detected
+                        newStatus: triaged
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  responses:
+    Error:
+      description: Request failed before a valid resource response could be produced.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            providerUnavailable:
+              value:
+                error:
+                  class: Unavailable
+                  message: provider is unavailable
+  schemas:
+    HealthzResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+    ClusterIdentity:
+      type: object
+      additionalProperties: false
+      required:
+        - fsid
+        - name
+        - cephVersion
+        - type
+      properties:
+        fsid:
+          type: string
+          description: Ceph cluster FSID.
+        name:
+          type: string
+          description: Atlas display name for the cluster.
+        cephVersion:
+          type: string
+          description: Reported Ceph version family.
+        type:
+          $ref: "#/components/schemas/ClusterType"
+    ClusterType:
+      type: string
+      enum:
+        - bare-metal
+        - rook
+    ClusterHealth:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - summary
+        - checks
+      properties:
+        status:
+          $ref: "#/components/schemas/HealthStatus"
+        summary:
+          type: string
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/HealthCheck"
+    HealthStatus:
+      type: string
+      enum:
+        - HEALTH_OK
+        - HEALTH_WARN
+        - HEALTH_ERR
+    HealthCheck:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - severity
+        - summary
+      properties:
+        name:
+          type: string
+        severity:
+          type: string
+        summary:
+          type: string
+    OSD:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - host
+        - up
+        - in
+      properties:
+        id:
+          type: integer
+          format: int32
+        host:
+          type: string
+        up:
+          type: boolean
+        in:
+          type: boolean
+        device:
+          type: string
+    InventorySyncRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - provider
+        - status
+        - startedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        provider:
+          type: string
+          enum:
+            - fake
+        scenario:
+          type: string
+        status:
+          $ref: "#/components/schemas/InventorySyncRunStatus"
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        snapshotId:
+          type: integer
+          format: int64
+        errorClass:
+          $ref: "#/components/schemas/ErrorClass"
+        errorMessage:
+          type: string
+    InventorySyncRunStatus:
+      type: string
+      enum:
+        - running
+        - succeeded
+        - failed
+    Case:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - summary
+        - status
+        - severity
+        - source
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        summary:
+          type: string
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+        severity:
+          $ref: "#/components/schemas/CaseSeverity"
+        source:
+          $ref: "#/components/schemas/CaseSource"
+        clusterFsid:
+          type: string
+          description: Ceph cluster FSID associated with the case when known.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+    CaseStatus:
+      type: string
+      enum:
+        - detected
+        - triaged
+        - closed
+    CaseSeverity:
+      type: string
+      enum:
+        - info
+        - low
+        - medium
+        - high
+        - critical
+    CaseSource:
+      type: string
+      enum:
+        - manual
+        - prometheus
+        - ceph
+        - rook
+        - atlas
+    TimelineEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - caseId
+        - type
+        - message
+        - occurredAt
+        - actor
+        - payload
+      properties:
+        id:
+          type: integer
+          format: int64
+        caseId:
+          type: integer
+          format: int64
+        type:
+          $ref: "#/components/schemas/TimelineEventType"
+        message:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        actor:
+          $ref: "#/components/schemas/TimelineActor"
+        payload:
+          type: object
+          additionalProperties: true
+          description: Type-specific normalized Atlas context.
+    TimelineEventType:
+      type: string
+      enum:
+        - case_detected
+        - case_triaged
+        - case_status_changed
+        - case_note_added
+        - workflow_attached
+        - workflow_state_changed
+    TimelineActor:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - displayName
+      properties:
+        type:
+          $ref: "#/components/schemas/TimelineActorType"
+        id:
+          type: string
+        displayName:
+          type: string
+    TimelineActorType:
+      type: string
+      enum:
+        - system
+        - user
+        - atlas_agent
+        - provider
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - class
+        - message
+      properties:
+        class:
+          $ref: "#/components/schemas/ErrorClass"
+        message:
+          type: string
+    ErrorClass:
+      type: string
+      enum:
+        - Internal
+        - Unavailable
+        - Unauthorized
+        - Unsupported
+        - VersionUnsupported
+        - NotFound
+        - Conflict
+        - Unsafe
+        - Partial
+        - MalformedResponse
+        - Timeout

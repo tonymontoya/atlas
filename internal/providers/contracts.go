@@ -1,0 +1,41 @@
+package providers
+
+import (
+	"context"
+
+	"github.com/tonymontoya/ceph-atlas/internal/fleet"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+)
+
+type ErrorClass string
+
+const (
+	ErrorUnavailable        ErrorClass = "Unavailable"
+	ErrorUnauthorized       ErrorClass = "Unauthorized"
+	ErrorUnsupported        ErrorClass = "Unsupported"
+	ErrorVersionUnsupported ErrorClass = "VersionUnsupported"
+	ErrorNotFound           ErrorClass = "NotFound"
+	ErrorConflict           ErrorClass = "Conflict"
+	ErrorUnsafe             ErrorClass = "Unsafe"
+	ErrorPartial            ErrorClass = "Partial"
+	ErrorMalformedResponse  ErrorClass = "MalformedResponse"
+	ErrorTimeout            ErrorClass = "Timeout"
+)
+
+type ProviderError struct {
+	Class   ErrorClass
+	Message string
+}
+
+func (e ProviderError) Error() string {
+	if e.Message == "" {
+		return string(e.Class)
+	}
+	return string(e.Class) + ": " + e.Message
+}
+
+type CephReadProvider interface {
+	ClusterIdentity(ctx context.Context) (fleet.ClusterIdentity, error)
+	Health(ctx context.Context) (inventory.Health, error)
+	OSDs(ctx context.Context) ([]inventory.OSD, error)
+}
