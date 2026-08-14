@@ -3,6 +3,8 @@ package fake
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
@@ -68,5 +70,29 @@ func TestFixturesReturnProviderErrorForMissingScenario(t *testing.T) {
 	}
 	if providerErr.Class != providers.ErrorUnavailable {
 		t.Fatalf("error class = %q, want %q", providerErr.Class, providers.ErrorUnavailable)
+	}
+}
+
+func TestFixturesRejectUnknownErrorClass(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "ceph", "synthetic")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	fixture := []byte(`{"error": {"class": "Bogus", "message": "not a real class"}}`)
+	if err := os.WriteFile(filepath.Join(dir, "health.json"), fixture, 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	_, err := New(root, "synthetic").Health(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var providerErr providers.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("error type = %T, want ProviderError", err)
+	}
+	if providerErr.Class != providers.ErrorMalformedResponse {
+		t.Fatalf("error class = %q, want %q", providerErr.Class, providers.ErrorMalformedResponse)
 	}
 }

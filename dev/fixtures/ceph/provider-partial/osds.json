@@ -1,0 +1,6 @@
+{
+  "error": {
+    "class": "Partial",
+    "message": "simulated upstream returned incomplete OSD inventory: OSDs on one host unavailable"
+  }
+}

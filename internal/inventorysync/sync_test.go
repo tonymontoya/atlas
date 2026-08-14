@@ -69,3 +69,21 @@ func TestRunOnceCollectsProviderDataAndWritesObservation(t *testing.T) {
 		t.Fatalf("unexpected sync failure = %+v", writer.failed)
 	}
 }
+
+func TestRunOnceRecordsProviderErrorClassOnFailure(t *testing.T) {
+	writer := &recordingWriter{}
+
+	_, err := RunFakeOnce(context.Background(), writer, Options{Scenario: "provider-unauthorized"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if writer.failed.RunID != 30 {
+		t.Fatalf("failure run ID = %d, want 30", writer.failed.RunID)
+	}
+	if writer.failed.ErrorClass != "Unauthorized" {
+		t.Fatalf("failure error class = %q, want %q", writer.failed.ErrorClass, "Unauthorized")
+	}
+	if writer.succeeded.RunID != 0 {
+		t.Fatalf("unexpected sync success = %+v", writer.succeeded)
+	}
+}

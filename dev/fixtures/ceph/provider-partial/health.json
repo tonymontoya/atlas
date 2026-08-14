@@ -1,0 +1,6 @@
+{
+  "error": {
+    "class": "Partial",
+    "message": "simulated upstream returned incomplete health: health checks for one host unavailable"
+  }
+}

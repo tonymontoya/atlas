@@ -186,6 +186,11 @@ Provider methods should normalize failures into a small set of error classes.
 | `MalformedResponse` | Upstream response could not be parsed safely. | Unexpected Dashboard API payload. |
 | `Timeout` | Provider exceeded configured deadline. | Prometheus query timed out. |
 
+Note on `Partial`: the Atlas read model currently represents `Partial` as an
+error with no partial payload; the provider aborts the collection rather than
+returning partial data. A partial-result shape (data plus error) may be
+introduced when a consumer needs it.
+
 ---
 
 # 6. CephReadProvider Methods

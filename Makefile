@@ -1,4 +1,4 @@
-.PHONY: test lint dev dev-fake db-up db-down dev-stack-up dev-stack-down dev-stack-check db-migrate db-sync-fake db-test fixtures-check migrations-check web-test
+.PHONY: test lint dev dev-fake db-up db-down dev-stack-up dev-stack-down dev-stack-check db-migrate db-sync-fake db-test fixtures-check migrations-check provider-contract-test web-test
 
 export GOCACHE := $(CURDIR)/.cache/go-build
 export GOPATH := $(CURDIR)/.cache/go
@@ -58,6 +58,9 @@ db-test:
 
 fixtures-check:
 	go test ./internal/providers/fake -run TestFixtures
+
+provider-contract-test:
+	go test ./internal/providers/... -run TestCephReadProviderContract -count=1
 
 migrations-check:
 	sh scripts/check_migrations.sh

@@ -75,6 +75,19 @@ func (p *Provider) load(ctx context.Context, name string, target any) error {
 	if err != nil {
 		return providers.ProviderError{Class: providers.ErrorUnavailable, Message: fmt.Sprintf("read fixture %s: %v", path, err)}
 	}
+	var envelope struct {
+		Error *struct {
+			Class   string `json:"class"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(data, &envelope); err == nil && envelope.Error != nil {
+		class, ok := providers.LookupErrorClass(envelope.Error.Class)
+		if !ok {
+			return providers.ProviderError{Class: providers.ErrorMalformedResponse, Message: fmt.Sprintf("fixture %s declares unknown error class %q", path, envelope.Error.Class)}
+		}
+		return providers.ProviderError{Class: class, Message: envelope.Error.Message}
+	}
 	if err := json.Unmarshal(data, target); err != nil {
 		return providers.ProviderError{Class: providers.ErrorMalformedResponse, Message: fmt.Sprintf("parse fixture %s: %v", path, err)}
 	}

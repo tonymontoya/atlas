@@ -34,6 +34,24 @@ func (e ProviderError) Error() string {
 	return string(e.Class) + ": " + e.Message
 }
 
+func LookupErrorClass(name string) (ErrorClass, bool) {
+	class := ErrorClass(name)
+	switch class {
+	case ErrorUnavailable,
+		ErrorUnauthorized,
+		ErrorUnsupported,
+		ErrorVersionUnsupported,
+		ErrorNotFound,
+		ErrorConflict,
+		ErrorUnsafe,
+		ErrorPartial,
+		ErrorMalformedResponse,
+		ErrorTimeout:
+		return class, true
+	}
+	return "", false
+}
+
 type CephReadProvider interface {
 	ClusterIdentity(ctx context.Context) (fleet.ClusterIdentity, error)
 	Health(ctx context.Context) (inventory.Health, error)

@@ -420,8 +420,21 @@ The first scaffold is test-ready when:
 
 - Which Go lint tool should be selected?
 - Which TypeScript test runner should be selected with the UI scaffold?
-- Should provider contract tests be shared test suites that every implementation imports?
+- ~~Should provider contract tests be shared test suites that every implementation imports?~~
+  Resolved: `internal/providers/contracttest` exports a shared suite
+  (`RunCephReadProviderSuite`) that every `CephReadProvider` implementation
+  wires into its own tests via a scenario factory. Run with
+  `make provider-contract-test`.
 - Should fixture schema be JSON Schema, Go validation code, or both?
+  Provisional convention in place: fake-provider fixtures may carry an
+  error-directive envelope (`{"error": {"class": ..., "message": ...}}`)
+  validated in Go by the fake provider; `provider-malformed/*.json` are
+  deliberately invalid JSON, which any future fixture syntax check must
+  account for.
+- Raw upstream payload leakage checks are not meaningfully testable against
+  the fake provider (its fixtures are already normalized); they become a
+  contract-suite requirement when a raw-payload provider implementation
+  exists.
 - Should migration tests use disposable local PostgreSQL containers or a developer-provided PostgreSQL instance?
 - Should CI use GitLab services for PostgreSQL?
 

@@ -1,0 +1,6 @@
+{
+  "error": {
+    "class": "Partial",
+    "message": "simulated upstream returned incomplete cluster identity: version summary unavailable"
+  }
+}

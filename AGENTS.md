@@ -57,6 +57,7 @@ Use these before committing when relevant:
 make test
 make lint
 make fixtures-check
+make provider-contract-test
 make web-test
 ```
 
