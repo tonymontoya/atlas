@@ -416,10 +416,10 @@ func TestAlertEvaluationRunLifecycle(t *testing.T) {
 	}
 	var succeeded, failed *AlertEvaluationRun
 	for i, run := range runs {
-		switch {
-		case run.ID == runID:
+		switch run.ID {
+		case runID:
 			succeeded = &runs[i]
-		case run.ID == failID:
+		case failID:
 			failed = &runs[i]
 		}
 	}
