@@ -108,10 +108,15 @@ wait_for_json "current pools" "$api_base/api/v1/clusters/current/pools" \
     'length >= 1 and all(.[]; .name != "" and (.type == "replicated" or .type == "erasure"))'
 wait_for_json "inventory sync runs" "$api_base/api/v1/inventory-sync-runs" \
     'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded"'
+wait_for_json "alert evaluation runs" "$api_base/api/v1/alert-evaluation-runs" \
+    'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded" and .[0].casesCreated == 1'
 wait_for_json "cases" "$api_base/api/v1/cases" \
-    'length >= 1 and .[0].title == "Review weekly capacity trend" and .[0].status == "triaged"'
-case_id="$(curl -fsS "$api_base/api/v1/cases" | jq -r '.[0].id')"
-wait_for_json "case timeline" "$api_base/api/v1/cases/${case_id}/timeline" \
+    'any(.[]; .title == "CephOSDDown on osd=1" and .status == "detected" and .severity == "high") and any(.[]; .title == "Review weekly capacity trend" and .status == "triaged")'
+detected_case_id="$(curl -fsS "$api_base/api/v1/cases" | jq -r '.[] | select(.title == "CephOSDDown on osd=1") | .id')"
+wait_for_json "detected case timeline" "$api_base/api/v1/cases/${detected_case_id}/timeline" \
+    'length == 1 and .[0].type == "case_detected" and .[0].payload.signal == "CEPH_OSD_DOWN" and .[0].payload.clusterFsid == "00000000-0000-4000-8000-000000000102"'
+seed_case_id="$(curl -fsS "$api_base/api/v1/cases" | jq -r '.[] | select(.title == "Review weekly capacity trend") | .id')"
+wait_for_json "seed case timeline" "$api_base/api/v1/cases/${seed_case_id}/timeline" \
     'length == 2 and .[0].type == "case_detected" and .[1].type == "case_triaged"'
 
 wait_for_text "web UI" "$web_base/" '<title>Atlas</title>'

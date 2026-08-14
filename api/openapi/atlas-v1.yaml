@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Atlas API
-  version: 0.2.0
+  version: 0.3.0
   description: >
     Read-only Atlas REST API contract for the fake-provider scaffold. Covers
     local health, current-cluster inventory reads (identity, health, OSDs,
@@ -268,6 +268,42 @@ paths:
                       startedAt: "2026-08-13T12:00:00Z"
                       finishedAt: "2026-08-13T12:00:01Z"
                       snapshotId: 1
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/alert-evaluation-runs:
+    get:
+      tags:
+        - Inventory
+      operationId: listAlertEvaluationRuns
+      summary: List recent alert evaluation runs
+      responses:
+        "200":
+          description: Recent alert evaluation run history.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AlertEvaluationRun"
+              examples:
+                runs:
+                  value:
+                    - id: 2
+                      provider: fake
+                      scenario: osd-down-alert
+                      status: succeeded
+                      startedAt: "2026-08-14T09:20:00Z"
+                      finishedAt: "2026-08-14T09:20:01Z"
+                      alertsEvaluated: 1
+                      casesCreated: 1
+                    - id: 1
+                      provider: fake
+                      scenario: provider-unauthorized
+                      status: failed
+                      startedAt: "2026-08-14T09:15:00Z"
+                      finishedAt: "2026-08-14T09:15:01Z"
+                      errorClass: Unauthorized
+                      errorMessage: "Unauthorized: simulated observability source rejected provider credentials"
         default:
           $ref: "#/components/responses/Error"
   /api/v1/cases:
@@ -621,6 +657,50 @@ components:
         errorMessage:
           type: string
     InventorySyncRunStatus:
+      type: string
+      enum:
+        - running
+        - succeeded
+        - failed
+    AlertEvaluationRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - provider
+        - status
+        - startedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        provider:
+          type: string
+          enum:
+            - fake
+        scenario:
+          type: string
+        status:
+          $ref: "#/components/schemas/AlertEvaluationRunStatus"
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        errorClass:
+          $ref: "#/components/schemas/ErrorClass"
+        errorMessage:
+          type: string
+        alertsEvaluated:
+          type: integer
+          format: int32
+          description: Alert count processed by the run, set on success.
+        casesCreated:
+          type: integer
+          format: int32
+          description: Cases created by the run, set on success.
+    AlertEvaluationRunStatus:
       type: string
       enum:
         - running

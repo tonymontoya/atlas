@@ -35,6 +35,7 @@ func (s *Server) routes() []route {
 		{"GET", "/api/v1/clusters/current/daemons", s.daemons},
 		{"GET", "/api/v1/clusters/current/pools", s.pools},
 		{"GET", "/api/v1/inventory-sync-runs", s.inventorySyncRuns},
+		{"GET", "/api/v1/alert-evaluation-runs", s.alertEvaluationRuns},
 		{"GET", "/api/v1/cases", s.cases},
 		{"GET", "/api/v1/cases/{id}", s.caseByID},
 		{"GET", "/api/v1/cases/{id}/timeline", s.caseTimeline},
@@ -130,6 +131,22 @@ func (s *Server) inventorySyncRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runs, err := s.app.InventorySyncRuns.ListInventorySyncRuns(r.Context(), 50)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, runs)
+}
+
+func (s *Server) alertEvaluationRuns(w http.ResponseWriter, r *http.Request) {
+	if s.app.AlertEvaluationRuns == nil {
+		writeError(w, providers.ProviderError{
+			Class:   providers.ErrorUnsupported,
+			Message: "alert evaluation run history requires postgres read source",
+		})
+		return
+	}
+	runs, err := s.app.AlertEvaluationRuns.ListAlertEvaluationRuns(r.Context(), 50)
 	if err != nil {
 		writeError(w, err)
 		return

@@ -12,15 +12,20 @@ import (
 )
 
 type App struct {
-	Config            config.Config
-	CephProvider      providers.CephReadProvider
-	InventorySyncRuns InventorySyncRunReader
-	Cases             CaseReader
-	close             func() error
+	Config              config.Config
+	CephProvider        providers.CephReadProvider
+	InventorySyncRuns   InventorySyncRunReader
+	AlertEvaluationRuns AlertEvaluationRunReader
+	Cases               CaseReader
+	close               func() error
 }
 
 type InventorySyncRunReader interface {
 	ListInventorySyncRuns(ctx context.Context, limit int) ([]store.InventorySyncRun, error)
+}
+
+type AlertEvaluationRunReader interface {
+	ListAlertEvaluationRuns(ctx context.Context, limit int) ([]store.AlertEvaluationRun, error)
 }
 
 type CaseReader interface {
@@ -47,11 +52,12 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 		}
 		postgresStore := store.NewPostgres(db)
 		return &App{
-			Config:            cfg,
-			CephProvider:      postgresStore,
-			InventorySyncRuns: postgresStore,
-			Cases:             postgresStore,
-			close:             db.Close,
+			Config:              cfg,
+			CephProvider:        postgresStore,
+			InventorySyncRuns:   postgresStore,
+			AlertEvaluationRuns: postgresStore,
+			Cases:               postgresStore,
+			close:               db.Close,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported read source %q", cfg.ReadSource)

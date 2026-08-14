@@ -1,4 +1,4 @@
-.PHONY: test lint dev dev-fake db-up db-down dev-stack-up dev-stack-down dev-stack-check db-migrate db-sync-fake db-test fixtures-check migrations-check provider-contract-test web-test web-lint
+.PHONY: test lint dev dev-fake db-up db-down dev-stack-up dev-stack-down dev-stack-check db-migrate db-sync-fake db-alert-eval-fake db-test fixtures-check migrations-check provider-contract-test web-test web-lint
 
 export GOCACHE := $(CURDIR)/.cache/go-build
 export GOPATH := $(CURDIR)/.cache/go
@@ -45,6 +45,9 @@ db-migrate:
 
 db-sync-fake: db-migrate
 	ATLAS_PROVIDER_MODE=fake go run ./cmd/atlas-inventory-sync
+
+db-alert-eval-fake: db-migrate
+	ATLAS_PROVIDER_MODE=fake go run ./cmd/atlas-alert-eval
 
 db-test:
 	@set -e; \

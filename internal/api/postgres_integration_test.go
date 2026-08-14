@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/casedetection"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
@@ -368,4 +369,95 @@ func serve(server *Server, method, path string) *httptest.ResponseRecorder {
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
 	return response
+}
+
+func TestPostgresReadSourceListsAlertEvaluationRuns(t *testing.T) {
+	databaseURL := testDatabaseURL(t)
+	ctx := context.Background()
+	db := openTestDB(t, ctx, databaseURL)
+	defer func() { _ = db.Close() }()
+	resetDetectionTables(t, ctx, db)
+
+	writer := store.NewPostgres(db)
+	if _, err := casedetection.RunFakeOnce(ctx, writer, casedetection.Options{
+		Scenario:    "osd-down-alert",
+		EvaluatedAt: time.Date(2026, 8, 14, 9, 20, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("run fake alert evaluation: %v", err)
+	}
+	if _, err := casedetection.RunFakeOnce(ctx, writer, casedetection.Options{
+		Scenario: "provider-unauthorized",
+	}); err == nil {
+		t.Fatal("expected failed fake alert evaluation")
+	}
+
+	server := newPostgresServer(t, ctx, databaseURL)
+	response := serve(server, http.MethodGet, "/api/v1/alert-evaluation-runs")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var runs []struct {
+		Provider        string `json:"provider"`
+		Scenario        string `json:"scenario"`
+		Status          string `json:"status"`
+		ErrorClass      string `json:"errorClass,omitempty"`
+		ErrorMessage    string `json:"errorMessage,omitempty"`
+		AlertsEvaluated *int   `json:"alertsEvaluated,omitempty"`
+		CasesCreated    *int   `json:"casesCreated,omitempty"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&runs); err != nil {
+		t.Fatalf("decode runs: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("run count = %d, want 2; runs=%+v", len(runs), runs)
+	}
+	if runs[0].Status != "failed" || runs[0].ErrorClass != "Unauthorized" || runs[0].ErrorMessage == "" {
+		t.Fatalf("first run = %+v, want failed unauthorized run", runs[0])
+	}
+	if runs[1].Status != "succeeded" || runs[1].Scenario != "osd-down-alert" {
+		t.Fatalf("second run = %+v, want succeeded osd-down-alert run", runs[1])
+	}
+	if runs[1].AlertsEvaluated == nil || *runs[1].AlertsEvaluated != 1 {
+		t.Fatalf("second run alertsEvaluated = %+v, want 1", runs[1].AlertsEvaluated)
+	}
+	if runs[1].CasesCreated == nil || *runs[1].CasesCreated != 1 {
+		t.Fatalf("second run casesCreated = %+v, want 1", runs[1].CasesCreated)
+	}
+}
+
+func resetDetectionTables(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	statements := []string{
+		`DELETE FROM case_alert_dedup WHERE case_id IN (SELECT id FROM cases WHERE title = 'CephOSDDown on osd=1')`,
+		`DELETE FROM cases WHERE title = 'CephOSDDown on osd=1'`,
+		`DELETE FROM alert_evaluation_runs`,
+	}
+	for _, statement := range statements {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("reset detection tables (%q): %v", statement, err)
+		}
+	}
+}
+
+func TestAlertEvaluationRunsEndpointRequiresPostgresReadSource(t *testing.T) {
+	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/alert-evaluation-runs", nil)
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
+	}
+	var body struct {
+		Error struct {
+			Class string `json:"class"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if body.Error.Class != string(providers.ErrorUnsupported) {
+		t.Fatalf("error class = %q, want %q", body.Error.Class, providers.ErrorUnsupported)
+	}
 }
