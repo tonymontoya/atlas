@@ -1,0 +1,9 @@
+{
+  "title": "CephOSDDown on osd=1",
+  "summary": "OSD 1 is down",
+  "severity": "high",
+  "source": "prometheus",
+  "signal": "CEPH_OSD_DOWN",
+  "clusterLabel": "reef-baremetal-osd-down",
+  "fingerprint": "ab8c42b68ea4c0e53e8c554f984b0a031161c98338f54781ddfe8b6e0bd936b3"
+}
