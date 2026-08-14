@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/fake"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
@@ -65,13 +64,9 @@ func runFakeOnce(ctx context.Context, writer Writer, opts Options) (store.SaveIn
 	if err != nil {
 		return store.SaveInventoryResult{}, err
 	}
-	var devices []inventory.StorageDevice
-	for _, host := range hosts {
-		hostDevices, err := provider.HostDevices(ctx, host.Name)
-		if err != nil {
-			return store.SaveInventoryResult{}, err
-		}
-		devices = append(devices, hostDevices...)
+	devices, err := providers.AllHostDevices(ctx, provider, hosts)
+	if err != nil {
+		return store.SaveInventoryResult{}, err
 	}
 	daemons, err := provider.Daemons(ctx)
 	if err != nil {

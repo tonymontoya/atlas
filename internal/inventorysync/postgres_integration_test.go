@@ -251,6 +251,93 @@ func TestSaveInventoryObservationPreservesDeviceOSDHistory(t *testing.T) {
 	}
 }
 
+func TestCurrentViewsReflectOnlyLatestSnapshot(t *testing.T) {
+	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
+	}
+
+	ctx := context.Background()
+	db, err := store.OpenPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer db.Close()
+
+	const fsid = "00000000-0000-4000-8000-000000000202"
+	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid); err != nil {
+		t.Fatalf("delete existing test cluster: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid)
+	})
+
+	cluster := fleet.ClusterIdentity{
+		FSID:        fsid,
+		Name:        "removal-test",
+		CephVersion: "18.2.x",
+		Type:        fleet.ClusterTypeBareMetal,
+	}
+	base := store.InventoryObservation{
+		Provider: "fake",
+		Scenario: "removal-test",
+		Cluster:  cluster,
+		Health:   inventory.Health{Status: inventory.HealthOK},
+	}
+
+	hostA := "host-a.example.invalid"
+	hostB := "host-b.example.invalid"
+	first := base
+	first.ObservedAt = time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	first.Hosts = []inventory.Host{{Name: hostA}, {Name: hostB}}
+	first.Devices = []inventory.StorageDevice{
+		{Host: hostA, Serial: "serial-a"},
+		{Host: hostB, Serial: "serial-b"},
+	}
+	first.Daemons = []inventory.Daemon{
+		{Type: "mon", Name: "mon.a", Host: hostA, Status: "running"},
+		{Type: "mon", Name: "mon.b", Host: hostB, Status: "running"},
+	}
+	first.Pools = []inventory.Pool{{ID: 1, Name: "pool-one", Type: "replicated"}}
+	first.OSDs = []inventory.OSD{{ID: 0, Host: hostA, Up: true, In: true}}
+	if _, err := store.NewPostgres(db).SaveInventoryObservation(ctx, first); err != nil {
+		t.Fatalf("save first observation: %v", err)
+	}
+
+	// Second snapshot: hostB, its device, mon.b, the pool, and osd.0 are gone.
+	second := base
+	second.ObservedAt = time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
+	second.Hosts = []inventory.Host{{Name: hostA}}
+	second.Devices = []inventory.StorageDevice{{Host: hostA, Serial: "serial-a"}}
+	second.Daemons = []inventory.Daemon{
+		{Type: "mon", Name: "mon.a", Host: hostA, Status: "running"},
+	}
+	second.Pools = nil
+	second.OSDs = nil
+	if _, err := store.NewPostgres(db).SaveInventoryObservation(ctx, second); err != nil {
+		t.Fatalf("save second observation: %v", err)
+	}
+
+	for _, check := range []struct {
+		view  string
+		query string
+	}{
+		{"cluster_current_hosts", `SELECT count(*) FROM cluster_current_hosts WHERE fsid = $1 AND host_name = '` + hostB + `'`},
+		{"cluster_current_storage_devices", `SELECT count(*) FROM cluster_current_storage_devices WHERE fsid = $1 AND host_name = '` + hostB + `'`},
+		{"cluster_current_daemons", `SELECT count(*) FROM cluster_current_daemons WHERE fsid = $1 AND daemon_name = 'mon.b'`},
+		{"cluster_current_pools", `SELECT count(*) FROM cluster_current_pools WHERE fsid = $1`},
+		{"cluster_current_osds", `SELECT count(*) FROM cluster_current_osds WHERE fsid = $1`},
+	} {
+		var remaining int
+		if err := db.QueryRowContext(ctx, check.query, fsid).Scan(&remaining); err != nil {
+			t.Fatalf("query %s: %v", check.view, err)
+		}
+		if remaining != 0 {
+			t.Fatalf("%s still lists %d row(s) absent from the latest snapshot; current views must reflect only the latest snapshot", check.view, remaining)
+		}
+	}
+}
+
 func TestRunOnceRecordsFailedSyncRun(t *testing.T) {
 	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
 	if databaseURL == "" {

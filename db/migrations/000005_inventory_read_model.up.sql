@@ -72,24 +72,46 @@ CREATE TABLE pool_observations (
 CREATE INDEX pool_observations_snapshot_idx
     ON pool_observations (snapshot_id, pool_id);
 
+-- Current-state views list exactly what the cluster's latest snapshot
+-- observed: objects absent from the latest snapshot are no longer current.
+-- Historical Storage Device to OSD links remain queryable through
+-- storage_device_osd_history.
+
 CREATE VIEW cluster_current_hosts AS
-SELECT DISTINCT ON (snapshots.cluster_id, hosts.host_name)
-    snapshots.cluster_id,
+WITH latest AS (
+    SELECT DISTINCT ON (cluster_id)
+        cluster_id,
+        id AS snapshot_id,
+        observed_at,
+        completed_at
+    FROM inventory_snapshots
+    ORDER BY cluster_id, observed_at DESC, id DESC
+)
+SELECT
+    latest.cluster_id,
     clusters.fsid,
     hosts.host_name,
     hosts.address,
-    snapshots.observed_at,
-    snapshots.completed_at
-FROM host_observations AS hosts
-JOIN inventory_snapshots AS snapshots
-    ON snapshots.id = hosts.snapshot_id
+    latest.observed_at,
+    latest.completed_at
+FROM latest
+JOIN host_observations AS hosts
+    ON hosts.snapshot_id = latest.snapshot_id
 JOIN atlas_clusters AS clusters
-    ON clusters.id = snapshots.cluster_id
-ORDER BY snapshots.cluster_id, hosts.host_name, snapshots.observed_at DESC, snapshots.id DESC;
+    ON clusters.id = latest.cluster_id;
 
 CREATE VIEW cluster_current_storage_devices AS
-SELECT DISTINCT ON (snapshots.cluster_id, devices.host_name, devices.serial)
-    snapshots.cluster_id,
+WITH latest AS (
+    SELECT DISTINCT ON (cluster_id)
+        cluster_id,
+        id AS snapshot_id,
+        observed_at,
+        completed_at
+    FROM inventory_snapshots
+    ORDER BY cluster_id, observed_at DESC, id DESC
+)
+SELECT
+    latest.cluster_id,
     clusters.fsid,
     devices.host_name,
     devices.serial,
@@ -97,50 +119,97 @@ SELECT DISTINCT ON (snapshots.cluster_id, devices.host_name, devices.serial)
     devices.device_path,
     devices.device_health,
     devices.osd_id,
-    snapshots.observed_at,
-    snapshots.completed_at
-FROM storage_device_observations AS devices
-JOIN inventory_snapshots AS snapshots
-    ON snapshots.id = devices.snapshot_id
+    latest.observed_at,
+    latest.completed_at
+FROM latest
+JOIN storage_device_observations AS devices
+    ON devices.snapshot_id = latest.snapshot_id
 JOIN atlas_clusters AS clusters
-    ON clusters.id = snapshots.cluster_id
-ORDER BY snapshots.cluster_id, devices.host_name, devices.serial, snapshots.observed_at DESC, snapshots.id DESC;
+    ON clusters.id = latest.cluster_id;
 
 CREATE VIEW cluster_current_daemons AS
-SELECT DISTINCT ON (snapshots.cluster_id, daemons.daemon_type, daemons.daemon_name)
-    snapshots.cluster_id,
+WITH latest AS (
+    SELECT DISTINCT ON (cluster_id)
+        cluster_id,
+        id AS snapshot_id,
+        observed_at,
+        completed_at
+    FROM inventory_snapshots
+    ORDER BY cluster_id, observed_at DESC, id DESC
+)
+SELECT
+    latest.cluster_id,
     clusters.fsid,
     daemons.daemon_type,
     daemons.daemon_name,
     daemons.host_name,
     daemons.status,
     daemons.ceph_version,
-    snapshots.observed_at,
-    snapshots.completed_at
-FROM daemon_observations AS daemons
-JOIN inventory_snapshots AS snapshots
-    ON snapshots.id = daemons.snapshot_id
+    latest.observed_at,
+    latest.completed_at
+FROM latest
+JOIN daemon_observations AS daemons
+    ON daemons.snapshot_id = latest.snapshot_id
 JOIN atlas_clusters AS clusters
-    ON clusters.id = snapshots.cluster_id
-ORDER BY snapshots.cluster_id, daemons.daemon_type, daemons.daemon_name, snapshots.observed_at DESC, snapshots.id DESC;
+    ON clusters.id = latest.cluster_id;
 
 CREATE VIEW cluster_current_pools AS
-SELECT DISTINCT ON (snapshots.cluster_id, pools.pool_id)
-    snapshots.cluster_id,
+WITH latest AS (
+    SELECT DISTINCT ON (cluster_id)
+        cluster_id,
+        id AS snapshot_id,
+        observed_at,
+        completed_at
+    FROM inventory_snapshots
+    ORDER BY cluster_id, observed_at DESC, id DESC
+)
+SELECT
+    latest.cluster_id,
     clusters.fsid,
     pools.pool_id,
     pools.name,
     pools.pool_type,
     pools.size,
     pools.min_size,
-    snapshots.observed_at,
-    snapshots.completed_at
-FROM pool_observations AS pools
-JOIN inventory_snapshots AS snapshots
-    ON snapshots.id = pools.snapshot_id
+    latest.observed_at,
+    latest.completed_at
+FROM latest
+JOIN pool_observations AS pools
+    ON pools.snapshot_id = latest.snapshot_id
 JOIN atlas_clusters AS clusters
-    ON clusters.id = snapshots.cluster_id
-ORDER BY snapshots.cluster_id, pools.pool_id, snapshots.observed_at DESC, snapshots.id DESC;
+    ON clusters.id = latest.cluster_id;
+
+-- Align OSD current-state reads with latest-snapshot semantics (the 0001
+-- view kept destroyed OSDs current indefinitely).
+CREATE OR REPLACE VIEW cluster_current_osds AS
+WITH latest AS (
+    SELECT DISTINCT ON (cluster_id)
+        cluster_id,
+        id AS snapshot_id,
+        observed_at,
+        completed_at
+    FROM inventory_snapshots
+    ORDER BY cluster_id, observed_at DESC, id DESC
+)
+SELECT
+    latest.cluster_id,
+    clusters.fsid,
+    osds.osd_id,
+    osds.host,
+    osds.osd_up,
+    osds.osd_in,
+    osds.device,
+    osds.weight,
+    osds.ceph_version,
+    osds.rook_namespace,
+    osds.rook_pod,
+    latest.observed_at,
+    latest.completed_at
+FROM latest
+JOIN osd_observations AS osds
+    ON osds.snapshot_id = latest.snapshot_id
+JOIN atlas_clusters AS clusters
+    ON clusters.id = latest.cluster_id;
 
 CREATE VIEW storage_device_osd_history AS
 SELECT

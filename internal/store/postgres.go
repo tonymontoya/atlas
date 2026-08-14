@@ -63,6 +63,14 @@ type InventorySyncRun struct {
 	ErrorMessage string     `json:"errorMessage,omitempty"`
 }
 
+const currentSnapshotCTE = `WITH current_cluster AS (
+	SELECT id AS snapshot_id
+	FROM inventory_snapshots
+	ORDER BY observed_at DESC, id DESC
+	LIMIT 1
+)
+`
+
 type PostgresStore struct {
 	db *sql.DB
 }
@@ -353,14 +361,7 @@ func (s *PostgresStore) Health(ctx context.Context) (inventory.Health, error) {
 }
 
 func (s *PostgresStore) OSDs(ctx context.Context) ([]inventory.OSD, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		WITH current_cluster AS (
-			SELECT id AS snapshot_id
-			FROM inventory_snapshots
-			ORDER BY observed_at DESC, id DESC
-			LIMIT 1
-		)
-		SELECT osds.osd_id, osds.host, osds.osd_up, osds.osd_in, osds.device
+	rows, err := s.db.QueryContext(ctx, currentSnapshotCTE+`		SELECT osds.osd_id, osds.host, osds.osd_up, osds.osd_in, osds.device
 		FROM osd_observations AS osds
 		WHERE osds.snapshot_id = (SELECT snapshot_id FROM current_cluster)
 		ORDER BY osd_id
@@ -392,14 +393,7 @@ func (s *PostgresStore) OSDs(ctx context.Context) ([]inventory.OSD, error) {
 }
 
 func (s *PostgresStore) Hosts(ctx context.Context) ([]inventory.Host, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		WITH current_cluster AS (
-			SELECT id AS snapshot_id
-			FROM inventory_snapshots
-			ORDER BY observed_at DESC, id DESC
-			LIMIT 1
-		)
-		SELECT hosts.host_name, hosts.address
+	rows, err := s.db.QueryContext(ctx, currentSnapshotCTE+`		SELECT hosts.host_name, hosts.address
 		FROM host_observations AS hosts
 		WHERE hosts.snapshot_id = (SELECT snapshot_id FROM current_cluster)
 		ORDER BY hosts.host_name
@@ -435,14 +429,7 @@ func (s *PostgresStore) HostDevices(ctx context.Context, host string) ([]invento
 		return nil, notFound("host not found")
 	}
 	var exists bool
-	err := s.db.QueryRowContext(ctx, `
-		WITH current_cluster AS (
-			SELECT id AS snapshot_id
-			FROM inventory_snapshots
-			ORDER BY observed_at DESC, id DESC
-			LIMIT 1
-		)
-		SELECT EXISTS (
+	err := s.db.QueryRowContext(ctx, currentSnapshotCTE+`		SELECT EXISTS (
 			SELECT 1
 			FROM host_observations AS hosts
 			WHERE hosts.snapshot_id = (SELECT snapshot_id FROM current_cluster)
@@ -456,14 +443,7 @@ func (s *PostgresStore) HostDevices(ctx context.Context, host string) ([]invento
 		return nil, notFound(fmt.Sprintf("host %q not found", host))
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-		WITH current_cluster AS (
-			SELECT id AS snapshot_id
-			FROM inventory_snapshots
-			ORDER BY observed_at DESC, id DESC
-			LIMIT 1
-		)
-		SELECT devices.host_name, devices.serial, devices.device_type, devices.device_path, devices.device_health, devices.osd_id
+	rows, err := s.db.QueryContext(ctx, currentSnapshotCTE+`		SELECT devices.host_name, devices.serial, devices.device_type, devices.device_path, devices.device_health, devices.osd_id
 		FROM storage_device_observations AS devices
 		WHERE devices.snapshot_id = (SELECT snapshot_id FROM current_cluster)
 			AND devices.host_name = $1
@@ -489,14 +469,7 @@ func (s *PostgresStore) HostDevices(ctx context.Context, host string) ([]invento
 }
 
 func (s *PostgresStore) Daemons(ctx context.Context) ([]inventory.Daemon, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		WITH current_cluster AS (
-			SELECT id AS snapshot_id
-			FROM inventory_snapshots
-			ORDER BY observed_at DESC, id DESC
-			LIMIT 1
-		)
-		SELECT daemons.daemon_type, daemons.daemon_name, daemons.host_name, daemons.status, daemons.ceph_version
+	rows, err := s.db.QueryContext(ctx, currentSnapshotCTE+`		SELECT daemons.daemon_type, daemons.daemon_name, daemons.host_name, daemons.status, daemons.ceph_version
 		FROM daemon_observations AS daemons
 		WHERE daemons.snapshot_id = (SELECT snapshot_id FROM current_cluster)
 		ORDER BY daemons.daemon_type, daemons.daemon_name
@@ -528,14 +501,7 @@ func (s *PostgresStore) Daemons(ctx context.Context) ([]inventory.Daemon, error)
 }
 
 func (s *PostgresStore) Pools(ctx context.Context) ([]inventory.Pool, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		WITH current_cluster AS (
-			SELECT id AS snapshot_id
-			FROM inventory_snapshots
-			ORDER BY observed_at DESC, id DESC
-			LIMIT 1
-		)
-		SELECT pools.pool_id, pools.name, pools.pool_type, pools.size, pools.min_size
+	rows, err := s.db.QueryContext(ctx, currentSnapshotCTE+`		SELECT pools.pool_id, pools.name, pools.pool_type, pools.size, pools.min_size
 		FROM pool_observations AS pools
 		WHERE pools.snapshot_id = (SELECT snapshot_id FROM current_cluster)
 		ORDER BY pools.pool_id

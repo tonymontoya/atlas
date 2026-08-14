@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/tonymontoya/ceph-atlas/internal/app"
-	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
@@ -96,14 +95,10 @@ func (s *Server) storageDevices(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	devices := make([]inventory.StorageDevice, 0)
-	for _, host := range hosts {
-		hostDevices, err := s.app.CephProvider.HostDevices(r.Context(), host.Name)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		devices = append(devices, hostDevices...)
+	devices, err := providers.AllHostDevices(r.Context(), s.app.CephProvider, hosts)
+	if err != nil {
+		writeError(w, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, devices)
 }

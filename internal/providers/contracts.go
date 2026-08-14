@@ -61,3 +61,15 @@ type CephReadProvider interface {
 	Daemons(ctx context.Context) ([]inventory.Daemon, error)
 	Pools(ctx context.Context) ([]inventory.Pool, error)
 }
+
+func AllHostDevices(ctx context.Context, provider CephReadProvider, hosts []inventory.Host) ([]inventory.StorageDevice, error) {
+	devices := make([]inventory.StorageDevice, 0, len(hosts))
+	for _, host := range hosts {
+		hostDevices, err := provider.HostDevices(ctx, host.Name)
+		if err != nil {
+			return nil, err
+		}
+		devices = append(devices, hostDevices...)
+	}
+	return devices, nil
+}

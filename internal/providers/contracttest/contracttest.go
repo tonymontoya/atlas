@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
@@ -20,16 +19,9 @@ const (
 	ScenarioPartial      Scenario = "partial"
 )
 
-// ReadProvider is the full read surface the suite validates. It mirrors the
-// intended providers.CephReadProvider shape.
+// ReadProvider is the full read surface the suite validates.
 type ReadProvider interface {
-	ClusterIdentity(ctx context.Context) (fleet.ClusterIdentity, error)
-	Health(ctx context.Context) (inventory.Health, error)
-	OSDs(ctx context.Context) ([]inventory.OSD, error)
-	Hosts(ctx context.Context) ([]inventory.Host, error)
-	HostDevices(ctx context.Context, host string) ([]inventory.StorageDevice, error)
-	Daemons(ctx context.Context) ([]inventory.Daemon, error)
-	Pools(ctx context.Context) ([]inventory.Pool, error)
+	providers.CephReadProvider
 }
 
 type ReadProviderFactory func(t *testing.T, scenario Scenario) ReadProvider
