@@ -14,7 +14,7 @@ func TestNewFromConfigDefaultsToProviderReadSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFromConfig returned error: %v", err)
 	}
-	defer application.Close()
+	t.Cleanup(func() { _ = application.Close() })
 
 	identity, err := application.CephProvider.ClusterIdentity(context.Background())
 	if err != nil {

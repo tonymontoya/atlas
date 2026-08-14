@@ -43,7 +43,7 @@ func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new app: %v", err)
 	}
-	defer application.Close()
+	t.Cleanup(func() { _ = application.Close() })
 
 	server := NewServer(application)
 
@@ -98,7 +98,7 @@ func TestPostgresReadSourceReturnsNotFoundForEmptyReadModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new app: %v", err)
 	}
-	defer application.Close()
+	t.Cleanup(func() { _ = application.Close() })
 
 	server := NewServer(application)
 	paths := []string{
