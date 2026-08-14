@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
@@ -24,6 +25,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/clusters/current", s.cluster)
 	mux.HandleFunc("GET /api/v1/clusters/current/health", s.clusterHealth)
 	mux.HandleFunc("GET /api/v1/clusters/current/osds", s.osds)
+	mux.HandleFunc("GET /api/v1/clusters/current/hosts", s.hosts)
+	mux.HandleFunc("GET /api/v1/clusters/current/storage-devices", s.storageDevices)
+	mux.HandleFunc("GET /api/v1/clusters/current/daemons", s.daemons)
+	mux.HandleFunc("GET /api/v1/clusters/current/pools", s.pools)
 	mux.HandleFunc("GET /api/v1/inventory-sync-runs", s.inventorySyncRuns)
 	mux.HandleFunc("GET /api/v1/cases", s.cases)
 	mux.HandleFunc("GET /api/v1/cases/{id}/timeline", s.caseTimeline)
@@ -60,6 +65,51 @@ func (s *Server) osds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, osds)
+}
+
+func (s *Server) hosts(w http.ResponseWriter, r *http.Request) {
+	hosts, err := s.app.CephProvider.Hosts(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, hosts)
+}
+
+func (s *Server) storageDevices(w http.ResponseWriter, r *http.Request) {
+	hosts, err := s.app.CephProvider.Hosts(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	devices := make([]inventory.StorageDevice, 0)
+	for _, host := range hosts {
+		hostDevices, err := s.app.CephProvider.HostDevices(r.Context(), host.Name)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		devices = append(devices, hostDevices...)
+	}
+	writeJSON(w, http.StatusOK, devices)
+}
+
+func (s *Server) daemons(w http.ResponseWriter, r *http.Request) {
+	daemons, err := s.app.CephProvider.Daemons(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, daemons)
+}
+
+func (s *Server) pools(w http.ResponseWriter, r *http.Request) {
+	pools, err := s.app.CephProvider.Pools(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, pools)
 }
 
 func (s *Server) inventorySyncRuns(w http.ResponseWriter, r *http.Request) {

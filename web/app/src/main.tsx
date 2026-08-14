@@ -5,11 +5,15 @@ import {
   loadCaseTimeline,
   loadDashboard,
   type CaseRecord,
+  type Daemon,
   type DashboardSnapshot,
   type InventorySyncRun,
   type OSD,
+  type Pool,
+  type StorageDevice,
   type TimelineEvent,
 } from "./api";
+import { poolRedundancyLabel, stoppedDaemonCount, storageDeviceOSDLabel } from "./inventory";
 import { labelForTimelineEventType, timelinePayloadLabels } from "./timeline";
 import "./styles.css";
 
@@ -150,6 +154,7 @@ function App() {
 
   const downOsds = snapshot.osds.filter((osd) => !osd.up).length;
   const outOsds = snapshot.osds.filter((osd) => !osd.in).length;
+  const stoppedDaemons = stoppedDaemonCount(snapshot.daemons);
 
   return (
     <main className="shell">
@@ -177,6 +182,17 @@ function App() {
           label="OSDs"
           value={String(snapshot.osds.length)}
           detail={`${downOsds} down, ${outOsds} out`}
+        />
+        <Metric
+          label="Hosts"
+          value={String(snapshot.hosts.length)}
+          detail={`${snapshot.storageDevices.length} Storage Devices`}
+        />
+        <Metric
+          label="Ceph Daemons"
+          value={String(snapshot.daemons.length)}
+          detail={stoppedDaemons === 0 ? "all running" : `${stoppedDaemons} stopped`}
+          tone={stoppedDaemons === 0 ? "ok" : "warn"}
         />
         <Metric
           label="Sync Runs"
@@ -285,6 +301,30 @@ function App() {
           <span className="badge neutral">{snapshot.osds.length}</span>
         </div>
         <OSDTable osds={snapshot.osds} />
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Storage Devices</h2>
+          <span className="badge neutral">{snapshot.storageDevices.length}</span>
+        </div>
+        <StorageDeviceTable devices={snapshot.storageDevices} />
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Ceph Daemons</h2>
+          <span className="badge neutral">{snapshot.daemons.length}</span>
+        </div>
+        <DaemonTable daemons={snapshot.daemons} />
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Pools</h2>
+          <span className="badge neutral">{snapshot.pools.length}</span>
+        </div>
+        <PoolTable pools={snapshot.pools} />
       </section>
     </main>
   );
@@ -520,6 +560,126 @@ function OSDTable({ osds }: { osds: OSD[] }) {
       </table>
     </div>
   );
+}
+
+function StorageDeviceTable({ devices }: { devices: StorageDevice[] }) {
+  if (devices.length === 0) {
+    return <p className="empty-state">No Storage Devices returned.</p>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Serial</th>
+            <th>Host</th>
+            <th>Type</th>
+            <th>Path</th>
+            <th>Health</th>
+            <th>Backing</th>
+          </tr>
+        </thead>
+        <tbody>
+          {devices.map((device) => (
+            <tr key={`${device.host}-${device.serial}`}>
+              <td>{device.serial}</td>
+              <td>{device.host}</td>
+              <td>{device.type ?? "unknown"}</td>
+              <td>{device.path ?? "unreported"}</td>
+              <td>
+                <span className={`badge ${toneForDeviceHealth(device.health)}`}>
+                  {device.health ?? "unknown"}
+                </span>
+              </td>
+              <td>{storageDeviceOSDLabel(device)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DaemonTable({ daemons }: { daemons: Daemon[] }) {
+  if (daemons.length === 0) {
+    return <p className="empty-state">No Ceph Daemons returned.</p>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Host</th>
+            <th>Status</th>
+            <th>Version</th>
+          </tr>
+        </thead>
+        <tbody>
+          {daemons.map((daemon) => (
+            <tr key={`${daemon.type}-${daemon.name}`}>
+              <td>{daemon.name}</td>
+              <td>{daemon.type}</td>
+              <td>{daemon.host}</td>
+              <td>
+                <span className={`badge ${daemon.status === "running" ? "ok" : "err"}`}>
+                  {daemon.status}
+                </span>
+              </td>
+              <td>{daemon.version ?? "unreported"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PoolTable({ pools }: { pools: Pool[] }) {
+  if (pools.length === 0) {
+    return <p className="empty-state">No Pools returned.</p>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Redundancy</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pools.map((pool) => (
+            <tr key={pool.id}>
+              <td>{pool.id}</td>
+              <td>{pool.name}</td>
+              <td>{pool.type}</td>
+              <td>{poolRedundancyLabel(pool)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function toneForDeviceHealth(health: string | undefined): "ok" | "warn" | "err" | "neutral" {
+  if (health === "ok") {
+    return "ok";
+  }
+  if (health === "warning") {
+    return "warn";
+  }
+  if (health === "error") {
+    return "err";
+  }
+  return "neutral";
 }
 
 function toneForHealth(status: string): "ok" | "warn" | "err" | "neutral" {

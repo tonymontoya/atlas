@@ -29,6 +29,36 @@ export type OSD = {
   device?: string;
 };
 
+export type Host = {
+  name: string;
+  address?: string;
+};
+
+export type StorageDevice = {
+  host: string;
+  serial: string;
+  type?: string;
+  path?: string;
+  health?: string;
+  osdId?: number;
+};
+
+export type Daemon = {
+  type: "mon" | "mgr" | "osd" | "mds" | "rgw";
+  name: string;
+  host: string;
+  status: "running" | "stopped";
+  version?: string;
+};
+
+export type Pool = {
+  id: number;
+  name: string;
+  type: "replicated" | "erasure";
+  size?: number;
+  minSize?: number;
+};
+
 export type InventorySyncRun = {
   id: number;
   provider: "fake";
@@ -83,6 +113,10 @@ export type DashboardSnapshot = {
   cluster: ClusterIdentity;
   health: ClusterHealth;
   osds: OSD[];
+  hosts: Host[];
+  storageDevices: StorageDevice[];
+  daemons: Daemon[];
+  pools: Pool[];
   syncRuns: InventorySyncRun[];
   syncRunsUnavailable?: string;
   cases: CaseRecord[];
@@ -111,26 +145,35 @@ export class ApiRequestError extends Error {
 export async function loadDashboard(
   signal?: AbortSignal,
 ): Promise<DashboardSnapshot> {
-  const [process, cluster, health, osds, syncRunsResult, casesResult] = await Promise.all([
-    request<HealthzResponse>("/healthz", signal),
-    request<ClusterIdentity>("/api/v1/clusters/current", signal),
-    request<ClusterHealth>("/api/v1/clusters/current/health", signal),
-    request<OSD[]>("/api/v1/clusters/current/osds", signal),
-    request<InventorySyncRun[]>("/api/v1/inventory-sync-runs", signal).then(
-      (syncRuns) => ({ ok: true as const, syncRuns }),
-      (error: unknown) => ({ ok: false as const, error }),
-    ),
-    request<CaseRecord[]>("/api/v1/cases", signal).then(
-      (cases) => ({ ok: true as const, cases }),
-      (error: unknown) => ({ ok: false as const, error }),
-    ),
-  ]);
+  const [process, cluster, health, osds, hosts, storageDevices, daemons, pools, syncRunsResult, casesResult] =
+    await Promise.all([
+      request<HealthzResponse>("/healthz", signal),
+      request<ClusterIdentity>("/api/v1/clusters/current", signal),
+      request<ClusterHealth>("/api/v1/clusters/current/health", signal),
+      request<OSD[]>("/api/v1/clusters/current/osds", signal),
+      request<Host[]>("/api/v1/clusters/current/hosts", signal),
+      request<StorageDevice[]>("/api/v1/clusters/current/storage-devices", signal),
+      request<Daemon[]>("/api/v1/clusters/current/daemons", signal),
+      request<Pool[]>("/api/v1/clusters/current/pools", signal),
+      request<InventorySyncRun[]>("/api/v1/inventory-sync-runs", signal).then(
+        (syncRuns) => ({ ok: true as const, syncRuns }),
+        (error: unknown) => ({ ok: false as const, error }),
+      ),
+      request<CaseRecord[]>("/api/v1/cases", signal).then(
+        (cases) => ({ ok: true as const, cases }),
+        (error: unknown) => ({ ok: false as const, error }),
+      ),
+    ]);
 
   return {
     process,
     cluster,
     health,
     osds,
+    hosts,
+    storageDevices,
+    daemons,
+    pools,
     syncRuns: syncRunsResult.ok ? syncRunsResult.syncRuns : [],
     syncRunsUnavailable: syncRunsResult.ok ? undefined : messageForError(syncRunsResult.error),
     cases: casesResult.ok ? casesResult.cases : [],

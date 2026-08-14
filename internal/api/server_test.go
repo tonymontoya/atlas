@@ -110,6 +110,100 @@ func TestOSDsEndpointUsesFakeProvider(t *testing.T) {
 	}
 }
 
+func TestHostsEndpointUsesFakeProvider(t *testing.T) {
+	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/hosts", nil)
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var hosts []inventory.Host
+	if err := json.NewDecoder(response.Body).Decode(&hosts); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(hosts) == 0 {
+		t.Fatal("expected Host inventory")
+	}
+}
+
+func TestStorageDevicesEndpointListsAllHostsDevices(t *testing.T) {
+	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/storage-devices", nil)
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var devices []inventory.StorageDevice
+	if err := json.NewDecoder(response.Body).Decode(&devices); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(devices) != 3 {
+		t.Fatalf("Storage Device count = %d, want 3 across all Hosts", len(devices))
+	}
+	withoutOSD := 0
+	for _, device := range devices {
+		if device.OSDID == nil {
+			withoutOSD++
+		}
+	}
+	if withoutOSD != 1 {
+		t.Fatalf("Storage Devices without an OSD link = %d, want 1", withoutOSD)
+	}
+}
+
+func TestDaemonsEndpointUsesFakeProvider(t *testing.T) {
+	server := NewServer(app.New(config.Config{FakeScenario: "reef-osd-down-baremetal"}))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/daemons", nil)
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var daemons []inventory.Daemon
+	if err := json.NewDecoder(response.Body).Decode(&daemons); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(daemons) == 0 {
+		t.Fatal("expected Ceph Daemon inventory")
+	}
+	stopped := 0
+	for _, daemon := range daemons {
+		if daemon.Status == "stopped" {
+			stopped++
+		}
+	}
+	if stopped != 1 {
+		t.Fatalf("stopped Ceph Daemon count = %d, want 1", stopped)
+	}
+}
+
+func TestPoolsEndpointUsesFakeProvider(t *testing.T) {
+	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/pools", nil)
+	response := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var pools []inventory.Pool
+	if err := json.NewDecoder(response.Body).Decode(&pools); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(pools) == 0 {
+		t.Fatal("expected Pool inventory")
+	}
+}
+
 func TestCasesEndpointRequiresPostgresReadSource(t *testing.T) {
 	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
 

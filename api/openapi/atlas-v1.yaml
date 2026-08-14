@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: Atlas API
-  version: 0.1.0
+  version: 0.2.0
   description: >
-    Initial read-only Atlas REST API contract for the Mode 1 fake-provider
-    scaffold. This contract is intentionally limited to local health,
-    current-cluster inventory reads, explicit inventory sync run history, and
-    read-only case records.
+    Read-only Atlas REST API contract for the fake-provider scaffold. Covers
+    local health, current-cluster inventory reads (identity, health, OSDs,
+    Hosts, Storage Devices, Ceph Daemons, Pools), explicit inventory sync run
+    history, and read-only case records.
 servers:
   - url: http://127.0.0.1:8080
     description: Local development
@@ -98,15 +98,141 @@ paths:
                 osds:
                   value:
                     - id: 0
-                      host: ceph-node-01
+                      host: host-a.example.invalid
                       up: true
                       in: true
-                      device: /dev/sdb
+                      device: nvme-serial-a
                     - id: 1
-                      host: ceph-node-02
+                      host: host-b.example.invalid
                       up: false
                       in: true
-                      device: /dev/sdb
+                      device: nvme-serial-b
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/clusters/current/hosts:
+    get:
+      tags:
+        - Clusters
+      operationId: listCurrentClusterHosts
+      summary: List Host inventory for the current cluster
+      responses:
+        "200":
+          description: Current cluster Host inventory.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Host"
+              examples:
+                hosts:
+                  value:
+                    - name: host-a.example.invalid
+                      address: 192.0.2.11
+                    - name: host-b.example.invalid
+                      address: 192.0.2.12
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/clusters/current/storage-devices:
+    get:
+      tags:
+        - Clusters
+      operationId: listCurrentClusterStorageDevices
+      summary: List Storage Device inventory for the current cluster
+      description: >
+        Flat listing across all Hosts. Each Storage Device names its Host and,
+        where one exists, the OSD identity it currently backs. The OSD link is
+        point-in-time; a Storage Device may back different OSD identities over
+        time.
+      responses:
+        "200":
+          description: Current cluster Storage Device inventory.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StorageDevice"
+              examples:
+                devices:
+                  value:
+                    - host: host-a.example.invalid
+                      serial: nvme-serial-a
+                      type: nvme
+                      path: /dev/nvme0n1
+                      health: ok
+                      osdId: 0
+                    - host: host-b.example.invalid
+                      serial: nvme-serial-b
+                      type: nvme
+                      path: /dev/nvme0n1
+                      health: error
+                      osdId: 1
+                    - host: host-c.example.invalid
+                      serial: spare-serial-c
+                      type: ssd
+                      path: /dev/sdb
+                      health: ok
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/clusters/current/daemons:
+    get:
+      tags:
+        - Clusters
+      operationId: listCurrentClusterDaemons
+      summary: List Ceph Daemon inventory for the current cluster
+      responses:
+        "200":
+          description: Current cluster Ceph Daemon inventory.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Daemon"
+              examples:
+                daemons:
+                  value:
+                    - type: mon
+                      name: mon.a
+                      host: host-a.example.invalid
+                      status: running
+                      version: 18.2.x
+                    - type: osd
+                      name: osd.1
+                      host: host-b.example.invalid
+                      status: stopped
+                      version: 18.2.x
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/clusters/current/pools:
+    get:
+      tags:
+        - Clusters
+      operationId: listCurrentClusterPools
+      summary: List Pool inventory for the current cluster
+      responses:
+        "200":
+          description: Current cluster Pool inventory.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pool"
+              examples:
+                pools:
+                  value:
+                    - id: 1
+                      name: device_health_metrics
+                      type: replicated
+                      size: 3
+                      minSize: 2
+                    - id: 2
+                      name: .mgr
+                      type: replicated
+                      size: 3
+                      minSize: 2
         default:
           $ref: "#/components/responses/Error"
   /api/v1/inventory-sync-runs:
@@ -361,6 +487,106 @@ components:
           type: boolean
         device:
           type: string
+    Host:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Host name as known to the cluster.
+        address:
+          type: string
+          description: Address metadata where available.
+    StorageDevice:
+      type: object
+      additionalProperties: false
+      required:
+        - host
+        - serial
+      properties:
+        host:
+          type: string
+          description: Host the Storage Device is attached to.
+        serial:
+          type: string
+          description: Storage Device serial number; its durable identity in the read model.
+        type:
+          type: string
+          description: Device media type where known, e.g. nvme, ssd, hdd.
+        path:
+          type: string
+          description: Device path where available.
+        health:
+          type: string
+          description: Device health evidence where available.
+        osdId:
+          type: integer
+          format: int32
+          description: OSD identity this device currently backs, when one exists.
+    Daemon:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - name
+        - host
+        - status
+      properties:
+        type:
+          $ref: "#/components/schemas/DaemonType"
+        name:
+          type: string
+          description: Ceph daemon name, e.g. mon.a, osd.0.
+        host:
+          type: string
+        status:
+          $ref: "#/components/schemas/DaemonStatus"
+        version:
+          type: string
+          description: Daemon Ceph version where available.
+    DaemonType:
+      type: string
+      enum:
+        - mon
+        - mgr
+        - osd
+        - mds
+        - rgw
+    DaemonStatus:
+      type: string
+      enum:
+        - running
+        - stopped
+    Pool:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - type
+      properties:
+        id:
+          type: integer
+          format: int32
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/PoolType"
+        size:
+          type: integer
+          format: int32
+          description: Replica or data-chunk count where available.
+        minSize:
+          type: integer
+          format: int32
+          description: Minimum replicas or chunks for writes where available.
+    PoolType:
+      type: string
+      enum:
+        - replicated
+        - erasure
     InventorySyncRun:
       type: object
       additionalProperties: false
