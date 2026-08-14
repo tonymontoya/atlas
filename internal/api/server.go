@@ -19,20 +19,34 @@ func NewServer(app *app.App) *Server {
 	return &Server{app: app}
 }
 
+type route struct {
+	method  string
+	pattern string
+	handler func(http.ResponseWriter, *http.Request)
+}
+
+func (s *Server) routes() []route {
+	return []route{
+		{"GET", "/healthz", s.healthz},
+		{"GET", "/api/v1/clusters/current", s.cluster},
+		{"GET", "/api/v1/clusters/current/health", s.clusterHealth},
+		{"GET", "/api/v1/clusters/current/osds", s.osds},
+		{"GET", "/api/v1/clusters/current/hosts", s.hosts},
+		{"GET", "/api/v1/clusters/current/storage-devices", s.storageDevices},
+		{"GET", "/api/v1/clusters/current/daemons", s.daemons},
+		{"GET", "/api/v1/clusters/current/pools", s.pools},
+		{"GET", "/api/v1/inventory-sync-runs", s.inventorySyncRuns},
+		{"GET", "/api/v1/cases", s.cases},
+		{"GET", "/api/v1/cases/{id}", s.caseByID},
+		{"GET", "/api/v1/cases/{id}/timeline", s.caseTimeline},
+	}
+}
+
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", s.healthz)
-	mux.HandleFunc("GET /api/v1/clusters/current", s.cluster)
-	mux.HandleFunc("GET /api/v1/clusters/current/health", s.clusterHealth)
-	mux.HandleFunc("GET /api/v1/clusters/current/osds", s.osds)
-	mux.HandleFunc("GET /api/v1/clusters/current/hosts", s.hosts)
-	mux.HandleFunc("GET /api/v1/clusters/current/storage-devices", s.storageDevices)
-	mux.HandleFunc("GET /api/v1/clusters/current/daemons", s.daemons)
-	mux.HandleFunc("GET /api/v1/clusters/current/pools", s.pools)
-	mux.HandleFunc("GET /api/v1/inventory-sync-runs", s.inventorySyncRuns)
-	mux.HandleFunc("GET /api/v1/cases", s.cases)
-	mux.HandleFunc("GET /api/v1/cases/{id}/timeline", s.caseTimeline)
-	mux.HandleFunc("GET /api/v1/cases/{id}", s.caseByID)
+	for _, r := range s.routes() {
+		mux.HandleFunc(r.method+" "+r.pattern, r.handler)
+	}
 	return mux
 }
 

@@ -59,6 +59,7 @@ make lint
 make fixtures-check
 make provider-contract-test
 make web-test
+make web-lint
 ```
 
 For PostgreSQL-backed work:

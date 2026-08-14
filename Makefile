@@ -1,4 +1,4 @@
-.PHONY: test lint dev dev-fake db-up db-down dev-stack-up dev-stack-down dev-stack-check db-migrate db-sync-fake db-test fixtures-check migrations-check provider-contract-test web-test
+.PHONY: test lint dev dev-fake db-up db-down dev-stack-up dev-stack-down dev-stack-check db-migrate db-sync-fake db-test fixtures-check migrations-check provider-contract-test web-test web-lint
 
 export GOCACHE := $(CURDIR)/.cache/go-build
 export GOPATH := $(CURDIR)/.cache/go
@@ -14,6 +14,8 @@ lint:
 		echo "$$gofmt_out"; \
 		exit 1; \
 	fi
+	go vet ./...
+	go test ./internal/api -run TestOpenAPISpecMatchesRegisteredRoutes -count=1
 	sh scripts/check_migrations.sh
 	go test ./...
 
@@ -67,3 +69,6 @@ migrations-check:
 
 web-test:
 	cd web/app && npm test
+
+web-lint:
+	cd web/app && npm run lint

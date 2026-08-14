@@ -418,11 +418,14 @@ The first scaffold is test-ready when:
 
 # 11. Open Questions
 
-- Which Go lint tool should be selected?
-- Which TypeScript test runner should be selected with the UI scaffold?
+- ~~Which Go lint tool should be selected?~~ Resolved: golangci-lint v2
+  (standard linters, `.golangci.yml`, CI job) plus `go vet` in `make lint`.
+- ~~Which TypeScript test runner should be selected with the UI scaffold?~~
+  Resolved: vitest (already in use). TypeScript linting uses ESLint with
+  typescript-eslint; `make web-lint` runs it.
 - ~~Should provider contract tests be shared test suites that every implementation imports?~~
   Resolved: `internal/providers/contracttest` exports a shared suite
-  (`RunCephReadProviderSuite`) that every `CephReadProvider` implementation
+  (`RunReadProviderSuite`) that every read provider implementation
   wires into its own tests via a scenario factory. Run with
   `make provider-contract-test`.
 - Should fixture schema be JSON Schema, Go validation code, or both?
