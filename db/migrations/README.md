@@ -52,6 +52,16 @@ These records are display-oriented operational history, not Audit Events.
 - `storage_device_osd_history`: historical Storage Device to OSD identity
   links with first/last observed timestamps (see ADR-0014).
 
+## Alert Case Detection
+
+`000006_alert_case_detection.up.sql` creates:
+
+- `alert_evaluation_runs`: durable records of alert evaluation runs with
+  `alerts_evaluated` and `cases_created` counts.
+- `case_alert_dedup`: one row per alert fingerprint linking the currently
+  matching Case (see ADR-0015). Enforces at most one Case per firing
+  condition; alert resolution is recorded on the row without closing Cases.
+
 The API can optionally read inventory, Case, and Case Timeline records from
 PostgreSQL with `ATLAS_READ_SOURCE=postgres`. Inventory endpoints need an
 explicit fake-provider sync before they have current cluster data. Seeded Case
