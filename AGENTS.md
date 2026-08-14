@@ -16,13 +16,18 @@ The current implementation supports:
 - React and TypeScript UI scaffolding.
 - PostgreSQL local development through Docker Compose.
 - Full local Docker Compose stack for PostgreSQL, migrations, fake inventory
-  sync, API, and web UI.
+  sync, API, web UI, and a dev OIDC issuer.
 - Plain SQL migrations.
 - Fake-provider inventory fixtures.
-- A read-only REST API scaffold.
+- A REST API v1 scaffold: read-only inventory and Case endpoints, plus
+  authenticated manual Case write endpoints (create, transition, assign,
+  note) verified through OIDC bearer tokens (ADR-0016).
 - A fake inventory sync command that writes one observation batch to PostgreSQL.
+- Fake alert evaluation that creates and deduplicates Cases from alerts.
 - Seeded read-only case records in PostgreSQL.
 - Seeded read-only Case Timeline records in PostgreSQL.
+- Manual Case writes (creation, transitions with closed-terminal semantics,
+  assignment, notes) with actor-attributed Timeline Events.
 
 ## Non-Negotiable Decisions
 

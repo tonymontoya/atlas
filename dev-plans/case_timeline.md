@@ -1,9 +1,10 @@
 # Case Timeline Read Model
-**Version:** 0.1 (Draft)
-**Status:** Read model implemented (`GET /api/v1/cases/{id}/timeline`, seeded
-events); `case_detected` write side implemented in v0.3.0
-(`internal/casedetection` writes it when an alert creates a Case). Remaining
-event types are still design-only.
+**Version:** 0.2 (Draft)
+**Status:** Read model implemented (`GET /api/v1/cases/{id}/timeline`); write
+sides implemented for `case_detected` (v0.3.0 detection and v0.4.0 manual
+creation), `case_triaged`, `case_status_changed`, `case_assigned`, and
+`case_note_added` (v0.4.0 authenticated manual writes, ADR-0016). Remaining
+workflow event types are still design-only.
 **Audience:** Engineering, Architecture, Product, Contributors
 **Project:** Atlas
 
@@ -124,6 +125,23 @@ Suggested payload:
 }
 ```
 
+Allowed manual transition edges: `detected → triaged`, `detected → closed`, `triaged → closed`. `closed` is terminal — reopening means creating a new Case, mirroring the detection reopen semantics in ADR-0015.
+
+## `case_assigned`
+
+Records that the Operator responsible for a Case changed.
+
+Suggested payload:
+
+```json
+{
+  "previousAssignee": "operator-subject-or-null",
+  "newAssignee": "operator-subject-or-null"
+}
+```
+
+Unassignment is `newAssignee: null`. Assignee identity is an OIDC subject string; display names are snapshotted alongside the current assignment, not carried in the payload.
+
 ## `case_note_added`
 
 Records that a human-visible note was added to the Case.
@@ -136,7 +154,7 @@ Suggested payload:
 }
 ```
 
-Timeline payloads should reference note identifiers rather than duplicating full note bodies.
+Timeline payloads should reference note identifiers rather than duplicating full note bodies. Note bodies live in dedicated Case Note storage exposed through the Case notes read endpoint.
 
 ## `workflow_attached`
 

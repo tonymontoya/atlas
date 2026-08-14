@@ -10,8 +10,12 @@ Atlas is in active early development as an open design-and-prototype project. It
 
 What exists today:
 
-- Go backend scaffold with a read-only REST API v1
-- React and TypeScript web UI scaffold
+- Go backend with a REST API v1: read-only inventory and Case endpoints plus
+  authenticated manual Case write endpoints (create, transition, assign, note)
+- OIDC bearer-token identity verification (JWT against the issuer's JWKS) with
+  a local dev issuer for development stacks
+- React and TypeScript web UI scaffold with operator sign-in and manual Case
+  writes
 - PostgreSQL persistence with plain SQL migrations
 - Fake-provider inventory fixtures and an inventory sync command
 - Fake-provider alert evaluation that automatically creates a Case (with
@@ -23,10 +27,10 @@ What does not exist yet:
 
 - Real Ceph or Rook providers (the only provider is the fake provider; alert
   detection reads fake Prometheus fixtures, not a live Prometheus)
-- Atlas Agent and any mutating operation
-- Authentication, RBAC, and audit enforcement
-- Manual Case creation, assignment, or status mutation (Case writes are
-  detection-generated only)
+- Atlas Agent and any mutating operation against Ceph
+- RBAC, policy, approvals, and Audit Events (any authenticated operator can
+  write Cases manually; see ADR-0016)
+- Workflow execution, notifications, and cluster registration
 
 ## Roadmap
 
@@ -85,15 +89,22 @@ make db-up
 
 The full local stack runs PostgreSQL, applies migrations, seeds one fake
 inventory snapshot, runs one fake alert evaluation that creates a detected
-Case, starts the API on `127.0.0.1:8080`, and starts the web UI on
-`127.0.0.1:5173`:
+Case, starts a local dev OIDC issuer on `127.0.0.1:18090`, starts the API on
+`127.0.0.1:8080`, and starts the web UI on `127.0.0.1:5173`:
 
 ```sh
 make dev-stack-up
 ```
 
-If a local port is already occupied, override `ATLAS_API_PORT` or
-`ATLAS_WEB_PORT` for the compose process.
+If a local port is already occupied, override `ATLAS_API_PORT`,
+`ATLAS_WEB_PORT`, or `ATLAS_DEV_ISSUER_PORT` for the compose process.
+
+To sign in to the web UI or call write endpoints, request a dev token from the
+dev issuer and use it as a bearer token:
+
+```sh
+curl -s -X POST http://127.0.0.1:18090/token | jq -r .token
+```
 
 Run the full-stack smoke check with:
 

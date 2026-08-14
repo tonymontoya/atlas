@@ -109,6 +109,10 @@ Should include:
 - OSD-down fake scenario creates or updates expected state
 - Prometheus alert fixture creates Case input when alert-to-Case is implemented
 - API response contract checks
+- OIDC bearer-token verification (ephemeral keys; valid, expired, wrong
+  audience, bad signature, missing subject, key rotation)
+- authenticated manual Case writes (create, transition with closed-terminal
+  conflicts, assignment, notes) including 401/400/404/409 error envelopes
 
 Should require:
 

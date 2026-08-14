@@ -44,9 +44,21 @@ _Avoid_: Bucket, volume
 
 ## Operations
 
+**Operator**:
+A human user of Atlas who performs operational work, distinct from system and Atlas Agent actors.
+_Avoid_: User account, admin
+
 **Case**:
 A long-lived record of operational work from detection through closure.
 _Avoid_: Ticket, incident
+
+**Assignment**:
+The Operator currently responsible for a Case.
+_Avoid_: Owner, ticket holder
+
+**Case Note**:
+A durable, addressable annotation on a Case, recorded as a Timeline Event.
+_Avoid_: Comment, message
 
 **Workflow**:
 A reusable operational procedure.
