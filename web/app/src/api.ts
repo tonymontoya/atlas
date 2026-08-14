@@ -87,6 +87,8 @@ export type CaseRecord = {
   severity: "info" | "low" | "medium" | "high" | "critical";
   source: "manual" | "prometheus" | "ceph" | "rook" | "atlas";
   clusterFsid?: string;
+  assignee?: string;
+  assigneeDisplayName?: string;
   createdAt: string;
   updatedAt: string;
   closedAt?: string;
@@ -98,6 +100,7 @@ export type TimelineEventType =
   | "case_triaged"
   | "case_status_changed"
   | "case_note_added"
+  | "case_assigned"
   | "workflow_attached"
   | "workflow_state_changed";
 
@@ -130,6 +133,27 @@ export type DashboardSnapshot = {
   syncRunsUnavailable?: string;
   cases: CaseRecord[];
   casesUnavailable?: string;
+};
+
+export type Operator = {
+  subject: string;
+  displayName: string;
+};
+
+export type CaseNote = {
+  id: number;
+  caseId: number;
+  authorId: string;
+  authorDisplayName: string;
+  body: string;
+  createdAt: string;
+};
+
+export type CreateCaseInput = {
+  title: string;
+  summary: string;
+  severity: CaseRecord["severity"];
+  clusterFsid?: string;
 };
 
 type ApiErrorBody = {
@@ -201,11 +225,79 @@ export async function loadCaseTimeline(
   return request<TimelineEvent[]>(`/api/v1/cases/${id}/timeline`, signal);
 }
 
-async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, {
-    headers: { Accept: "application/json" },
-    signal,
+export async function loadMe(token: string, signal?: AbortSignal): Promise<Operator> {
+  return request<Operator>("/api/v1/me", signal, token);
+}
+
+export async function createCase(
+  input: CreateCaseInput,
+  token: string,
+  signal?: AbortSignal,
+): Promise<CaseRecord> {
+  return request<CaseRecord>("/api/v1/cases", signal, token, {
+    method: "POST",
+    body: JSON.stringify(input),
   });
+}
+
+export async function transitionCase(
+  id: number,
+  status: CaseRecord["status"],
+  token: string,
+  signal?: AbortSignal,
+): Promise<CaseRecord> {
+  return request<CaseRecord>(`/api/v1/cases/${id}/transitions`, signal, token, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function assignCase(
+  id: number,
+  assignee: string,
+  assigneeDisplayName: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<CaseRecord> {
+  return request<CaseRecord>(`/api/v1/cases/${id}/assignment`, signal, token, {
+    method: "POST",
+    body: JSON.stringify({ assignee, assigneeDisplayName }),
+  });
+}
+
+export async function addCaseNote(
+  id: number,
+  body: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<CaseNote> {
+  return request<CaseNote>(`/api/v1/cases/${id}/notes`, signal, token, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export async function loadCaseNotes(
+  id: number,
+  signal?: AbortSignal,
+): Promise<CaseNote[]> {
+  return request<CaseNote[]>(`/api/v1/cases/${id}/notes`, signal);
+}
+
+async function request<T>(
+  path: string,
+  signal?: AbortSignal,
+  token?: string,
+  init?: RequestInit,
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (init?.body) {
+    headers["Content-Type"] = "application/json";
+  }
+  const response = await fetch(path, { ...init, headers, signal });
 
   if (!response.ok) {
     const body = await readErrorBody(response);

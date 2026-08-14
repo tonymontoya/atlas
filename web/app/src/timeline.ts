@@ -10,6 +10,8 @@ export function labelForTimelineEventType(type: TimelineEventType): string {
       return "Status changed";
     case "case_note_added":
       return "Note added";
+    case "case_assigned":
+      return "Assignment changed";
     case "workflow_attached":
       return "Workflow attached";
     case "workflow_state_changed":
@@ -39,8 +41,30 @@ export function timelinePayloadLabels(event: TimelineEvent): string[] {
   if (typeof payload.noteId === "number") {
     labels.push(`Note #${payload.noteId}`);
   }
+  if (event.type === "case_assigned") {
+    labels.push(assignmentPayloadLabel(payload));
+  }
 
   return labels;
+}
+
+export function assignmentPayloadLabel(payload: Record<string, unknown>): string {
+  const previous = assigneeLabel(payload.previousAssignee);
+  const next = assigneeLabel(payload.newAssignee);
+  if (previous === null && next !== null) {
+    return `assigned to ${next}`;
+  }
+  if (previous !== null && next === null) {
+    return "unassigned";
+  }
+  if (previous !== null && next !== null) {
+    return `${previous} to ${next}`;
+  }
+  return "assignment unchanged";
+}
+
+function assigneeLabel(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
 }
 
 export function detectionLabel(detectedBy: CaseDetectionLink): string {

@@ -23,6 +23,7 @@ describe("labelForTimelineEventType", () => {
       ["case_triaged", "Case triaged"],
       ["case_status_changed", "Status changed"],
       ["case_note_added", "Note added"],
+      ["case_assigned", "Assignment changed"],
       ["workflow_attached", "Workflow attached"],
       ["workflow_state_changed", "Workflow state changed"],
     ];
@@ -68,7 +69,40 @@ describe("timelinePayloadLabels", () => {
       ),
     ).toEqual([]);
   });
+
+  it("labels assignment, reassignment, and unassignment events", () => {
+    expect(
+      timelinePayloadLabels(
+        assignmentEvent({ previousAssignee: null, newAssignee: "operator-2" }),
+      ),
+    ).toEqual(["assigned to operator-2"]);
+    expect(
+      timelinePayloadLabels(
+        assignmentEvent({ previousAssignee: "operator-1", newAssignee: "operator-2" }),
+      ),
+    ).toEqual(["operator-1 to operator-2"]);
+    expect(
+      timelinePayloadLabels(
+        assignmentEvent({ previousAssignee: "operator-1", newAssignee: null }),
+      ),
+    ).toEqual(["unassigned"]);
+  });
 });
+
+function assignmentEvent(payload: Record<string, unknown>): TimelineEvent {
+  return {
+    id: 4,
+    caseId: 2,
+    type: "case_assigned",
+    message: "Case assigned to Second Operator.",
+    occurredAt: "2026-08-13T12:15:00Z",
+    actor: {
+      type: "user",
+      displayName: "Storage Operator",
+    },
+    payload,
+  };
+}
 
 function timelineEvent(payload: Record<string, unknown>): TimelineEvent {
   return {

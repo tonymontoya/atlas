@@ -318,6 +318,173 @@ th {
   margin-bottom: 18px;
 }
 
+.operator-panel,
+.compose-panel {
+  margin-bottom: 18px;
+}
+
+.token-form {
+  display: grid;
+  gap: 8px;
+}
+
+.token-form label {
+  color: #51636e;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.token-form-row {
+  display: flex;
+  gap: 8px;
+}
+
+.token-form-row input {
+  flex: 1;
+}
+
+.token-form-row input,
+.compose-form input,
+.compose-form select,
+.compose-form textarea,
+.assignment-form input,
+.note-form textarea {
+  background: #f4f6f9;
+  border: 1px solid #cfd8e0;
+  border-radius: 8px;
+  color: #141b22;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+}
+
+.compose-form,
+.note-form {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 2fr 1fr;
+}
+
+.form-grid label {
+  color: #51636e;
+  display: grid;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+.form-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.compose-form button[type="submit"],
+.note-form button[type="submit"],
+.case-actions button,
+.token-form-row button {
+  background: #1f5f8b;
+  border: 0;
+  border-radius: 8px;
+  color: #f7fafc;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 0 14px;
+}
+
+.compose-form button:disabled,
+.note-form button:disabled,
+.case-actions button:disabled,
+.token-form-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.action-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-error {
+  color: #a52208;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.case-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.assignment-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assignment-form input {
+  min-width: 160px;
+}
+
+.case-actions button {
+  background: #e3e8ef;
+  color: #354250;
+}
+
+.case-actions > .action-row > button {
+  background: #1f5f8b;
+  color: #f7fafc;
+}
+
+.case-notes {
+  border-top: 1px solid #e3e8ef;
+  padding-top: 12px;
+}
+
+.note-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.note-row {
+  background: #f7f9fc;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.note-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.note-heading time {
+  color: #60717b;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.note-row p {
+  margin: 0;
+}
+
 .text-button {
   background: #e3e8ef;
   border: 0;
