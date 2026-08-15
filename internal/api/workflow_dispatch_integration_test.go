@@ -209,7 +209,7 @@ func TestCompleteWorkflowTaskRejectsInvalidRequests(t *testing.T) {
 	// any other task.
 	wrongTask := harness.do(t, http.MethodPost,
 		"/api/v1/workflow-instances/"+strconv.FormatInt(instanceID, 10)+"/task-completions",
-		map[string]any{"taskId": "rotate-disks"}, true)
+		map[string]any{"taskId": "rotate-devices"}, true)
 	if wrongTask.Code != http.StatusConflict {
 		t.Fatalf("wrong task status = %d; body=%s", wrongTask.Code, wrongTask.Body.String())
 	}
