@@ -8,6 +8,7 @@ type Config struct {
 	ProviderMode      string
 	FakeScenario      string
 	FakeAlertScenario string
+	FakeAgentScenario string
 	ReadSource        string
 	AgentMode         string
 	OIDCIssuer        string
@@ -22,6 +23,7 @@ func Load() Config {
 		ProviderMode:      env("ATLAS_PROVIDER_MODE", "fake"),
 		FakeScenario:      env("ATLAS_FAKE_SCENARIO", "reef-healthy-baremetal"),
 		FakeAlertScenario: env("ATLAS_FAKE_ALERT_SCENARIO", "osd-down-alert"),
+		FakeAgentScenario: env("ATLAS_FAKE_AGENT_SCENARIO", ""),
 		ReadSource:        env("ATLAS_READ_SOURCE", "provider"),
 		AgentMode:         env("ATLAS_AGENT_MODE", "disabled"),
 		OIDCIssuer:        env("ATLAS_OIDC_ISSUER", ""),

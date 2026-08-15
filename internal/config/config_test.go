@@ -7,6 +7,7 @@ func TestLoadDefaultsToFakeProvider(t *testing.T) {
 	t.Setenv("ATLAS_DATABASE_URL", "")
 	t.Setenv("ATLAS_PROVIDER_MODE", "")
 	t.Setenv("ATLAS_FAKE_SCENARIO", "")
+	t.Setenv("ATLAS_FAKE_AGENT_SCENARIO", "")
 	t.Setenv("ATLAS_READ_SOURCE", "")
 	t.Setenv("ATLAS_AGENT_MODE", "")
 
@@ -22,6 +23,9 @@ func TestLoadDefaultsToFakeProvider(t *testing.T) {
 	}
 	if cfg.FakeScenario != "reef-healthy-baremetal" {
 		t.Fatalf("FakeScenario = %q, want reef-healthy-baremetal", cfg.FakeScenario)
+	}
+	if cfg.FakeAgentScenario != "" {
+		t.Fatalf("FakeAgentScenario = %q, want the happy-path default", cfg.FakeAgentScenario)
 	}
 	if cfg.ReadSource != "provider" {
 		t.Fatalf("ReadSource = %q, want provider", cfg.ReadSource)

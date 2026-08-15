@@ -867,9 +867,10 @@ paths:
         record without touching the instance. The Approval record is the
         authorization evidence; no Audit Events are written. When the fake
         agent loop is enabled (ATLAS_AGENT_MODE=fake), the resumed instance
-        is also driven through its Jobs synchronously and may reach a
-        terminal state within this request; with the agent loop disabled
-        the instance rests running with pending Jobs.
+        is also driven through its Jobs synchronously and pauses at the
+        next human Task or reaches a terminal state within this request;
+        with the agent loop disabled the instance rests running with
+        pending Jobs.
       security:
         - bearerAuth: []
       parameters:
@@ -927,6 +928,95 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Instance is not waiting_for_approval at the supplied gate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Workflow writes require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workflow-instances/{id}/task-completions:
+    post:
+      tags:
+        - Cases
+      operationId: completeWorkflowTask
+      summary: Record the Operator's completion of the Task a Workflow Instance is paused at
+      description: >
+        Records the durable, immutable Task completion (operator subject
+        and display-name snapshot, task binding, optional note, timestamp)
+        and resumes the instance past the human Task to running with a
+        workflow_state_changed Timeline Event attributed to the resuming
+        Operator (ADR-0019). The instance must be waiting_for_operator at
+        exactly this task; completing any other task is rejected. A second
+        completion of an already-passed task is an idempotent no-op
+        returning the existing record without touching the instance. When
+        the fake agent loop is enabled (ATLAS_AGENT_MODE=fake), the
+        resumed instance is also driven through its remaining Jobs
+        synchronously and pauses at the next human Task or reaches a
+        terminal state within this request; with the agent loop disabled
+        the instance rests running with pending Jobs.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteWorkflowTaskRequest"
+            examples:
+              withNote:
+                value:
+                  taskId: replace-device
+                  note: Replacement device installed and seated.
+      responses:
+        "201":
+          description: >
+            Recorded the Task completion and resumed the instance; with
+            the fake agent loop enabled the instance has also been driven
+            through its remaining Jobs to a pause or terminal state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowTaskCompletion"
+        "200":
+          description: The task was already completed; the existing record is returned as an idempotent no-op.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowTaskCompletion"
+        "400":
+          description: Malformed body or missing taskId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Workflow Instance not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Instance is not waiting_for_operator at the supplied task.
           content:
             application/json:
               schema:
@@ -1441,6 +1531,52 @@ components:
         reason:
           type: string
           description: Optional reason snapshot; null when none was given.
+        createdAt:
+          type: string
+          format: date-time
+    CompleteWorkflowTaskRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - taskId
+      properties:
+        taskId:
+          type: string
+          minLength: 1
+          description: Definition step id of the human Task to complete; must be the instance's current step.
+        note:
+          type: string
+          description: Optional note snapshot recorded with the Task completion.
+    WorkflowTaskCompletion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workflowInstanceId
+        - taskId
+        - operatorId
+        - operatorDisplayName
+        - note
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        workflowInstanceId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          description: Definition step id of the Task this completion advanced.
+        operatorId:
+          type: string
+          description: OIDC subject of the Operator who performed the Task.
+        operatorDisplayName:
+          type: string
+          description: Display name snapshot of the operator at completion time.
+        note:
+          type: string
+          description: Optional note snapshot; null when none was given.
         createdAt:
           type: string
           format: date-time

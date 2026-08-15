@@ -5,6 +5,7 @@ import {
   approveWorkflowGate,
   assignCase,
   attachCaseWorkflow,
+  completeWorkflowTask,
   createCase,
   loadCase,
   loadCaseNotes,
@@ -1020,6 +1021,14 @@ function CaseWorkflows({
                   onChanged={onChanged}
                 />
               ) : null}
+              {instance.state === "waiting_for_operator" && instance.currentStep && token ? (
+                <WorkflowResumeForm
+                  taskID={instance.currentStep}
+                  instanceID={instance.id}
+                  token={token}
+                  onChanged={onChanged}
+                />
+              ) : null}
             </li>
           ))}
         </ul>
@@ -1096,6 +1105,57 @@ function WorkflowApproveForm({
           {busy ? "Approving…" : `Approve ${gateID}`}
         </button>
         {approveError ? <p className="form-error">{approveError}</p> : null}
+      </div>
+    </form>
+  );
+}
+
+function WorkflowResumeForm({
+  taskID,
+  instanceID,
+  token,
+  onChanged,
+}: {
+  taskID: string;
+  instanceID: number;
+  token: string;
+  onChanged: () => void;
+}) {
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [resumeError, setResumeError] = React.useState<string | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) {
+      return;
+    }
+    try {
+      setBusy(true);
+      setResumeError(null);
+      await completeWorkflowTask(instanceID, taskID, note.trim(), token);
+      setNote("");
+      onChanged();
+    } catch (thrown) {
+      setResumeError(errorMessage(thrown));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="workflow-resume-form" onSubmit={submit}>
+      <input
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        placeholder="Note (optional)"
+        aria-label="Task completion note"
+      />
+      <div className="action-row">
+        <button type="submit" disabled={busy}>
+          {busy ? "Resuming…" : `Done: ${taskID}`}
+        </button>
+        {resumeError ? <p className="form-error">{resumeError}</p> : null}
       </div>
     </form>
   );

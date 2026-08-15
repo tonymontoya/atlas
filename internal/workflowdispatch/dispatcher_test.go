@@ -9,21 +9,25 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
+	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
 )
 
-// memStore is an in-memory Store that applies transitions blindly and
-// records them; the PostgreSQL store's edge rules are proven by the
-// store-backed integration tests.
+// memStore is an in-memory Store that applies transitions and records
+// them. Retry-budget semantics (the failed -> pending attempt bump and
+// its refusal once the budget is spent) mirror the PostgreSQL store so
+// dispatcher retry logic is exercised against the real contract; the
+// remaining edge rules are proven by the store-backed integration tests.
 type memStore struct {
-	instance      store.WorkflowInstance
-	jobs          []store.WorkflowJob
-	approvals     []store.ApprovalRecord
-	target        cases.Case
-	jobCalls      []store.WorkflowJobTransitionInput
-	instanceCalls []store.WorkflowInstanceTransitionInput
-	getCaseErr    error
+	instance        store.WorkflowInstance
+	jobs            []store.WorkflowJob
+	approvals       []store.ApprovalRecord
+	taskCompletions []store.TaskCompletionRecord
+	target          cases.Case
+	jobCalls        []store.WorkflowJobTransitionInput
+	instanceCalls   []store.WorkflowInstanceTransitionInput
+	getCaseErr      error
 }
 
 func (m *memStore) GetWorkflowInstance(_ context.Context, _ int64) (store.WorkflowInstance, error) {
@@ -33,7 +37,9 @@ func (m *memStore) GetWorkflowInstance(_ context.Context, _ int64) (store.Workfl
 func (m *memStore) TransitionWorkflowInstance(_ context.Context, input store.WorkflowInstanceTransitionInput) (store.WorkflowInstance, error) {
 	m.instanceCalls = append(m.instanceCalls, input)
 	m.instance.State = input.To
-	if input.To == workflows.InstanceSucceeded || input.To == workflows.InstanceFailed || input.To == workflows.InstanceCancelled {
+	if input.AtStep != "" {
+		step := input.AtStep
+		m.instance.CurrentStep = &step
 		return m.instance, nil
 	}
 	m.instance.CurrentStep = nil
@@ -43,10 +49,20 @@ func (m *memStore) TransitionWorkflowInstance(_ context.Context, input store.Wor
 func (m *memStore) TransitionWorkflowJob(_ context.Context, input store.WorkflowJobTransitionInput) (store.WorkflowJob, error) {
 	m.jobCalls = append(m.jobCalls, input)
 	for i := range m.jobs {
-		if m.jobs[i].ID == input.JobID {
-			m.jobs[i].State = input.To
-			return m.jobs[i], nil
+		if m.jobs[i].ID != input.JobID {
+			continue
 		}
+		if m.jobs[i].State == workflows.JobFailed && input.To == workflows.JobPending {
+			if m.jobs[i].Attempt >= m.jobs[i].MaxAttempts {
+				return store.WorkflowJob{}, providers.ProviderError{
+					Class:   providers.ErrorConflict,
+					Message: "job exhausted its retry budget",
+				}
+			}
+			m.jobs[i].Attempt++
+		}
+		m.jobs[i].State = input.To
+		return m.jobs[i], nil
 	}
 	return store.WorkflowJob{}, errors.New("unknown job")
 }
@@ -57,6 +73,10 @@ func (m *memStore) ListWorkflowJobs(_ context.Context, _ int64) ([]store.Workflo
 
 func (m *memStore) ListWorkflowApprovals(_ context.Context, _ int64) ([]store.ApprovalRecord, error) {
 	return m.approvals, nil
+}
+
+func (m *memStore) ListWorkflowTaskCompletions(_ context.Context, _ int64) ([]store.TaskCompletionRecord, error) {
+	return m.taskCompletions, nil
 }
 
 func (m *memStore) GetCase(_ context.Context, _ int64) (cases.Case, error) {
@@ -124,17 +144,54 @@ func runningReplaceOSD(t *testing.T) *memStore {
 	}
 }
 
-func TestRunDrivesRunningInstanceToSucceeded(t *testing.T) {
+// completeReplaceDevice seeds the memStore with the durable Task
+// completion record an Operator's resume leaves behind.
+func completeReplaceDevice(mem *memStore) {
+	mem.taskCompletions = append(mem.taskCompletions, store.TaskCompletionRecord{
+		ID: 11, WorkflowInstanceID: 42, TaskID: "replace-device",
+		Operator: store.Actor{Subject: "op-1", DisplayName: "Operator One"},
+	})
+}
+
+func TestRunPausesAtTaskThenResumesToSucceeded(t *testing.T) {
 	mem := runningReplaceOSD(t)
 	adapter := &recordingAdapter{}
 	dispatcher := New(mem, replaceOSDRegistry(t), adapter)
 
-	instance, err := dispatcher.Run(context.Background(), 42)
+	paused, err := dispatcher.Run(context.Background(), 42)
 	if err != nil {
-		t.Fatalf("Run: %v", err)
+		t.Fatalf("Run to task: %v", err)
 	}
-	if instance.State != workflows.InstanceSucceeded {
-		t.Fatalf("instance state = %s, want succeeded", instance.State)
+	if paused.State != workflows.InstanceWaitingForOperator || paused.CurrentStep == nil || *paused.CurrentStep != "replace-device" {
+		t.Fatalf("instance = %+v, want waiting_for_operator at replace-device", paused)
+	}
+	if mem.jobs[0].State != workflows.JobSucceeded || mem.jobs[1].State != workflows.JobSucceeded {
+		t.Fatalf("jobs before the task = %+v, want succeeded", mem.jobs)
+	}
+	if mem.jobs[2].State != workflows.JobPending {
+		t.Fatalf("verify job = %s, want untouched pending past the task", mem.jobs[2].State)
+	}
+	if len(adapter.envelopes) != 2 {
+		t.Fatalf("dispatches = %d, want 2 before the task", len(adapter.envelopes))
+	}
+	if len(mem.instanceCalls) != 1 || mem.instanceCalls[0].To != workflows.InstanceWaitingForOperator || mem.instanceCalls[0].AtStep != "replace-device" {
+		t.Fatalf("instance calls = %+v, want the task pause", mem.instanceCalls)
+	}
+
+	// The Operator finishes the Task and resumes the instance.
+	completeReplaceDevice(mem)
+	if _, err := mem.TransitionWorkflowInstance(context.Background(), store.WorkflowInstanceTransitionInput{
+		InstanceID: 42, To: workflows.InstanceRunning,
+	}); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+
+	finished, err := dispatcher.Run(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("Run after resume: %v", err)
+	}
+	if finished.State != workflows.InstanceSucceeded {
+		t.Fatalf("instance state = %s, want succeeded", finished.State)
 	}
 	for _, job := range mem.jobs {
 		if job.State != workflows.JobSucceeded {
@@ -142,7 +199,7 @@ func TestRunDrivesRunningInstanceToSucceeded(t *testing.T) {
 		}
 	}
 	if len(adapter.envelopes) != 3 {
-		t.Fatalf("dispatches = %d, want 3", len(adapter.envelopes))
+		t.Fatalf("dispatches = %d, want 3 total", len(adapter.envelopes))
 	}
 
 	// Jobs advance pending -> dispatched -> succeeded, in definition order.
@@ -161,11 +218,6 @@ func TestRunDrivesRunningInstanceToSucceeded(t *testing.T) {
 				t.Fatalf("job call %d = %+v, want job %d -> %s", i*2+j, call, want.id, wantState)
 			}
 		}
-	}
-
-	// The instance reaches terminal succeeded after the jobs.
-	if len(mem.instanceCalls) != 1 || mem.instanceCalls[0].To != workflows.InstanceSucceeded {
-		t.Fatalf("instance calls = %+v, want one succeeded", mem.instanceCalls)
 	}
 }
 
@@ -232,6 +284,11 @@ func TestRunFailsInstanceWhenJobFails(t *testing.T) {
 	if mem.jobs[0].State != workflows.JobSucceeded || mem.jobs[1].State != workflows.JobFailed {
 		t.Fatalf("jobs = %+v, want first succeeded second failed", mem.jobs)
 	}
+	// destroy-osd has a one-attempt budget: the failure exhausts it and
+	// no retry may fire.
+	if mem.jobs[1].Attempt != 1 {
+		t.Fatalf("destroy attempt = %d, want 1 (no auto-retry for the destructive step)", mem.jobs[1].Attempt)
+	}
 	if mem.jobs[2].State != workflows.JobPending {
 		t.Fatalf("verify job = %s, want untouched pending", mem.jobs[2].State)
 	}
@@ -240,8 +297,85 @@ func TestRunFailsInstanceWhenJobFails(t *testing.T) {
 	}
 }
 
-func TestRunTreatsAdapterErrorAsJobFailure(t *testing.T) {
+// A transient failure consumes one attempt and the retry policy re-pends
+// and re-dispatches the Job; the retried dispatch carries a new
+// idempotency key.
+func TestRunRetriesFailedJobPerPolicy(t *testing.T) {
 	mem := runningReplaceOSD(t)
+	completeReplaceDevice(mem)
+	adapter := &recordingAdapter{results: []agent.Result{
+		{Outcome: agent.OutcomeFailed, Detail: "transient evidence hiccup"},
+	}}
+	dispatcher := New(mem, replaceOSDRegistry(t), adapter)
+
+	finished, err := dispatcher.Run(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if finished.State != workflows.InstanceSucceeded {
+		t.Fatalf("instance state = %s, want recovered succeeded", finished.State)
+	}
+	if mem.jobs[0].State != workflows.JobSucceeded || mem.jobs[0].Attempt != 2 {
+		t.Fatalf("collect job = %+v, want succeeded on attempt 2", mem.jobs[0])
+	}
+
+	wantCalls := []workflows.JobState{
+		workflows.JobDispatched, workflows.JobFailed, workflows.JobPending,
+		workflows.JobDispatched, workflows.JobSucceeded,
+	}
+	for i, want := range wantCalls {
+		call := mem.jobCalls[i]
+		if call.JobID != 101 || call.To != want {
+			t.Fatalf("job call %d = %+v, want job 101 -> %s", i, call, want)
+		}
+	}
+	if len(adapter.envelopes) != 4 {
+		t.Fatalf("dispatches = %d, want 4 (retry + remaining jobs)", len(adapter.envelopes))
+	}
+	if adapter.envelopes[0].IdempotencyKey != "instance-42-job-101-attempt-1" {
+		t.Fatalf("first attempt key = %q", adapter.envelopes[0].IdempotencyKey)
+	}
+	if adapter.envelopes[1].IdempotencyKey != "instance-42-job-101-attempt-2" {
+		t.Fatalf("retry key = %q, want a fresh key for the new attempt", adapter.envelopes[1].IdempotencyKey)
+	}
+}
+
+// When every allowed attempt fails, the retry budget is spent, the Job
+// rests failed, and the instance fails terminally.
+func TestRunFailsInstanceWhenRetriesExhaust(t *testing.T) {
+	mem := runningReplaceOSD(t)
+	adapter := &recordingAdapter{results: []agent.Result{
+		{Outcome: agent.OutcomeFailed, Detail: "attempt 1"},
+		{Outcome: agent.OutcomeFailed, Detail: "attempt 2"},
+		{Outcome: agent.OutcomeFailed, Detail: "attempt 3"},
+	}}
+	dispatcher := New(mem, replaceOSDRegistry(t), adapter)
+
+	instance, err := dispatcher.Run(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if instance.State != workflows.InstanceFailed {
+		t.Fatalf("instance state = %s, want failed", instance.State)
+	}
+	if mem.jobs[0].State != workflows.JobFailed || mem.jobs[0].Attempt != 3 {
+		t.Fatalf("collect job = %+v, want failed after 3 attempts", mem.jobs[0])
+	}
+	if mem.jobs[1].State != workflows.JobPending || mem.jobs[2].State != workflows.JobPending {
+		t.Fatalf("later jobs = %+v, want untouched pending", mem.jobs)
+	}
+	if len(adapter.envelopes) != 3 {
+		t.Fatalf("dispatches = %d, want exactly the 3 allowed attempts", len(adapter.envelopes))
+	}
+	if len(mem.instanceCalls) != 1 || mem.instanceCalls[0].To != workflows.InstanceFailed {
+		t.Fatalf("instance calls = %+v, want one terminal failed", mem.instanceCalls)
+	}
+}
+
+// An adapter error is a retriable Job failure, not a dispatcher error.
+func TestRunTreatsAdapterErrorAsRetriableJobFailure(t *testing.T) {
+	mem := runningReplaceOSD(t)
+	completeReplaceDevice(mem)
 	adapter := &recordingAdapter{errs: []error{errors.New("agent unreachable")}}
 	dispatcher := New(mem, replaceOSDRegistry(t), adapter)
 
@@ -249,8 +383,11 @@ func TestRunTreatsAdapterErrorAsJobFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if instance.State != workflows.InstanceFailed || mem.jobs[0].State != workflows.JobFailed {
-		t.Fatalf("state = %s / job = %s, want failed", instance.State, mem.jobs[0].State)
+	if instance.State != workflows.InstanceSucceeded {
+		t.Fatalf("instance state = %s, want recovered after retry", instance.State)
+	}
+	if mem.jobs[0].State != workflows.JobSucceeded || mem.jobs[0].Attempt != 2 {
+		t.Fatalf("collect job = %+v, want succeeded on attempt 2", mem.jobs[0])
 	}
 }
 
@@ -306,9 +443,76 @@ func TestRunStopsAtUnapprovedGate(t *testing.T) {
 	}
 }
 
-func TestRunStopsAtInFlightJobWithoutTouchingIt(t *testing.T) {
+// A Job left dispatched by a dead process is re-dispatched under the
+// SAME idempotency key: the agent replays the recorded outcome instead
+// of executing again.
+func TestRunReDispatchesInFlightJobWithSameKey(t *testing.T) {
 	mem := runningReplaceOSD(t)
+	completeReplaceDevice(mem)
 	mem.jobs[0].State = workflows.JobDispatched
+	adapter := &recordingAdapter{}
+	dispatcher := New(mem, replaceOSDRegistry(t), adapter)
+
+	finished, err := dispatcher.Run(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if finished.State != workflows.InstanceSucceeded {
+		t.Fatalf("instance state = %s, want recovered succeeded", finished.State)
+	}
+	if mem.jobs[0].State != workflows.JobSucceeded || mem.jobs[0].Attempt != 1 {
+		t.Fatalf("collect job = %+v, want succeeded on the same attempt", mem.jobs[0])
+	}
+	if len(adapter.envelopes) != 3 {
+		t.Fatalf("dispatches = %d, want 3", len(adapter.envelopes))
+	}
+	if adapter.envelopes[0].JobID != 101 || adapter.envelopes[0].IdempotencyKey != "instance-42-job-101-attempt-1" {
+		t.Fatalf("re-dispatch = %+v, want job 101 under its original attempt key", adapter.envelopes[0])
+	}
+	// The in-flight Job needs no dispatched transition: it is already
+	// dispatched; only the terminal outcome is recorded.
+	if len(mem.jobCalls) != 5 {
+		t.Fatalf("job calls = %d, want 5 (one outcome for job 101, full lifecycle for the rest)", len(mem.jobCalls))
+	}
+	if mem.jobCalls[0].JobID != 101 || mem.jobCalls[0].To != workflows.JobSucceeded {
+		t.Fatalf("first job call = %+v, want job 101 -> succeeded", mem.jobCalls[0])
+	}
+}
+
+// A Job left failed by a dead process with budget remaining is re-pended
+// and re-dispatched under a fresh attempt key.
+func TestRunRequeuesFailedJobWithRemainingBudget(t *testing.T) {
+	mem := runningReplaceOSD(t)
+	completeReplaceDevice(mem)
+	mem.jobs[0].State = workflows.JobFailed
+	mem.jobs[0].Attempt = 1
+	adapter := &recordingAdapter{}
+	dispatcher := New(mem, replaceOSDRegistry(t), adapter)
+
+	finished, err := dispatcher.Run(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if finished.State != workflows.InstanceSucceeded {
+		t.Fatalf("instance state = %s, want recovered succeeded", finished.State)
+	}
+	if mem.jobs[0].Attempt != 2 || mem.jobs[0].State != workflows.JobSucceeded {
+		t.Fatalf("collect job = %+v, want re-run on attempt 2", mem.jobs[0])
+	}
+	wantFirst := []workflows.JobState{workflows.JobPending, workflows.JobDispatched, workflows.JobSucceeded}
+	for i, want := range wantFirst {
+		if mem.jobCalls[i].JobID != 101 || mem.jobCalls[i].To != want {
+			t.Fatalf("job call %d = %+v, want job 101 -> %s", i, mem.jobCalls[i], want)
+		}
+	}
+}
+
+// A Job left failed by a dead process with its budget already spent
+// fails the instance without another dispatch.
+func TestRunFailsInstanceOnJobFailedWithSpentBudget(t *testing.T) {
+	mem := runningReplaceOSD(t)
+	mem.jobs[0].State = workflows.JobFailed
+	mem.jobs[0].Attempt = 3
 	adapter := &recordingAdapter{}
 	dispatcher := New(mem, replaceOSDRegistry(t), adapter)
 
@@ -316,13 +520,17 @@ func TestRunStopsAtInFlightJobWithoutTouchingIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if instance.State != workflows.InstanceRunning || len(adapter.envelopes) != 0 {
-		t.Fatalf("an in-flight job must stop the run; state=%s dispatches=%d", instance.State, len(adapter.envelopes))
+	if instance.State != workflows.InstanceFailed {
+		t.Fatalf("instance state = %s, want failed", instance.State)
+	}
+	if len(adapter.envelopes) != 0 {
+		t.Fatalf("dispatches = %d, want none", len(adapter.envelopes))
 	}
 }
 
 func TestRunResumesPastSucceededJobs(t *testing.T) {
 	mem := runningReplaceOSD(t)
+	completeReplaceDevice(mem)
 	mem.jobs[0].State = workflows.JobSucceeded
 	adapter := &recordingAdapter{}
 	dispatcher := New(mem, replaceOSDRegistry(t), adapter)

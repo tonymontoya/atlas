@@ -362,6 +362,34 @@ export async function approveWorkflowGate(
   );
 }
 
+export type WorkflowTaskCompletionRecord = {
+  id: number;
+  workflowInstanceId: number;
+  taskId: string;
+  operatorId: string;
+  operatorDisplayName: string;
+  note: string | null;
+  createdAt: string;
+};
+
+export async function completeWorkflowTask(
+  instanceID: number,
+  taskId: string,
+  note: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<WorkflowTaskCompletionRecord> {
+  return request<WorkflowTaskCompletionRecord>(
+    `/api/v1/workflow-instances/${instanceID}/task-completions`,
+    signal,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify(note === "" ? { taskId } : { taskId, note }),
+    },
+  );
+}
+
 export async function loadCaseNotes(
   id: number,
   signal?: AbortSignal,

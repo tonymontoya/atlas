@@ -350,6 +350,7 @@ th {
 .assignment-form input,
 .workflow-attach-form input,
 .workflow-approve-form input,
+.workflow-resume-form input,
 .note-form textarea {
   background: #f4f6f9;
   border: 1px solid #cfd8e0;
@@ -389,6 +390,7 @@ th {
 .case-actions button,
 .workflow-attach-form button[type="submit"],
 .workflow-approve-form button[type="submit"],
+.workflow-resume-form button[type="submit"],
 .token-form-row button {
   background: #1f5f8b;
   border: 0;
@@ -407,6 +409,7 @@ th {
 .case-actions button:disabled,
 .workflow-attach-form button:disabled,
 .workflow-approve-form button:disabled,
+.workflow-resume-form button:disabled,
 .token-form-row button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -525,7 +528,8 @@ th {
 }
 
 .workflow-attach-form,
-.workflow-approve-form {
+.workflow-approve-form,
+.workflow-resume-form {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -535,7 +539,8 @@ th {
   min-width: 160px;
 }
 
-.workflow-approve-form input {
+.workflow-approve-form input,
+.workflow-resume-form input {
   flex: 1;
   min-width: 200px;
 }

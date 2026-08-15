@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
@@ -57,5 +59,99 @@ func TestFakeDispatchRejectsMalformedEnvelope(t *testing.T) {
 				t.Fatal("expected error")
 			}
 		})
+	}
+}
+
+// A duplicate dispatch under the same idempotency key must not repeat the
+// work: the fake remembers the outcome per key and replays it.
+func TestFakeDispatchReplaysRememberedOutcomePerIdempotencyKey(t *testing.T) {
+	fake := NewFake(testRegistry(t))
+
+	first, err := fake.Dispatch(context.Background(), []byte(collectEvidenceEnvelope))
+	if err != nil {
+		t.Fatalf("first dispatch: %v", err)
+	}
+	executions := fake.ExecutionCount()
+	if executions != 1 {
+		t.Fatalf("executions = %d after first dispatch, want 1", executions)
+	}
+
+	second, err := fake.Dispatch(context.Background(), []byte(collectEvidenceEnvelope))
+	if err != nil {
+		t.Fatalf("duplicate dispatch: %v", err)
+	}
+	if second.Outcome != first.Outcome {
+		t.Fatalf("replayed outcome = %q, want %q", second.Outcome, first.Outcome)
+	}
+	if got := fake.ExecutionCount(); got != executions {
+		t.Fatalf("executions = %d after duplicate dispatch, want %d (no repeat)", got, executions)
+	}
+}
+
+func TestNewFakeWithScenarioValidatesScenarioName(t *testing.T) {
+	registry := testRegistry(t)
+
+	for _, scenario := range []string{"", "dispatch-fails-once", "job-failure"} {
+		if _, err := NewFakeWithScenario(registry, scenario); err != nil {
+			t.Fatalf("scenario %q: unexpected error %v", scenario, err)
+		}
+	}
+	if _, err := NewFakeWithScenario(registry, "nonsense"); err == nil {
+		t.Fatal("unknown scenario must be rejected")
+	}
+}
+
+// dispatch-fails-once: the first executed dispatch fails; the retry (a
+// new idempotency key) and every later dispatch succeed.
+func TestFakeScenarioDispatchFailsOnce(t *testing.T) {
+	fake, err := NewFakeWithScenario(testRegistry(t), "dispatch-fails-once")
+	if err != nil {
+		t.Fatalf("scenario agent: %v", err)
+	}
+
+	first, err := fake.Dispatch(context.Background(), []byte(collectEvidenceEnvelope))
+	if err != nil {
+		t.Fatalf("first dispatch: %v", err)
+	}
+	if first.Outcome != OutcomeFailed {
+		t.Fatalf("first outcome = %q, want failed", first.Outcome)
+	}
+
+	retryEnvelope := strings.Replace(collectEvidenceEnvelope, "attempt-1", "attempt-2", 1)
+	retry, err := fake.Dispatch(context.Background(), []byte(retryEnvelope))
+	if err != nil {
+		t.Fatalf("retry dispatch: %v", err)
+	}
+	if retry.Outcome != OutcomeSucceeded {
+		t.Fatalf("retry outcome = %q, want succeeded", retry.Outcome)
+	}
+
+	// The failed outcome replays for the failed key too.
+	replay, err := fake.Dispatch(context.Background(), []byte(collectEvidenceEnvelope))
+	if err != nil {
+		t.Fatalf("replay dispatch: %v", err)
+	}
+	if replay.Outcome != OutcomeFailed {
+		t.Fatalf("replay outcome = %q, want the remembered failure", replay.Outcome)
+	}
+}
+
+// job-failure: every first execution of a key fails, retries included,
+// until the retry budget is spent.
+func TestFakeScenarioJobFailureFailsEveryAttempt(t *testing.T) {
+	fake, err := NewFakeWithScenario(testRegistry(t), "job-failure")
+	if err != nil {
+		t.Fatalf("scenario agent: %v", err)
+	}
+
+	for attempt := 1; attempt <= 3; attempt++ {
+		envelope := strings.Replace(collectEvidenceEnvelope, "attempt-1", fmt.Sprintf("attempt-%d", attempt), 1)
+		result, err := fake.Dispatch(context.Background(), []byte(envelope))
+		if err != nil {
+			t.Fatalf("attempt %d: %v", attempt, err)
+		}
+		if result.Outcome != OutcomeFailed {
+			t.Fatalf("attempt %d outcome = %q, want failed", attempt, result.Outcome)
+		}
 	}
 }

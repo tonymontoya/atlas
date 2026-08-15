@@ -553,3 +553,116 @@ func TestRecordApprovalRejectsWrongGateAndNotWaiting(t *testing.T) {
 		t.Fatalf("bad approver error = %v, want InvalidInputError", err)
 	}
 }
+
+func pauseAtTask(t *testing.T, store *PostgresStore, ctx context.Context, instance WorkflowInstance) {
+	t.Helper()
+	if _, err := store.TransitionWorkflowInstance(ctx, WorkflowInstanceTransitionInput{InstanceID: instance.ID, To: workflows.InstanceRunning}); err != nil {
+		t.Fatalf("pending -> running: %v", err)
+	}
+	if _, err := store.TransitionWorkflowInstance(ctx, WorkflowInstanceTransitionInput{
+		InstanceID: instance.ID,
+		To:         workflows.InstanceWaitingForOperator,
+		AtStep:     "replace-device",
+	}); err != nil {
+		t.Fatalf("running -> waiting_for_operator: %v", err)
+	}
+}
+
+func TestRecordTaskCompletionBindsTaskAndIsIdempotent(t *testing.T) {
+	store, ctx := workflowStateTestDB(t)
+	instance := attachTestInstance(t, store, ctx)
+	pauseAtTask(t, store, ctx, instance)
+
+	completion, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{
+		InstanceID: instance.ID,
+		TaskID:     "replace-device",
+		Operator:   manualTestActor(),
+		Note:       "device swapped",
+	})
+	if err != nil {
+		t.Fatalf("RecordTaskCompletion: %v", err)
+	}
+	if completion.ID == 0 || completion.WorkflowInstanceID != instance.ID || completion.TaskID != "replace-device" {
+		t.Fatalf("completion = %+v", completion)
+	}
+	if completion.Operator.Subject != "manual-test-operator" || completion.Operator.DisplayName != "Manual Test Operator" {
+		t.Fatalf("operator = %+v, want the acting operator", completion.Operator)
+	}
+	if completion.Note == nil || *completion.Note != "device swapped" {
+		t.Fatalf("note = %v, want snapshot", completion.Note)
+	}
+	if completion.CreatedAt.IsZero() {
+		t.Fatal("completion has no timestamp")
+	}
+
+	again, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{
+		InstanceID: instance.ID,
+		TaskID:     "replace-device",
+		Operator:   manualTestActor(),
+	})
+	if err != nil {
+		t.Fatalf("second RecordTaskCompletion: %v", err)
+	}
+	if again.ID != completion.ID {
+		t.Fatalf("second completion = %d, want idempotent %d", again.ID, completion.ID)
+	}
+}
+
+func TestListWorkflowTaskCompletions(t *testing.T) {
+	store, ctx := workflowStateTestDB(t)
+	instance := attachTestInstance(t, store, ctx)
+	pauseAtTask(t, store, ctx, instance)
+
+	completions, err := store.ListWorkflowTaskCompletions(ctx, instance.ID)
+	if err != nil {
+		t.Fatalf("ListWorkflowTaskCompletions before any completion: %v", err)
+	}
+	if len(completions) != 0 {
+		t.Fatalf("completions = %d, want none", len(completions))
+	}
+	if unknown, err := store.ListWorkflowTaskCompletions(ctx, 999999); err != nil || len(unknown) != 0 {
+		t.Fatalf("unknown instance = %v, %v, want empty without error", unknown, err)
+	}
+
+	recorded, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{
+		InstanceID: instance.ID,
+		TaskID:     "replace-device",
+		Operator:   manualTestActor(),
+	})
+	if err != nil {
+		t.Fatalf("RecordTaskCompletion: %v", err)
+	}
+
+	completions, err = store.ListWorkflowTaskCompletions(ctx, instance.ID)
+	if err != nil {
+		t.Fatalf("ListWorkflowTaskCompletions: %v", err)
+	}
+	if len(completions) != 1 || completions[0].ID != recorded.ID || completions[0].TaskID != "replace-device" {
+		t.Fatalf("completions = %+v, want the recorded task completion", completions)
+	}
+}
+
+func TestRecordTaskCompletionRejectsWrongTaskAndNotWaiting(t *testing.T) {
+	store, ctx := workflowStateTestDB(t)
+
+	waiting := attachTestInstance(t, store, ctx)
+	pauseAtTask(t, store, ctx, waiting)
+	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: waiting.ID, TaskID: "other-task", Operator: manualTestActor()}); !isConflict(err) {
+		t.Fatalf("wrong task error = %v, want conflict", err)
+	}
+
+	pending := attachTestInstance(t, store, ctx)
+	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: pending.ID, TaskID: "replace-device", Operator: manualTestActor()}); !isConflict(err) {
+		t.Fatalf("not waiting error = %v, want conflict", err)
+	}
+
+	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: 999999, TaskID: "replace-device", Operator: manualTestActor()}); !isNotFound(err) {
+		t.Fatalf("missing instance error = %v, want not found", err)
+	}
+	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: pending.ID, TaskID: "", Operator: manualTestActor()}); !isInvalidInput(err) {
+		t.Fatalf("empty task error = %v, want InvalidInputError", err)
+	}
+	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: pending.ID, TaskID: "replace-device", Operator: Actor{Subject: "", DisplayName: "X"}}); !isInvalidInput(err) {
+		t.Fatalf("bad operator error = %v, want InvalidInputError", err)
+	}
+}

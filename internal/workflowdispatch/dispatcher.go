@@ -25,15 +25,21 @@ type Store interface {
 	TransitionWorkflowJob(ctx context.Context, input store.WorkflowJobTransitionInput) (store.WorkflowJob, error)
 	ListWorkflowJobs(ctx context.Context, instanceID int64) ([]store.WorkflowJob, error)
 	ListWorkflowApprovals(ctx context.Context, instanceID int64) ([]store.ApprovalRecord, error)
+	ListWorkflowTaskCompletions(ctx context.Context, instanceID int64) ([]store.TaskCompletionRecord, error)
 	GetCase(ctx context.Context, caseID int64) (cases.Case, error)
 }
 
 // Dispatcher advances one running Workflow Instance at a time through
-// its definition: pending Jobs are dispatched to the agent adapter
-// (pending -> dispatched -> succeeded, or failed on a failed outcome),
-// and once every Job has succeeded the instance reaches terminal
-// succeeded (ADR-0019). A Job that fails terminally fails the instance;
-// retry is the resilience slice that follows.
+// its definition: pending Jobs are dispatched to the agent adapter and
+// failed Jobs are retried per the definition's policy until they succeed
+// or their budget is spent, human Tasks pause the instance at
+// waiting_for_operator until an Operator records their completion, and
+// once every Job has succeeded the instance reaches terminal succeeded
+// (ADR-0019). The dispatcher owns no state of its own: every advance is
+// a durable store transition, so a stopped process leaves the instance
+// resumable from PostgreSQL — Run re-dispatches a Job left in flight
+// under its original idempotency key and re-queues a failed Job whose
+// budget has not been spent.
 type Dispatcher struct {
 	store   Store
 	defs    workflows.Registry
@@ -78,6 +84,14 @@ func (d *Dispatcher) Run(ctx context.Context, instanceID int64) (store.WorkflowI
 	for _, approval := range approvals {
 		approvedGates[approval.GateID] = true
 	}
+	completions, err := d.store.ListWorkflowTaskCompletions(ctx, instanceID)
+	if err != nil {
+		return store.WorkflowInstance{}, err
+	}
+	completedTasks := make(map[string]bool, len(completions))
+	for _, completion := range completions {
+		completedTasks[completion.TaskID] = true
+	}
 	target, err := d.store.GetCase(ctx, instance.CaseID)
 	if err != nil {
 		return store.WorkflowInstance{}, err
@@ -93,24 +107,22 @@ func (d *Dispatcher) Run(ctx context.Context, instanceID int64) (store.WorkflowI
 				return instance, nil
 			}
 		case workflows.TaskStep:
-			// The waiting_for_operator pause at human Tasks — and the
-			// operator resume — lands with the resilience slice
-			// (ADR-0019); the fake loop treats Tasks as pass-through
-			// until then.
+			// Human Tasks pause the instance until an Operator records
+			// the completion that resumes it (ADR-0019).
+			if !completedTasks[step.ID] {
+				return d.store.TransitionWorkflowInstance(ctx, store.WorkflowInstanceTransitionInput{
+					InstanceID: instanceID,
+					To:         workflows.InstanceWaitingForOperator,
+					AtStep:     step.ID,
+				})
+			}
 		case workflows.JobStep:
 			job, ok := jobsByStep[step.ID]
 			if !ok {
 				return store.WorkflowInstance{}, fmt.Errorf("workflow instance %d has no job row for step %q", instanceID, step.ID)
 			}
-			switch job.State {
-			case workflows.JobSucceeded:
+			if job.State == workflows.JobSucceeded {
 				continue
-			case workflows.JobDispatched:
-				// An in-flight Job means another dispatcher owns this
-				// instance; restart recovery is the resilience slice.
-				return instance, nil
-			case workflows.JobFailed:
-				return instance, nil
 			}
 			outcome, err := d.dispatchJob(ctx, definition, target, instance, job, approvals)
 			if err != nil {
@@ -130,37 +142,58 @@ func (d *Dispatcher) Run(ctx context.Context, instanceID int64) (store.WorkflowI
 	})
 }
 
-// dispatchJob sends one Job through the agent adapter: the Job moves to
-// dispatched, the typed-operation request envelope is serialized and
-// handed to the adapter, and the Job records the adapter's terminal
-// outcome. An adapter that rejects the envelope counts as a failed
-// Job: the request did not satisfy the typed-operation contract.
+// dispatchJob drives one Job to a terminal outcome, applying the
+// definition's retry policy (ADR-0019). A pending Job is dispatched and
+// the adapter's answer is recorded; a dispatched Job — one a dead
+// process left in flight — is re-dispatched under its original
+// idempotency key, which the agent deduplicates; a failed Job whose
+// budget is not spent is re-queued onto a fresh attempt. An adapter that
+// rejects the envelope counts as a failed attempt: the request did not
+// satisfy the typed-operation contract.
 func (d *Dispatcher) dispatchJob(ctx context.Context, definition workflows.Definition, target cases.Case, instance store.WorkflowInstance, job store.WorkflowJob, approvals []store.ApprovalRecord) (workflows.JobState, error) {
-	if _, err := d.store.TransitionWorkflowJob(ctx, store.WorkflowJobTransitionInput{JobID: job.ID, To: workflows.JobDispatched}); err != nil {
-		return "", err
-	}
-
-	envelope, err := requestEnvelope(definition, target, instance, job, approvals)
-	if err != nil {
-		return "", err
-	}
-	payload, err := json.Marshal(envelope)
-	if err != nil {
-		return "", err
-	}
-	result, err := d.adapter.Dispatch(ctx, payload)
-	if err != nil || result.Outcome == agent.OutcomeFailed {
-		failed, transitionErr := d.store.TransitionWorkflowJob(ctx, store.WorkflowJobTransitionInput{JobID: job.ID, To: workflows.JobFailed})
-		if transitionErr != nil {
-			return "", transitionErr
+	for {
+		switch job.State {
+		case workflows.JobFailed:
+			if job.Attempt >= job.MaxAttempts {
+				return workflows.JobFailed, nil
+			}
+			requeued, err := d.store.TransitionWorkflowJob(ctx, store.WorkflowJobTransitionInput{JobID: job.ID, To: workflows.JobPending})
+			if err != nil {
+				return "", err
+			}
+			job = requeued
+			continue
+		case workflows.JobPending:
+			dispatched, err := d.store.TransitionWorkflowJob(ctx, store.WorkflowJobTransitionInput{JobID: job.ID, To: workflows.JobDispatched})
+			if err != nil {
+				return "", err
+			}
+			job = dispatched
 		}
-		return failed.State, nil
+
+		envelope, err := requestEnvelope(definition, target, instance, job, approvals)
+		if err != nil {
+			return "", err
+		}
+		payload, err := json.Marshal(envelope)
+		if err != nil {
+			return "", err
+		}
+		result, err := d.adapter.Dispatch(ctx, payload)
+		if err != nil || result.Outcome == agent.OutcomeFailed {
+			failed, transitionErr := d.store.TransitionWorkflowJob(ctx, store.WorkflowJobTransitionInput{JobID: job.ID, To: workflows.JobFailed})
+			if transitionErr != nil {
+				return "", transitionErr
+			}
+			job = failed
+			continue
+		}
+		succeeded, err := d.store.TransitionWorkflowJob(ctx, store.WorkflowJobTransitionInput{JobID: job.ID, To: workflows.JobSucceeded})
+		if err != nil {
+			return "", err
+		}
+		return succeeded.State, nil
 	}
-	succeeded, err := d.store.TransitionWorkflowJob(ctx, store.WorkflowJobTransitionInput{JobID: job.ID, To: workflows.JobSucceeded})
-	if err != nil {
-		return "", err
-	}
-	return succeeded.State, nil
 }
 
 // requestEnvelope builds the typed-operation request envelope for one

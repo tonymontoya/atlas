@@ -194,6 +194,23 @@ func (s *Server) listCaseWorkflows(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payload)
 }
 
+// parseWorkflowInstanceID reads the instance id path segment; a missing
+// or invalid id is a 404 like any unknown instance.
+func parseWorkflowInstanceID(r *http.Request) (int64, bool) {
+	instanceID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || instanceID <= 0 {
+		return 0, false
+	}
+	return instanceID, true
+}
+
+func workflowInstanceNotFound() providers.ProviderError {
+	return providers.ProviderError{
+		Class:   providers.ErrorNotFound,
+		Message: "workflow instance not found",
+	}
+}
+
 // approveWorkflowGate records the durable, immutable Approval for the gate
 // the instance is paused at and advances the instance past it (ADR-0020,
 // ADR-0021). A second approval of an already-passed gate is an idempotent
@@ -203,12 +220,9 @@ func (s *Server) approveWorkflowGate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}
-	instanceID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || instanceID <= 0 {
-		writeError(w, providers.ProviderError{
-			Class:   providers.ErrorNotFound,
-			Message: "workflow instance not found",
-		})
+	instanceID, ok := parseWorkflowInstanceID(r)
+	if !ok {
+		writeError(w, workflowInstanceNotFound())
 		return
 	}
 	var request struct {
@@ -268,6 +282,100 @@ func (s *Server) approveWorkflowGate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, newApprovalPayload(approval))
 }
 
+// completeWorkflowTask records the durable, immutable Task completion
+// for the human Task the instance is paused at and resumes the instance
+// past it (ADR-0019). A second completion of an already-passed task is
+// an idempotent no-op returning the existing record without touching
+// the instance.
+func (s *Server) completeWorkflowTask(w http.ResponseWriter, r *http.Request) {
+	if s.app.WorkflowWrites == nil {
+		writeError(w, workflowWritesUnsupported())
+		return
+	}
+	instanceID, ok := parseWorkflowInstanceID(r)
+	if !ok {
+		writeError(w, workflowInstanceNotFound())
+		return
+	}
+	var request struct {
+		TaskID string `json:"taskId"`
+		Note   string `json:"note"`
+	}
+	if err := decodeJSONBody(w, r, &request); err != nil {
+		return
+	}
+	if request.TaskID == "" {
+		writeError(w, invalidRequestError{Message: "taskId is required"})
+		return
+	}
+
+	actor, _ := identity.FromContext(r.Context())
+	completion, err := s.app.WorkflowWrites.RecordTaskCompletion(r.Context(), store.RecordTaskCompletionInput{
+		InstanceID: instanceID,
+		TaskID:     request.TaskID,
+		Operator:   store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
+		Note:       request.Note,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	// The record already existing means the task was passed before; the
+	// completion authorizes nothing further. Otherwise this call
+	// recorded the first completion, and the instance is still paused at
+	// the task: resume it.
+	instance, err := s.app.WorkflowWrites.GetWorkflowInstance(r.Context(), instanceID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if instance.State == workflows.InstanceWaitingForOperator && instance.CurrentStep != nil && *instance.CurrentStep == request.TaskID {
+		if _, err := s.app.WorkflowWrites.TransitionWorkflowInstance(r.Context(), store.WorkflowInstanceTransitionInput{
+			InstanceID: instanceID,
+			To:         workflows.InstanceRunning,
+			Actor:      &store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
+		}); err != nil {
+			writeError(w, err)
+			return
+		}
+		// With the task done, the fake agent loop (ADR-0022) drives the
+		// instance through its remaining Jobs synchronously; without a
+		// dispatcher the instance rests running with pending Jobs.
+		if s.app.WorkflowDispatch != nil {
+			if _, err := s.app.WorkflowDispatch.Run(r.Context(), instanceID); err != nil {
+				writeError(w, err)
+				return
+			}
+		}
+		writeJSON(w, http.StatusCreated, newTaskCompletionPayload(completion))
+		return
+	}
+	writeJSON(w, http.StatusOK, newTaskCompletionPayload(completion))
+}
+
+type taskCompletionPayload struct {
+	ID                 int64     `json:"id"`
+	WorkflowInstanceID int64     `json:"workflowInstanceId"`
+	TaskID             string    `json:"taskId"`
+	OperatorID         string    `json:"operatorId"`
+	OperatorName       string    `json:"operatorDisplayName"`
+	Note               *string   `json:"note"`
+	CreatedAt          time.Time `json:"createdAt"`
+}
+
+func newTaskCompletionPayload(record store.TaskCompletionRecord) taskCompletionPayload {
+	return taskCompletionPayload{
+		ID:                 record.ID,
+		WorkflowInstanceID: record.WorkflowInstanceID,
+		TaskID:             record.TaskID,
+		OperatorID:         record.Operator.Subject,
+		OperatorName:       record.Operator.DisplayName,
+		Note:               record.Note,
+		CreatedAt:          record.CreatedAt,
+	}
+}
+
 type workflowJobPayload struct {
 	ID                 int64      `json:"id"`
 	WorkflowInstanceID int64      `json:"workflowInstanceId"`
@@ -289,12 +397,9 @@ func (s *Server) listWorkflowJobs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}
-	instanceID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || instanceID <= 0 {
-		writeError(w, providers.ProviderError{
-			Class:   providers.ErrorNotFound,
-			Message: "workflow instance not found",
-		})
+	instanceID, ok := parseWorkflowInstanceID(r)
+	if !ok {
+		writeError(w, workflowInstanceNotFound())
 		return
 	}
 	if _, err := s.app.WorkflowReads.GetWorkflowInstance(r.Context(), instanceID); err != nil {

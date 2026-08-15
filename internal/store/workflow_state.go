@@ -613,3 +613,139 @@ func scanApprovalRecord(row rowScanner) (ApprovalRecord, error) {
 	approval.Reason = nullableStringPtr(reason)
 	return approval, nil
 }
+
+const taskCompletionColumns = "id, workflow_instance_id, task_id, operator_id, operator_display_name, note, created_at"
+
+// RecordTaskCompletionInput records an Operator's completion of a human
+// Task bound to a Workflow Instance (ADR-0019). Note is optional.
+type RecordTaskCompletionInput struct {
+	InstanceID int64
+	TaskID     string
+	Operator   Actor
+	Note       string
+}
+
+// TaskCompletionRecord is the durable, immutable record that one human
+// Task was performed (ADR-0019): it advances one instance past one Task
+// and authorizes nothing else. No update or delete paths exist.
+type TaskCompletionRecord struct {
+	ID                 int64
+	WorkflowInstanceID int64
+	TaskID             string
+	Operator           Actor
+	Note               *string
+	CreatedAt          time.Time
+}
+
+// RecordTaskCompletion writes the Task completion record for a Task. The
+// instance must be paused at that task in waiting_for_operator;
+// completing a task that is not the instance's current one is rejected.
+// A second completion of the same task is an idempotent no-op returning
+// the existing record.
+func (s *PostgresStore) RecordTaskCompletion(ctx context.Context, input RecordTaskCompletionInput) (TaskCompletionRecord, error) {
+	if input.TaskID == "" {
+		return TaskCompletionRecord{}, inputError("task id is required")
+	}
+	if err := validateActor(input.Operator); err != nil {
+		return TaskCompletionRecord{}, err
+	}
+
+	occurredAt := time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return TaskCompletionRecord{}, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	instance, err := lockWorkflowInstanceForUpdate(ctx, tx, input.InstanceID)
+	if err != nil {
+		return TaskCompletionRecord{}, err
+	}
+
+	var existing TaskCompletionRecord
+	row := tx.QueryRowContext(ctx, `
+		SELECT `+taskCompletionColumns+`
+		FROM workflow_task_completions
+		WHERE workflow_instance_id = $1 AND task_id = $2
+	`, input.InstanceID, input.TaskID)
+	existing, err = scanTaskCompletionRecord(row)
+	if err == nil {
+		if err := tx.Commit(); err != nil {
+			return TaskCompletionRecord{}, err
+		}
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return TaskCompletionRecord{}, err
+	}
+
+	if instance.State != workflows.InstanceWaitingForOperator || instance.CurrentStep == nil || *instance.CurrentStep != input.TaskID {
+		return TaskCompletionRecord{}, providers.ProviderError{Class: providers.ErrorConflict, Message: fmt.Sprintf("workflow instance is not waiting for operator at task %s", input.TaskID)}
+	}
+
+	var note sql.NullString
+	if input.Note != "" {
+		note = sql.NullString{String: input.Note, Valid: true}
+	}
+	inserted := tx.QueryRowContext(ctx, `
+		INSERT INTO workflow_task_completions (workflow_instance_id, task_id, operator_id, operator_display_name, note, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING `+taskCompletionColumns,
+		input.InstanceID, input.TaskID, input.Operator.Subject, input.Operator.DisplayName, note, occurredAt)
+	completion, err := scanTaskCompletionRecord(inserted)
+	if err != nil {
+		return TaskCompletionRecord{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return TaskCompletionRecord{}, err
+	}
+	return completion, nil
+}
+
+// ListWorkflowTaskCompletions returns a Workflow Instance's Task
+// completion records in creation order.
+func (s *PostgresStore) ListWorkflowTaskCompletions(ctx context.Context, instanceID int64) ([]TaskCompletionRecord, error) {
+	if instanceID <= 0 {
+		return nil, notFound("workflow instance not found")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT `+taskCompletionColumns+`
+		FROM workflow_task_completions
+		WHERE workflow_instance_id = $1
+		ORDER BY created_at ASC, id ASC
+	`, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	completions := make([]TaskCompletionRecord, 0)
+	for rows.Next() {
+		completion, err := scanTaskCompletionRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		completions = append(completions, completion)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return completions, nil
+}
+
+func scanTaskCompletionRecord(row rowScanner) (TaskCompletionRecord, error) {
+	var completion TaskCompletionRecord
+	var note sql.NullString
+	err := row.Scan(
+		&completion.ID, &completion.WorkflowInstanceID, &completion.TaskID,
+		&completion.Operator.Subject, &completion.Operator.DisplayName, &note, &completion.CreatedAt,
+	)
+	if err != nil {
+		return TaskCompletionRecord{}, err
+	}
+	completion.Note = nullableStringPtr(note)
+	return completion, nil
+}

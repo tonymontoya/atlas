@@ -33,6 +33,19 @@ func newWriteHarness(t *testing.T) *writeHarness {
 // loop (ADR-0022); anything else dispatches nothing.
 func newWriteHarnessWithAgentMode(t *testing.T, agentMode string) *writeHarness {
 	t.Helper()
+	return newWriteHarnessWithOptions(t, agentMode, "")
+}
+
+// newWriteHarnessWithAgentScenario builds the fake-agent harness with a
+// failure scenario (ATLAS_FAKE_AGENT_SCENARIO) driving the dispatch
+// loop.
+func newWriteHarnessWithAgentScenario(t *testing.T, fakeAgentScenario string) *writeHarness {
+	t.Helper()
+	return newWriteHarnessWithOptions(t, "fake", fakeAgentScenario)
+}
+
+func newWriteHarnessWithOptions(t *testing.T, agentMode string, fakeAgentScenario string) *writeHarness {
+	t.Helper()
 	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
 
@@ -53,12 +66,13 @@ func newWriteHarnessWithAgentMode(t *testing.T, agentMode string) *writeHarness 
 	t.Cleanup(func() { cleanupManualAPIRows(t, db) })
 
 	application, err := app.NewFromConfig(ctx, config.Config{
-		DatabaseURL:  databaseURL,
-		ReadSource:   "postgres",
-		AgentMode:    agentMode,
-		OIDCIssuer:   "https://atlas-dev-issuer.local",
-		OIDCAudience: "atlas-api",
-		OIDCJWKSURL:  jwks.URL + "/.well-known/jwks.json",
+		DatabaseURL:       databaseURL,
+		ReadSource:        "postgres",
+		AgentMode:         agentMode,
+		FakeAgentScenario: fakeAgentScenario,
+		OIDCIssuer:        "https://atlas-dev-issuer.local",
+		OIDCAudience:      "atlas-api",
+		OIDCJWKSURL:       jwks.URL + "/.well-known/jwks.json",
 	})
 	if err != nil {
 		t.Fatalf("new app: %v", err)

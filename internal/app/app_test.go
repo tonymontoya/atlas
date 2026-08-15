@@ -42,3 +42,14 @@ func TestNewFromConfigRejectsUnsupportedAgentMode(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestNewFromConfigRejectsUnknownFakeAgentScenario(t *testing.T) {
+	_, err := NewFromConfig(context.Background(), config.Config{
+		ReadSource:        "postgres",
+		AgentMode:         "fake",
+		FakeAgentScenario: "nonsense",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
