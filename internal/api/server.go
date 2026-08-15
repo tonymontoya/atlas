@@ -48,6 +48,7 @@ func (s *Server) routes() []route {
 		{"POST", "/api/v1/cases/{id}/assignment", s.requireIdentity(s.assignCase)},
 		{"POST", "/api/v1/cases/{id}/notes", s.requireIdentity(s.addCaseNote)},
 		{"GET", "/api/v1/cases/{id}/notes", s.caseNotes},
+		{"POST", "/api/v1/cases/{id}/workflows", s.requireIdentity(s.attachWorkflow)},
 	}
 }
 

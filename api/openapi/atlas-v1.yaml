@@ -1,14 +1,15 @@
 openapi: 3.1.0
 info:
   title: Atlas API
-  version: 0.4.0
+  version: 0.5.0
   description: >
     Atlas REST API contract for the fake-provider scaffold. Covers local
     health, current-cluster inventory reads (identity, health, OSDs, Hosts,
     Storage Devices, Ceph Daemons, Pools), explicit inventory sync run
     history, read-only case records, and the authenticated operator identity
-    probe. Write endpoints arriving in 0.4.0 carry a bearer-token security
-    scheme; existing read endpoints remain public.
+    probe. Write endpoints carry a bearer-token security scheme; existing
+    read endpoints remain public. 0.5.0 adds attaching Workflow Instances to
+    Cases.
 servers:
   - url: http://127.0.0.1:8080
     description: Local development
@@ -737,6 +738,78 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
+  /api/v1/cases/{id}/workflows:
+    post:
+      tags:
+        - Cases
+      operationId: attachCaseWorkflow
+      summary: Attach a Workflow to a case
+      description: >
+        Resolves the Workflow definition id and version in the code registry,
+        creates a pending Workflow Instance with one pending Job per Job step
+        (Gates and Tasks are not Jobs; they surface as instance pauses), and
+        writes a workflow_attached Timeline Event attributed to the
+        authenticated Operator. Attaching to a closed Case is a conflict.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachWorkflowRequest"
+            examples:
+              replaceOSD:
+                value:
+                  workflowId: replace-osd
+                  workflowVersion: 1
+      responses:
+        "201":
+          description: Attached Workflow Instance in pending state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowInstance"
+        "400":
+          description: Malformed body, missing workflowId, or non-positive workflowVersion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Case or Workflow definition not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Case is closed; closed Cases do not accept new Workflow Instances.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Workflow writes require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     bearerAuth:
@@ -1140,6 +1213,21 @@ components:
         body:
           type: string
           minLength: 1
+    AttachWorkflowRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - workflowId
+        - workflowVersion
+      properties:
+        workflowId:
+          type: string
+          minLength: 1
+          description: Workflow definition id in the code registry, e.g. replace-osd.
+        workflowVersion:
+          type: integer
+          minimum: 1
+          description: Workflow definition version to attach.
     CaseNote:
       type: object
       additionalProperties: false
@@ -1213,6 +1301,58 @@ components:
         - ceph
         - rook
         - atlas
+    WorkflowInstanceState:
+      type: string
+      description: Workflow Instance state machine (ADR-0019); terminal states never revert.
+      enum:
+        - pending
+        - running
+        - waiting_for_approval
+        - waiting_for_operator
+        - succeeded
+        - failed
+        - cancelled
+    WorkflowInstance:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - caseId
+        - workflowId
+        - workflowVersion
+        - state
+        - currentStep
+        - createdAt
+        - updatedAt
+        - finishedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        caseId:
+          type: integer
+          format: int64
+        workflowId:
+          type: string
+          description: Workflow definition id this instance executes.
+        workflowVersion:
+          type: integer
+          description: Workflow definition version this instance executes.
+        state:
+          $ref: "#/components/schemas/WorkflowInstanceState"
+        currentStep:
+          type: string
+          description: Definition step id the instance is paused at; null while running or terminal.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          description: Set when the instance reaches a terminal state; null before that.
     TimelineEvent:
       type: object
       additionalProperties: false

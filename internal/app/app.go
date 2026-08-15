@@ -7,9 +7,11 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
+	"github.com/tonymontoya/ceph-atlas/internal/operations"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/fake"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
+	"github.com/tonymontoya/ceph-atlas/internal/workflows"
 )
 
 type App struct {
@@ -19,6 +21,8 @@ type App struct {
 	AlertEvaluationRuns AlertEvaluationRunReader
 	Cases               CaseReader
 	CaseWrites          CaseWriter
+	WorkflowWrites      WorkflowWriter
+	WorkflowRegistry    workflows.Registry
 	Verifier            *identity.Verifier
 	close               func() error
 }
@@ -45,6 +49,10 @@ type CaseWriter interface {
 	ListCaseNotes(ctx context.Context, caseID int64) ([]cases.CaseNote, error)
 }
 
+type WorkflowWriter interface {
+	CreateWorkflowInstance(ctx context.Context, input store.CreateWorkflowInstanceInput) (store.WorkflowInstance, error)
+}
+
 func New(cfg config.Config) *App {
 	return &App{
 		Config:       cfg,
@@ -66,6 +74,11 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			return nil, err
 		}
 		postgresStore := store.NewPostgres(db)
+		workflowRegistry, err := defaultWorkflowRegistry()
+		if err != nil {
+			_ = db.Close()
+			return nil, err
+		}
 		return &App{
 			Config:              cfg,
 			CephProvider:        postgresStore,
@@ -73,12 +86,24 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			AlertEvaluationRuns: postgresStore,
 			Cases:               postgresStore,
 			CaseWrites:          postgresStore,
+			WorkflowWrites:      postgresStore,
+			WorkflowRegistry:    workflowRegistry,
 			Verifier:            verifier,
 			close:               db.Close,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported read source %q", cfg.ReadSource)
 	}
+}
+
+// defaultWorkflowRegistry builds the Workflow definition registry this Atlas
+// binary ships (ADR-0017).
+func defaultWorkflowRegistry() (workflows.Registry, error) {
+	ops, err := operations.DefaultRegistry()
+	if err != nil {
+		return nil, err
+	}
+	return workflows.DefaultRegistry(ops)
 }
 
 func verifierFromConfig(cfg config.Config) (*identity.Verifier, error) {

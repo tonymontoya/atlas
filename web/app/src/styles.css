@@ -348,6 +348,7 @@ th {
 .compose-form select,
 .compose-form textarea,
 .assignment-form input,
+.workflow-attach-form input,
 .note-form textarea {
   background: #f4f6f9;
   border: 1px solid #cfd8e0;
@@ -385,6 +386,7 @@ th {
 .compose-form button[type="submit"],
 .note-form button[type="submit"],
 .case-actions button,
+.workflow-attach-form button[type="submit"],
 .token-form-row button {
   background: #1f5f8b;
   border: 0;
@@ -401,6 +403,7 @@ th {
 .compose-form button:disabled,
 .note-form button:disabled,
 .case-actions button:disabled,
+.workflow-attach-form button:disabled,
 .token-form-row button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -448,6 +451,21 @@ th {
 .case-notes {
   border-top: 1px solid #e3e8ef;
   padding-top: 12px;
+}
+
+.case-workflow-attach {
+  border-top: 1px solid #e3e8ef;
+  padding-top: 12px;
+}
+
+.workflow-attach-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workflow-attach-form input {
+  min-width: 160px;
 }
 
 .note-list {

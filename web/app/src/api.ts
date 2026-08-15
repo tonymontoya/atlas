@@ -277,6 +277,40 @@ export async function addCaseNote(
   });
 }
 
+export type WorkflowInstanceState =
+  | "pending"
+  | "running"
+  | "waiting_for_approval"
+  | "waiting_for_operator"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export type WorkflowInstanceRecord = {
+  id: number;
+  caseId: number;
+  workflowId: string;
+  workflowVersion: number;
+  state: WorkflowInstanceState;
+  currentStep: string | null;
+  createdAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
+};
+
+export async function attachCaseWorkflow(
+  id: number,
+  workflowId: string,
+  workflowVersion: number,
+  token: string,
+  signal?: AbortSignal,
+): Promise<WorkflowInstanceRecord> {
+  return request<WorkflowInstanceRecord>(`/api/v1/cases/${id}/workflows`, signal, token, {
+    method: "POST",
+    body: JSON.stringify({ workflowId, workflowVersion }),
+  });
+}
+
 export async function loadCaseNotes(
   id: number,
   signal?: AbortSignal,

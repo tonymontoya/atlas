@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   addCaseNote,
   assignCase,
+  attachCaseWorkflow,
   createCase,
   loadCase,
   loadCaseNotes,
@@ -739,6 +740,9 @@ function CaseDetailPanel({
           {operator && token ? (
             <CaseActions detail={detail} token={token} onChanged={onChanged} />
           ) : null}
+          {operator && token && availableCaseActions(detail.status).canAttachWorkflow ? (
+            <CaseWorkflowAttach caseID={detail.id} token={token} onChanged={onChanged} />
+          ) : null}
           <CaseNotes
             error={notesError}
             loading={notesLoading}
@@ -848,6 +852,69 @@ function CaseActions({
       </div>
       {actionError ? <p className="form-error">{actionError}</p> : null}
     </div>
+  );
+}
+
+function CaseWorkflowAttach({
+  caseID,
+  token,
+  onChanged,
+}: {
+  caseID: number;
+  token: string;
+  onChanged: () => void;
+}) {
+  const [workflowID, setWorkflowID] = React.useState("replace-osd");
+  const [workflowVersion, setWorkflowVersion] = React.useState("1");
+  const [busy, setBusy] = React.useState(false);
+  const [attachError, setAttachError] = React.useState<string | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const version = Number.parseInt(workflowVersion, 10);
+    if (busy || workflowID.trim() === "" || !Number.isInteger(version) || version < 1) {
+      return;
+    }
+    try {
+      setBusy(true);
+      setAttachError(null);
+      await attachCaseWorkflow(caseID, workflowID.trim(), version, token);
+      onChanged();
+    } catch (thrown) {
+      setAttachError(errorMessage(thrown));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const formReady = workflowID.trim() !== "" && Number.parseInt(workflowVersion, 10) >= 1;
+
+  return (
+    <section className="case-workflow-attach" aria-label="Attach Workflow">
+      <div className="section-heading">
+        <h3>Workflow</h3>
+      </div>
+      <form className="workflow-attach-form" onSubmit={submit}>
+        <input
+          value={workflowID}
+          onChange={(event) => setWorkflowID(event.target.value)}
+          placeholder="Workflow id, e.g. replace-osd"
+          aria-label="Workflow id"
+        />
+        <input
+          value={workflowVersion}
+          onChange={(event) => setWorkflowVersion(event.target.value)}
+          placeholder="Version"
+          aria-label="Workflow version"
+        />
+        <div className="action-row">
+          <button type="submit" disabled={busy || !formReady}>
+            {busy ? "Attaching…" : "Attach workflow"}
+          </button>
+          {attachError ? <p className="form-error">{attachError}</p> : null}
+        </div>
+      </form>
+    </section>
   );
 }
 

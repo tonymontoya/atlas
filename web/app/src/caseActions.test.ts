@@ -4,30 +4,33 @@ import type { CaseRecord } from "./api";
 import { availableCaseActions } from "./caseActions";
 
 describe("availableCaseActions", () => {
-  it("allows triage and close from detected", () => {
+  it("allows triage, close, and workflow attach from detected", () => {
     expect(availableCaseActions("detected")).toEqual({
       canTriage: true,
       canClose: true,
       isClosed: false,
       canAssign: true,
+      canAttachWorkflow: true,
     });
   });
 
-  it("allows close but not re-triage from triaged", () => {
+  it("allows close and workflow attach but not re-triage from triaged", () => {
     expect(availableCaseActions("triaged")).toEqual({
       canTriage: false,
       canClose: true,
       isClosed: false,
       canAssign: true,
+      canAttachWorkflow: true,
     });
   });
 
-  it("treats closed as terminal", () => {
+  it("treats closed as terminal, including workflow attach", () => {
     expect(availableCaseActions("closed")).toEqual({
       canTriage: false,
       canClose: false,
       isClosed: true,
       canAssign: false,
+      canAttachWorkflow: false,
     });
   });
 
