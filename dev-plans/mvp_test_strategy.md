@@ -113,6 +113,11 @@ Should include:
   audience, bad signature, missing subject, key rotation)
 - authenticated manual Case writes (create, transition with closed-terminal
   conflicts, assignment, notes) including 401/400/404/409 error envelopes
+- the workflow loop against the fake Agent adapter (v0.5.0): attach,
+  Approval Gate pause and idempotent approval, human Task pause and
+  completion, retry past scripted transient Job failures, terminal
+  succeeded/failed states, and restart re-dispatch under the original
+  idempotency key
 
 Should require:
 
@@ -309,7 +314,8 @@ MVP tests should cover:
 - basic seed data load for local fake-provider mode
 - transaction behavior for sync writes
 - append-only audit table behavior once audit exists
-- durable workflow state persistence once workflows exist
+- durable workflow state persistence (instance and Job state machines,
+  approvals, task completions — covered since v0.5.0)
 
 Do not introduce Redis or NATS test dependencies until code paths require them.
 
@@ -338,24 +344,29 @@ API tests should use fake providers by default.
 
 MVP workflow testing should start with read-only and state-machine behavior.
 
-Before mutating workflows:
+Before mutating workflows (state-machine items covered since v0.5.0 against
+the fake Agent adapter, ADR-0022):
 
-- Case creation from alert fixture
+- Case creation from alert fixture (covered, v0.3.0)
 - Case creation from OSD-down fake provider scenario
-- Workflow Instance creation
-- Job state transitions
-- resume after process restart
+- Workflow Instance creation (covered)
+- Job state transitions (covered)
+- resume after process restart (covered)
 - safety check result attached as evidence
-- approval-required state represented but not bypassed
+- approval-required state represented but not bypassed (covered)
 
-After mutation gates:
+After mutation gates (typed operation dispatch and idempotency are covered
+by the fake adapter loop; real mutation remains gated on the security
+review checklist):
 
 - typed operation dispatch
 - idempotency
 - audit before and after execution
 - rollback/escalation path
 
-The first scaffold should not include mutating workflow execution.
+The scaffold's mutating workflow execution is fake-only: the compose stack
+check drives the whole loop (`make dev-stack-check`) without any real
+Ceph, Rook, or Atlas Agent dependency.
 
 ---
 

@@ -111,3 +111,17 @@ Instance creation writes a `workflow_attached` Timeline Event on the
 owning Case; every instance state transition writes
 `workflow_state_changed` with the acting operator or the Atlas system
 actor.
+
+## Workflow Task Completions
+
+`000009_workflow_task_completions.up.sql` adds:
+
+- `workflow_task_completions`: immutable records that a human Task was
+  performed, bound to a Workflow Instance task with operator identity
+  snapshots and an optional note. One completion per task; no update or
+  delete paths exist, mirroring `workflow_approvals` (ADR-0019).
+
+Task completions are the durable evidence that resumes an instance paused
+at `waiting_for_operator` (ADR-0019): after a restart, a recorded
+completion lets the dispatch loop continue past the Task instead of
+pausing again.

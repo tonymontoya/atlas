@@ -14,23 +14,30 @@ What exists today:
   authenticated manual Case write endpoints (create, transition, assign, note)
 - OIDC bearer-token identity verification (JWT against the issuer's JWKS) with
   a local dev issuer for development stacks
-- React and TypeScript web UI scaffold with operator sign-in and manual Case
-  writes
+- React and TypeScript web UI scaffold with operator sign-in, manual Case
+  writes, and Workflow attach/approve/resume forms
 - PostgreSQL persistence with plain SQL migrations
 - Fake-provider inventory fixtures and an inventory sync command
 - Fake-provider alert evaluation that automatically creates a Case (with
   Timeline Events and deduplication) from a firing alert
 - Seeded read-only Case and Case Timeline records
-- A local Docker Compose stack for the full development environment
+- A Workflow execution skeleton (ADR-0017 through ADR-0022): the Replace OSD
+  Workflow attaches to a Case, pauses at its Approval Gate and human Task,
+  and a fake Agent adapter drives its typed Jobs (with retry policies and
+  idempotent re-dispatch) to terminal state — all state is durable in
+  PostgreSQL
+- A local Docker Compose stack for the full development environment,
+  including the full fake workflow loop
 
 What does not exist yet:
 
 - Real Ceph or Rook providers (the only provider is the fake provider; alert
   detection reads fake Prometheus fixtures, not a live Prometheus)
-- Atlas Agent and any mutating operation against Ceph
-- RBAC, policy, approvals, and Audit Events (any authenticated operator can
-  write Cases manually; see ADR-0016)
-- Workflow execution, notifications, and cluster registration
+- A real Atlas Agent or any mutating operation against Ceph (the fake Agent
+  adapter only simulates Job execution)
+- RBAC, policy, and Audit Events (any authenticated operator can approve
+  gates and complete tasks; see ADR-0016)
+- Notifications and cluster registration
 
 ## Roadmap
 
@@ -106,11 +113,40 @@ dev issuer and use it as a bearer token:
 curl -s -X POST http://127.0.0.1:18090/token | jq -r .token
 ```
 
+### Try the workflow loop
+
+The dev stack runs the API with the fake Agent adapter
+(`ATLAS_AGENT_MODE=fake`), so the Replace OSD Workflow runs end to end
+against simulated Job execution:
+
+1. Open the web UI at `http://127.0.0.1:5173`, paste the dev token to sign
+   in, and open the detected Case (`CephOSDDown on osd=1`) or create a new
+   Case.
+2. In the Workflows section of the Case detail view, attach `replace-osd`
+   version `1`. The instance pauses at its Approval Gate
+   (`waiting_for_approval`).
+3. Approve the gate. The fake Agent executes the collect and destroy Jobs
+   (visible with per-Job state and attempt counters) and the instance
+   pauses at the human Task (`waiting_for_operator`).
+4. Mark the device-replacement Task done. The final verification Job runs
+   and the instance reaches terminal `succeeded`; every step is recorded
+   as a Timeline Event on the Case.
+
+The same loop is available over the REST API: `POST
+/api/v1/cases/{id}/workflows`, `POST
+/api/v1/workflow-instances/{id}/approvals`, and `POST
+/api/v1/workflow-instances/{id}/task-completions` (see `api/openapi`).
+
 Run the full-stack smoke check with:
 
 ```sh
 make dev-stack-check
 ```
+
+The smoke check exercises the whole loop — attach, approve, complete the
+Task, terminal state, Timeline Events — plus 401-without-token assertions
+on the write endpoints. It creates its own probe Case per run, so it stays
+green against a persistent database volume.
 
 Stop the full stack with:
 

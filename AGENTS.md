@@ -42,6 +42,14 @@ The current implementation supports:
 - Seeded read-only Case Timeline records in PostgreSQL.
 - Manual Case writes (creation, transitions with closed-terminal semantics,
   assignment, notes) with actor-attributed Timeline Events.
+- The Workflow skeleton (ADR-0017 through ADR-0022): the code-registered
+  Replace OSD Workflow attaches to a Case with durable instance and Job
+  state, pauses at its Approval Gate and human Task, and resumes through
+  authenticated approval and task-completion endpoints. With
+  `ATLAS_AGENT_MODE=fake` a fake Agent adapter drives Jobs (typed
+  operation envelopes, retry policies, idempotent replay) to terminal
+  state; every transition writes a Timeline Event. `make dev-stack-check`
+  probes the full loop, including 401-without-token assertions.
 
 ## Non-Negotiable Decisions
 

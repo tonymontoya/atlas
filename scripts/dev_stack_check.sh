@@ -79,6 +79,29 @@ expect_status() {
     echo "ok: $name"
 }
 
+# expect_post_status asserts a POST's status code; the body and optional
+# bearer token are passed through unchanged.
+expect_post_status() {
+    name="$1"
+    url="$2"
+    want_status="$3"
+    body="$4"
+    token="${5:-}"
+    if [ -n "$token" ]; then
+        status="$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+            -d "$body" "$url")"
+    else
+        status="$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            -H "Content-Type: application/json" -d "$body" "$url")"
+    fi
+    if [ "$status" != "$want_status" ]; then
+        echo "failed: $name: status $status, want $want_status" >&2
+        return 1
+    fi
+    echo "ok: $name"
+}
+
 wait_for_dev_issuer_token() {
     deadline=$(( $(date +%s) + timeout_seconds ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
@@ -159,5 +182,61 @@ dev_token="$(wait_for_dev_issuer_token)"
 expect_status "me without token is rejected" "$api_base/api/v1/me" 401
 wait_for_json "me with dev token" "$api_base/api/v1/me" \
     '.subject == "dev-operator" and .displayName == "Dev Operator"' "$dev_token"
+
+# The workflow loop (ADR-0022): attach the Replace OSD Workflow to a fresh
+# Case, approve the Approval Gate, complete the human Task, and watch the
+# fake agent drive the instance to terminal succeeded. Every run attaches
+# to its own freshly created Case, so reruns against a persistent volume
+# stay green.
+expect_post_status "attach workflow without token is rejected" \
+    "$api_base/api/v1/cases/1/workflows" 401 \
+    '{"workflowId":"replace-osd","workflowVersion":1}'
+expect_post_status "approve gate without token is rejected" \
+    "$api_base/api/v1/workflow-instances/1/approvals" 401 \
+    '{"gateId":"approve-destroy"}'
+expect_post_status "complete task without token is rejected" \
+    "$api_base/api/v1/workflow-instances/1/task-completions" 401 \
+    '{"taskId":"replace-device"}'
+
+loop_case_id="$(curl -fsS -X POST \
+    -H "Authorization: Bearer $dev_token" -H "Content-Type: application/json" \
+    -d '{"title":"dev-stack-check Replace OSD loop","summary":"workflow loop probe case","severity":"low","clusterFsid":"00000000-0000-4000-8000-000000000102"}' \
+    "$api_base/api/v1/cases" | jq -r '.id')"
+loop_instance_id="$(curl -fsS -X POST \
+    -H "Authorization: Bearer $dev_token" -H "Content-Type: application/json" \
+    -d '{"workflowId":"replace-osd","workflowVersion":1}' \
+    "$api_base/api/v1/cases/${loop_case_id}/workflows" | jq -r '.id')"
+
+wait_for_json "attached instance pauses at the approval gate" \
+    "$api_base/api/v1/cases/${loop_case_id}/workflows" \
+    'length == 1 and .[0].state == "waiting_for_approval" and .[0].currentStep == "approve-destroy"'
+wait_for_json "attached jobs rest pending at the gate" \
+    "$api_base/api/v1/workflow-instances/${loop_instance_id}/jobs" \
+    '([.[].stepId]) == ["collect-evidence","destroy-osd","verify-osd"] and all(.[]; .state == "pending")'
+
+expect_post_status "gate approval is recorded" \
+    "$api_base/api/v1/workflow-instances/${loop_instance_id}/approvals" 201 \
+    '{"gateId":"approve-destroy","reason":"dev-stack-check"}' "$dev_token"
+
+wait_for_json "approved instance pauses at the operator task" \
+    "$api_base/api/v1/cases/${loop_case_id}/workflows" \
+    'length == 1 and .[0].state == "waiting_for_operator" and .[0].currentStep == "replace-device"'
+wait_for_json "jobs before the task ran through the fake agent" \
+    "$api_base/api/v1/workflow-instances/${loop_instance_id}/jobs" \
+    '([.[].state]) == ["succeeded","succeeded","pending"]'
+
+expect_post_status "task completion is recorded" \
+    "$api_base/api/v1/workflow-instances/${loop_instance_id}/task-completions" 201 \
+    '{"taskId":"replace-device","note":"dev-stack-check device swap"}' "$dev_token"
+
+wait_for_json "completed instance reaches terminal succeeded" \
+    "$api_base/api/v1/cases/${loop_case_id}/workflows" \
+    'length == 1 and .[0].state == "succeeded" and .[0].finishedAt != null'
+wait_for_json "all jobs succeeded" \
+    "$api_base/api/v1/workflow-instances/${loop_instance_id}/jobs" \
+    'length == 3 and all(.[]; .state == "succeeded")'
+wait_for_json "workflow loop timeline" \
+    "$api_base/api/v1/cases/${loop_case_id}/timeline" \
+    'length == 8 and .[0].type == "case_detected" and ([.[] | select(.type == "workflow_attached")] | length == 1) and ([.[] | select(.type == "workflow_state_changed") | .payload.newState]) == ["running","waiting_for_approval","running","waiting_for_operator","running","succeeded"]'
 
 echo "Atlas dev stack smoke check passed"

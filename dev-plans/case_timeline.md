@@ -1,10 +1,12 @@
 # Case Timeline Read Model
-**Version:** 0.2 (Draft)
+**Version:** 0.3 (Draft)
 **Status:** Read model implemented (`GET /api/v1/cases/{id}/timeline`); write
 sides implemented for `case_detected` (v0.3.0 detection and v0.4.0 manual
 creation), `case_triaged`, `case_status_changed`, `case_assigned`, and
-`case_note_added` (v0.4.0 authenticated manual writes, ADR-0016). Remaining
-workflow event types are still design-only.
+`case_note_added` (v0.4.0 authenticated manual writes, ADR-0016), and
+`workflow_attached` / `workflow_state_changed` (v0.5.0 Workflow skeleton,
+ADR-0017 through ADR-0022: attach, gate/task pauses, operator resumes, and
+terminal transitions all write Timeline Events on the owning Case).
 **Audience:** Engineering, Architecture, Product, Contributors
 **Project:** Atlas
 
@@ -160,7 +162,7 @@ Timeline payloads should reference note identifiers rather than duplicating full
 
 Records that a Workflow Instance was attached to the Case.
 
-Suggested payload:
+Payload (implemented, v0.5.0):
 
 ```json
 {
@@ -173,11 +175,11 @@ Suggested payload:
 
 Records a visible Workflow Instance lifecycle transition.
 
-Suggested payload:
+Payload (implemented, v0.5.0; `pausedAtStep` appears only while paused at
+a gate or task):
 
 ```json
 {
-  "workflowInstanceId": 101,
   "previousState": "waiting_for_approval",
   "newState": "running"
 }
