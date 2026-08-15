@@ -11,6 +11,7 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
 func TestHealthz(t *testing.T) {
@@ -256,5 +257,30 @@ func TestProviderErrorsUseStructuredEnvelope(t *testing.T) {
 	}
 	if body.Error.Message == "" {
 		t.Fatal("expected non-empty error message")
+	}
+}
+
+func TestWriteErrorMapsStoreInvalidInputToInvalidRequest(t *testing.T) {
+	response := httptest.NewRecorder()
+
+	writeError(response, store.InvalidInputError{Message: "title is required"})
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	var body struct {
+		Error struct {
+			Class   string `json:"class"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Error.Class != "InvalidRequest" {
+		t.Fatalf("error class = %q, want InvalidRequest", body.Error.Class)
+	}
+	if body.Error.Message != "title is required" {
+		t.Fatalf("error message = %q, want the store message", body.Error.Message)
 	}
 }

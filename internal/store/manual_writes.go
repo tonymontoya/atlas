@@ -59,7 +59,7 @@ func validateActor(actor Actor) error {
 }
 
 func inputError(message string) error {
-	return providers.ProviderError{Class: providers.ErrorUnsupported, Message: message}
+	return InvalidInputError{Message: message}
 }
 
 func (s *PostgresStore) CreateManualCase(ctx context.Context, input ManualCaseInput) (cases.Case, error) {
@@ -71,13 +71,13 @@ func (s *PostgresStore) CreateManualCase(ctx context.Context, input ManualCaseIn
 	}
 	severity, err := cases.ParseCaseSeverity(input.Severity)
 	if err != nil {
-		return cases.Case{}, providers.ProviderError{Class: providers.ErrorUnsupported, Message: err.Error()}
+		return cases.Case{}, inputError(err.Error())
 	}
 	if err := validateActor(input.Actor); err != nil {
 		return cases.Case{}, err
 	}
 	if input.ClusterFSID != "" && !IsUUIDShape(input.ClusterFSID) {
-		return cases.Case{}, providers.ProviderError{Class: providers.ErrorUnsupported, Message: "clusterFsid must be a UUID"}
+		return cases.Case{}, inputError("clusterFsid must be a UUID")
 	}
 
 	occurredAt := time.Now().UTC()
@@ -126,7 +126,7 @@ func (s *PostgresStore) TransitionCase(ctx context.Context, input CaseTransition
 	}
 	target, err := cases.ParseCaseStatus(string(input.To))
 	if err != nil {
-		return cases.Case{}, providers.ProviderError{Class: providers.ErrorUnsupported, Message: err.Error()}
+		return cases.Case{}, inputError(err.Error())
 	}
 
 	occurredAt := time.Now().UTC()

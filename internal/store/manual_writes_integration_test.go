@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"testing"
 
@@ -85,14 +86,38 @@ func TestCreateManualCaseWritesCaseAndDetectionEvent(t *testing.T) {
 func TestCreateManualCaseRejectsInvalidInput(t *testing.T) {
 	store, ctx := manualWritesTestDB(t)
 
-	if _, err := store.CreateManualCase(ctx, ManualCaseInput{Title: "", Summary: "s", Severity: "medium", Actor: manualTestActor()}); err == nil {
-		t.Fatal("accepted an empty title")
+	inputs := []struct {
+		name  string
+		input ManualCaseInput
+	}{
+		{"empty title", ManualCaseInput{Title: "", Summary: "s", Severity: "medium", Actor: manualTestActor()}},
+		{"empty summary", ManualCaseInput{Title: "t", Summary: "", Severity: "medium", Actor: manualTestActor()}},
+		{"unknown severity", ManualCaseInput{Title: "t", Summary: "s", Severity: "severe", Actor: manualTestActor()}},
+		{"invalid cluster fsid", ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", ClusterFSID: "not-a-uuid", Actor: manualTestActor()}},
+		{"actor without subject", ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", Actor: Actor{Subject: "", DisplayName: "Name"}}},
+		{"actor without display name", ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", Actor: Actor{Subject: "subj", DisplayName: ""}}},
 	}
-	if _, err := store.CreateManualCase(ctx, ManualCaseInput{Title: "t", Summary: "s", Severity: "severe", Actor: manualTestActor()}); err == nil {
-		t.Fatal("accepted an unknown severity")
+	for _, input := range inputs {
+		t.Run(input.name, func(t *testing.T) {
+			_, err := store.CreateManualCase(ctx, input.input)
+			if !isInvalidInput(err) {
+				t.Fatalf("error = %v, want InvalidInputError", err)
+			}
+		})
 	}
-	if _, err := store.CreateManualCase(ctx, ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", Actor: Actor{Subject: "", DisplayName: ""}}); err == nil {
-		t.Fatal("accepted an actor without a subject")
+}
+
+func TestCaseWritesClassifyInvalidInput(t *testing.T) {
+	store, ctx := manualWritesTestDB(t)
+
+	if _, err := store.TransitionCase(ctx, CaseTransitionInput{CaseID: 1, To: cases.CaseStatus("bogus"), Actor: manualTestActor()}); !isInvalidInput(err) {
+		t.Fatalf("transition error = %v, want InvalidInputError", err)
+	}
+	if _, err := store.AssignCase(ctx, CaseAssignmentInput{CaseID: 1, Assignee: "subj", AssigneeDisplayName: "", Actor: manualTestActor()}); !isInvalidInput(err) {
+		t.Fatalf("assign error = %v, want InvalidInputError", err)
+	}
+	if _, err := store.AddCaseNote(ctx, CaseNoteInput{CaseID: 1, Body: "", Actor: manualTestActor()}); !isInvalidInput(err) {
+		t.Fatalf("note error = %v, want InvalidInputError", err)
 	}
 }
 
@@ -329,4 +354,9 @@ func asProviderError(err error, target *providers.ProviderError) bool {
 func isNotFound(err error) bool {
 	providerErr, ok := err.(providers.ProviderError)
 	return ok && providerErr.Class == providers.ErrorNotFound
+}
+
+func isInvalidInput(err error) bool {
+	var invalid InvalidInputError
+	return errors.As(err, &invalid)
 }

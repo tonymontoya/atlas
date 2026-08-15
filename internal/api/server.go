@@ -10,6 +10,7 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
 type Server struct {
@@ -283,6 +284,16 @@ func writeError(w http.ResponseWriter, err error) {
 			"error": {
 				Class:   string(providerErr.Class),
 				Message: providerErr.Message,
+			},
+		})
+		return
+	}
+	var invalidInput store.InvalidInputError
+	if errors.As(err, &invalidInput) {
+		writeJSON(w, http.StatusBadRequest, map[string]apiError{
+			"error": {
+				Class:   "InvalidRequest",
+				Message: invalidInput.Message,
 			},
 		})
 		return
