@@ -356,10 +356,14 @@ func (s *PostgresStore) ListCaseNotes(ctx context.Context, caseID int64) ([]case
 }
 
 func insertTimelineEvent(ctx context.Context, tx *sql.Tx, caseID int64, eventType cases.TimelineEventType, message string, occurredAt time.Time, actor Actor, payload []byte) error {
+	return insertTimelineEventWithActorType(ctx, tx, caseID, eventType, message, occurredAt, cases.TimelineActorUser, actor.Subject, actor.DisplayName, payload)
+}
+
+func insertTimelineEventWithActorType(ctx context.Context, tx *sql.Tx, caseID int64, eventType cases.TimelineEventType, message string, occurredAt time.Time, actorType cases.TimelineActorType, actorID, actorDisplayName string, payload []byte) error {
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO case_timeline_events (case_id, event_type, message, occurred_at, actor_type, actor_id, actor_display_name, payload)
-		VALUES ($1, $2, $3, $4, 'user', $5, $6, $7::jsonb)
-	`, caseID, eventType, message, occurredAt, actor.Subject, actor.DisplayName, payload)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8::jsonb)
+	`, caseID, eventType, message, occurredAt, actorType, actorID, actorDisplayName, payload)
 	return err
 }
 

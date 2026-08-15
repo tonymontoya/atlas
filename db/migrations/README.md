@@ -88,3 +88,26 @@ Manual writes arrive through the authenticated write API (ADR-0016): manual
 Case creation, status transitions (closed is terminal; reopen means a new
 Case, mirroring ADR-0015), assignment, and notes. Each write records its
 matching Timeline Event with the acting operator as a user actor.
+
+## Workflow State
+
+`000008_workflow_state.up.sql` adds:
+
+- `workflow_instances`: durable Workflow Instance state machines with
+  CHECK-constrained states from ADR-0019 (`pending`, `running`,
+  `waiting_for_approval`, `waiting_for_operator`, terminal `succeeded`,
+  `failed`, `cancelled`), the definition id/version they reference
+  (ADR-0017), and `current_step` recording the definition step an
+  instance is paused at.
+- `workflow_jobs`: Job state machines (`pending`, `dispatched`,
+  `succeeded`, `failed`) with definition order, typed operation type,
+  and attempt/max-attempts retry bookkeeping. The failed -> pending
+  retry edge is governed by the definition's retry policy.
+- `workflow_approvals`: immutable Approval records bound to a Workflow
+  Instance gate with approver identity snapshots and an optional reason
+  (ADR-0020). One approval per gate; no update or delete paths exist.
+
+Instance creation writes a `workflow_attached` Timeline Event on the
+owning Case; every instance state transition writes
+`workflow_state_changed` with the acting operator or the Atlas system
+actor.
