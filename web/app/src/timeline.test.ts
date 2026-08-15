@@ -70,6 +70,26 @@ describe("timelinePayloadLabels", () => {
     ).toEqual([]);
   });
 
+  it("labels workflow state changes with pause context", () => {
+    expect(
+      timelinePayloadLabels(
+        timelineEvent({
+          previousState: "running",
+          newState: "waiting_for_approval",
+          pausedAtStep: "approve-destroy",
+        }),
+      ),
+    ).toEqual(["running to waiting_for_approval", "Paused at approve-destroy"]);
+    expect(
+      timelinePayloadLabels(
+        timelineEvent({
+          previousState: "waiting_for_approval",
+          newState: "running",
+        }),
+      ),
+    ).toEqual(["waiting_for_approval to running"]);
+  });
+
   it("labels assignment, reassignment, and unassignment events", () => {
     expect(
       timelinePayloadLabels(

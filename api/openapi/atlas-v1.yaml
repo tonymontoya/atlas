@@ -749,7 +749,10 @@ paths:
         creates a pending Workflow Instance with one pending Job per Job step
         (Gates and Tasks are not Jobs; they surface as instance pauses), and
         writes a workflow_attached Timeline Event attributed to the
-        authenticated Operator. Attaching to a closed Case is a conflict.
+        authenticated Operator. The instance then advances from pending
+        through running to a pause at the definition's first Approval Gate
+        (waiting_for_approval), with the Atlas system actor attributing the
+        advancement Timeline Events. Attaching to a closed Case is a conflict.
       security:
         - bearerAuth: []
       parameters:
@@ -773,7 +776,7 @@ paths:
                   workflowVersion: 1
       responses:
         "201":
-          description: Attached Workflow Instance in pending state.
+          description: Attached Workflow Instance, parked at its first Approval Gate when the definition has one.
           content:
             application/json:
               schema:
@@ -798,6 +801,125 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Case is closed; closed Cases do not accept new Workflow Instances.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Workflow writes require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+    get:
+      tags:
+        - Cases
+      operationId: listCaseWorkflows
+      summary: List Workflow Instances attached to a case
+      description: Workflow Instances for the Case in creation order.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "200":
+          description: Workflow Instances ordered oldest to newest.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkflowInstance"
+        "404":
+          description: Case not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Workflow reads require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workflow-instances/{id}/approvals:
+    post:
+      tags:
+        - Cases
+      operationId: approveWorkflowGate
+      summary: Approve the gate a Workflow Instance is paused at
+      description: >
+        Records the durable, immutable Approval (approver subject and
+        display-name snapshot, gate binding, optional reason, timestamp) and
+        advances the instance past the gate to running with a
+        workflow_state_changed Timeline Event attributed to the approving
+        Operator. The instance must be waiting_for_approval at exactly this
+        gate; approving any other gate is rejected. A second approval of an
+        already-passed gate is an idempotent no-op returning the existing
+        record without touching the instance. The Approval record is the
+        authorization evidence; no Audit Events are written.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveWorkflowGateRequest"
+            examples:
+              withReason:
+                value:
+                  gateId: approve-destroy
+                  reason: Replacement device verified in the maintenance window.
+      responses:
+        "201":
+          description: Recorded the Approval and advanced the instance past the gate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowApproval"
+        "200":
+          description: The gate was already approved; the existing Approval is returned as an idempotent no-op.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowApproval"
+        "400":
+          description: Malformed body or missing gateId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Workflow Instance not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Instance is not waiting_for_approval at the supplied gate.
           content:
             application/json:
               schema:
@@ -1228,6 +1350,52 @@ components:
           type: integer
           minimum: 1
           description: Workflow definition version to attach.
+    ApproveWorkflowGateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - gateId
+      properties:
+        gateId:
+          type: string
+          minLength: 1
+          description: Definition step id of the Approval Gate to approve; must be the instance's current step.
+        reason:
+          type: string
+          description: Optional reason snapshot recorded with the Approval.
+    WorkflowApproval:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workflowInstanceId
+        - gateId
+        - approverId
+        - approverDisplayName
+        - reason
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        workflowInstanceId:
+          type: integer
+          format: int64
+        gateId:
+          type: string
+          description: Definition step id of the gate this Approval advanced.
+        approverId:
+          type: string
+          description: OIDC subject of the approving Operator.
+        approverDisplayName:
+          type: string
+          description: Display name snapshot of the approver at approval time.
+        reason:
+          type: string
+          description: Optional reason snapshot; null when none was given.
+        createdAt:
+          type: string
+          format: date-time
     CaseNote:
       type: object
       additionalProperties: false

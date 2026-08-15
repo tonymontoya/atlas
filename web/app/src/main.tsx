@@ -2,12 +2,14 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import {
   addCaseNote,
+  approveWorkflowGate,
   assignCase,
   attachCaseWorkflow,
   createCase,
   loadCase,
   loadCaseNotes,
   loadCaseTimeline,
+  loadCaseWorkflows,
   loadDashboard,
   loadMe,
   transitionCase,
@@ -21,6 +23,7 @@ import {
   type Pool,
   type StorageDevice,
   type TimelineEvent,
+  type WorkflowInstanceRecord,
 } from "./api";
 import { poolRedundancyLabel, stoppedDaemonCount, storageDeviceOSDLabel } from "./inventory";
 import { availableCaseActions } from "./caseActions";
@@ -44,6 +47,9 @@ function App() {
   const [caseNotes, setCaseNotes] = React.useState<CaseNote[]>([]);
   const [caseNotesError, setCaseNotesError] = React.useState<string | null>(null);
   const [caseNotesLoading, setCaseNotesLoading] = React.useState(false);
+  const [caseWorkflows, setCaseWorkflows] = React.useState<WorkflowInstanceRecord[]>([]);
+  const [caseWorkflowsError, setCaseWorkflowsError] = React.useState<string | null>(null);
+  const [caseWorkflowsLoading, setCaseWorkflowsLoading] = React.useState(false);
   const [token, setToken] = React.useState<string | null>(null);
   const [operator, setOperator] = React.useState<Operator | null>(null);
 
@@ -88,6 +94,9 @@ function App() {
       setCaseNotes([]);
       setCaseNotesError(null);
       setCaseNotesLoading(false);
+      setCaseWorkflows([]);
+      setCaseWorkflowsError(null);
+      setCaseWorkflowsLoading(false);
       return;
     }
 
@@ -99,11 +108,13 @@ function App() {
         setCaseDetailLoading(true);
         setCaseTimelineLoading(true);
         setCaseNotesLoading(true);
+        setCaseWorkflowsLoading(true);
         setCaseDetailError(null);
         setCaseTimelineError(null);
         setCaseNotesError(null);
+        setCaseWorkflowsError(null);
 
-        const [detailResult, timelineResult, notesResult] = await Promise.all([
+        const [detailResult, timelineResult, notesResult, workflowsResult] = await Promise.all([
           loadCase(caseID, controller.signal).then(
             (detail) => ({ ok: true as const, detail }),
             (error: unknown) => ({ ok: false as const, error }),
@@ -114,6 +125,10 @@ function App() {
           ),
           loadCaseNotes(caseID, controller.signal).then(
             (notes) => ({ ok: true as const, notes }),
+            (error: unknown) => ({ ok: false as const, error }),
+          ),
+          loadCaseWorkflows(caseID, controller.signal).then(
+            (workflows) => ({ ok: true as const, workflows }),
             (error: unknown) => ({ ok: false as const, error }),
           ),
         ]);
@@ -131,6 +146,8 @@ function App() {
           setCaseTimelineError(null);
           setCaseNotes([]);
           setCaseNotesError(null);
+          setCaseWorkflows([]);
+          setCaseWorkflowsError(null);
           return;
         }
 
@@ -147,6 +164,13 @@ function App() {
           setCaseNotes([]);
           setCaseNotesError(errorMessage(notesResult.error));
         }
+
+        if (workflowsResult.ok) {
+          setCaseWorkflows(workflowsResult.workflows);
+        } else {
+          setCaseWorkflows([]);
+          setCaseWorkflowsError(errorMessage(workflowsResult.error));
+        }
       } catch (loadError) {
         if (controller.signal.aborted) {
           return;
@@ -154,14 +178,17 @@ function App() {
         setCaseDetail(null);
         setCaseTimeline([]);
         setCaseNotes([]);
+        setCaseWorkflows([]);
         setCaseDetailError(errorMessage(loadError));
         setCaseTimelineError(errorMessage(loadError));
         setCaseNotesError(errorMessage(loadError));
+        setCaseWorkflowsError(errorMessage(loadError));
       } finally {
         if (!controller.signal.aborted) {
           setCaseDetailLoading(false);
           setCaseTimelineLoading(false);
           setCaseNotesLoading(false);
+          setCaseWorkflowsLoading(false);
         }
       }
     }
@@ -368,6 +395,9 @@ function App() {
           notes={caseNotes}
           notesError={caseNotesError}
           notesLoading={caseNotesLoading}
+          workflows={caseWorkflows}
+          workflowsError={caseWorkflowsError}
+          workflowsLoading={caseWorkflowsLoading}
           operator={operator}
           token={token}
           onChanged={reloadSelectedCase}
@@ -673,6 +703,9 @@ function CaseDetailPanel({
   notes,
   notesError,
   notesLoading,
+  workflows,
+  workflowsError,
+  workflowsLoading,
   operator,
   token,
   onChanged,
@@ -687,6 +720,9 @@ function CaseDetailPanel({
   notes: CaseNote[];
   notesError: string | null;
   notesLoading: boolean;
+  workflows: WorkflowInstanceRecord[];
+  workflowsError: string | null;
+  workflowsLoading: boolean;
   operator: Operator | null;
   token: string | null;
   onChanged: () => void;
@@ -740,9 +776,15 @@ function CaseDetailPanel({
           {operator && token ? (
             <CaseActions detail={detail} token={token} onChanged={onChanged} />
           ) : null}
-          {operator && token && availableCaseActions(detail.status).canAttachWorkflow ? (
-            <CaseWorkflowAttach caseID={detail.id} token={token} onChanged={onChanged} />
-          ) : null}
+          <CaseWorkflows
+            caseID={detail.id}
+            error={workflowsError}
+            loading={workflowsLoading}
+            workflows={workflows}
+            canAttach={operator !== null && token !== null && availableCaseActions(detail.status).canAttachWorkflow}
+            token={token}
+            onChanged={onChanged}
+          />
           <CaseNotes
             error={notesError}
             loading={notesLoading}
@@ -855,13 +897,21 @@ function CaseActions({
   );
 }
 
-function CaseWorkflowAttach({
+function CaseWorkflows({
   caseID,
+  error,
+  loading,
+  workflows,
+  canAttach,
   token,
   onChanged,
 }: {
   caseID: number;
-  token: string;
+  error: string | null;
+  loading: boolean;
+  workflows: WorkflowInstanceRecord[];
+  canAttach: boolean;
+  token: string | null;
   onChanged: () => void;
 }) {
   const [workflowID, setWorkflowID] = React.useState("replace-osd");
@@ -872,7 +922,7 @@ function CaseWorkflowAttach({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const version = Number.parseInt(workflowVersion, 10);
-    if (busy || workflowID.trim() === "" || !Number.isInteger(version) || version < 1) {
+    if (busy || workflowID.trim() === "" || !Number.isInteger(version) || version < 1 || !token) {
       return;
     }
     try {
@@ -890,32 +940,136 @@ function CaseWorkflowAttach({
   const formReady = workflowID.trim() !== "" && Number.parseInt(workflowVersion, 10) >= 1;
 
   return (
-    <section className="case-workflow-attach" aria-label="Attach Workflow">
+    <section className="case-workflows" aria-label="Workflows">
       <div className="section-heading">
-        <h3>Workflow</h3>
+        <h3>Workflows</h3>
+        {!loading && !error ? <span className="badge neutral">{workflows.length}</span> : null}
       </div>
-      <form className="workflow-attach-form" onSubmit={submit}>
-        <input
-          value={workflowID}
-          onChange={(event) => setWorkflowID(event.target.value)}
-          placeholder="Workflow id, e.g. replace-osd"
-          aria-label="Workflow id"
-        />
-        <input
-          value={workflowVersion}
-          onChange={(event) => setWorkflowVersion(event.target.value)}
-          placeholder="Version"
-          aria-label="Workflow version"
-        />
-        <div className="action-row">
-          <button type="submit" disabled={busy || !formReady}>
-            {busy ? "Attaching…" : "Attach workflow"}
-          </button>
-          {attachError ? <p className="form-error">{attachError}</p> : null}
-        </div>
-      </form>
+      {loading ? <p className="empty-state">Loading Workflow Instances.</p> : null}
+      {error ? <p className="empty-state">Workflow Instances unavailable: {error}</p> : null}
+      {!loading && !error && workflows.length === 0 ? (
+        <p className="empty-state">No Workflow Instances attached.</p>
+      ) : null}
+      {!loading && !error && workflows.length > 0 ? (
+        <ul className="workflow-instance-list">
+          {workflows.map((instance) => (
+            <li key={instance.id} className="workflow-instance-row">
+              <div className="workflow-instance-heading">
+                <strong>
+                  {instance.workflowId} v{instance.workflowVersion}
+                </strong>
+                <span className={`badge ${toneForWorkflowState(instance.state)}`}>
+                  {instance.state.replace(/_/g, " ")}
+                </span>
+              </div>
+              <p className="workflow-instance-meta">
+                #{instance.id}
+                {instance.currentStep ? ` · paused at ${instance.currentStep}` : ""}
+                {` · updated ${formatDate(instance.updatedAt)}`}
+              </p>
+              {instance.state === "waiting_for_approval" && instance.currentStep && token ? (
+                <WorkflowApproveForm
+                  gateID={instance.currentStep}
+                  instanceID={instance.id}
+                  token={token}
+                  onChanged={onChanged}
+                />
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {canAttach ? (
+        <form className="workflow-attach-form" onSubmit={submit}>
+          <input
+            value={workflowID}
+            onChange={(event) => setWorkflowID(event.target.value)}
+            placeholder="Workflow id, e.g. replace-osd"
+            aria-label="Workflow id"
+          />
+          <input
+            value={workflowVersion}
+            onChange={(event) => setWorkflowVersion(event.target.value)}
+            placeholder="Version"
+            aria-label="Workflow version"
+          />
+          <div className="action-row">
+            <button type="submit" disabled={busy || !formReady}>
+              {busy ? "Attaching…" : "Attach workflow"}
+            </button>
+            {attachError ? <p className="form-error">{attachError}</p> : null}
+          </div>
+        </form>
+      ) : null}
     </section>
   );
+}
+
+function WorkflowApproveForm({
+  gateID,
+  instanceID,
+  token,
+  onChanged,
+}: {
+  gateID: string;
+  instanceID: number;
+  token: string;
+  onChanged: () => void;
+}) {
+  const [reason, setReason] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [approveError, setApproveError] = React.useState<string | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) {
+      return;
+    }
+    try {
+      setBusy(true);
+      setApproveError(null);
+      await approveWorkflowGate(instanceID, gateID, reason.trim(), token);
+      setReason("");
+      onChanged();
+    } catch (thrown) {
+      setApproveError(errorMessage(thrown));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="workflow-approve-form" onSubmit={submit}>
+      <input
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        placeholder="Reason (optional)"
+        aria-label="Approval reason"
+      />
+      <div className="action-row">
+        <button type="submit" disabled={busy}>
+          {busy ? "Approving…" : `Approve ${gateID}`}
+        </button>
+        {approveError ? <p className="form-error">{approveError}</p> : null}
+      </div>
+    </form>
+  );
+}
+
+function toneForWorkflowState(state: WorkflowInstanceRecord["state"]): string {
+  switch (state) {
+    case "succeeded":
+      return "ok";
+    case "failed":
+    case "cancelled":
+      return "err";
+    case "running":
+    case "pending":
+      return "neutral";
+    case "waiting_for_approval":
+    case "waiting_for_operator":
+      return "warn";
+  }
 }
 
 function CaseNotes({

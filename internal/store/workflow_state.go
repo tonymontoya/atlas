@@ -174,6 +174,53 @@ func (s *PostgresStore) GetWorkflowInstance(ctx context.Context, instanceID int6
 	return instance, err
 }
 
+// ListWorkflowInstancesByCase returns a Case's Workflow Instances in
+// creation order.
+func (s *PostgresStore) ListWorkflowInstancesByCase(ctx context.Context, caseID int64) ([]WorkflowInstance, error) {
+	if caseID <= 0 {
+		return nil, notFound("case not found")
+	}
+
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM cases
+			WHERE id = $1
+		)
+	`, caseID).Scan(&exists)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, notFound("case not found")
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT `+workflowInstanceColumns+`
+		FROM workflow_instances
+		WHERE case_id = $1
+		ORDER BY created_at ASC, id ASC
+	`, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	instances := make([]WorkflowInstance, 0)
+	for rows.Next() {
+		instance, err := scanWorkflowInstance(rows)
+		if err != nil {
+			return nil, err
+		}
+		instances = append(instances, instance)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return instances, nil
+}
+
 // ListWorkflowJobs returns a Workflow Instance's Jobs in definition
 // order.
 func (s *PostgresStore) ListWorkflowJobs(ctx context.Context, instanceID int64) ([]WorkflowJob, error) {

@@ -21,6 +21,7 @@ type App struct {
 	AlertEvaluationRuns AlertEvaluationRunReader
 	Cases               CaseReader
 	CaseWrites          CaseWriter
+	WorkflowReads       WorkflowReader
 	WorkflowWrites      WorkflowWriter
 	WorkflowRegistry    workflows.Registry
 	Verifier            *identity.Verifier
@@ -49,8 +50,15 @@ type CaseWriter interface {
 	ListCaseNotes(ctx context.Context, caseID int64) ([]cases.CaseNote, error)
 }
 
+type WorkflowReader interface {
+	ListWorkflowInstancesByCase(ctx context.Context, caseID int64) ([]store.WorkflowInstance, error)
+}
+
 type WorkflowWriter interface {
 	CreateWorkflowInstance(ctx context.Context, input store.CreateWorkflowInstanceInput) (store.WorkflowInstance, error)
+	GetWorkflowInstance(ctx context.Context, instanceID int64) (store.WorkflowInstance, error)
+	TransitionWorkflowInstance(ctx context.Context, input store.WorkflowInstanceTransitionInput) (store.WorkflowInstance, error)
+	RecordApproval(ctx context.Context, input store.RecordApprovalInput) (store.ApprovalRecord, error)
 }
 
 func New(cfg config.Config) *App {
@@ -86,6 +94,7 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			AlertEvaluationRuns: postgresStore,
 			Cases:               postgresStore,
 			CaseWrites:          postgresStore,
+			WorkflowReads:       postgresStore,
 			WorkflowWrites:      postgresStore,
 			WorkflowRegistry:    workflowRegistry,
 			Verifier:            verifier,

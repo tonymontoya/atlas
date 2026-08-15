@@ -137,6 +137,39 @@ func TestCreateWorkflowInstanceWritesInstanceJobsAndAttachEvent(t *testing.T) {
 	}
 }
 
+func TestListWorkflowInstancesByCase(t *testing.T) {
+	store, ctx := workflowStateTestDB(t)
+	caseID := workflowTestCaseID(t, store, ctx, cases.CaseStatusDetected)
+	otherCaseID := workflowTestCaseID(t, store, ctx, cases.CaseStatusDetected)
+
+	first, err := store.CreateWorkflowInstance(ctx, validWorkflowInstanceInput(caseID))
+	if err != nil {
+		t.Fatalf("CreateWorkflowInstance: %v", err)
+	}
+	second, err := store.CreateWorkflowInstance(ctx, validWorkflowInstanceInput(caseID))
+	if err != nil {
+		t.Fatalf("CreateWorkflowInstance: %v", err)
+	}
+	if _, err := store.CreateWorkflowInstance(ctx, validWorkflowInstanceInput(otherCaseID)); err != nil {
+		t.Fatalf("CreateWorkflowInstance: %v", err)
+	}
+
+	listed, err := store.ListWorkflowInstancesByCase(ctx, caseID)
+	if err != nil {
+		t.Fatalf("ListWorkflowInstancesByCase: %v", err)
+	}
+	if len(listed) != 2 || listed[0].ID != first.ID || listed[1].ID != second.ID {
+		t.Fatalf("listed = %+v, want instances %d, %d in creation order", listed, first.ID, second.ID)
+	}
+	if listed[0].DefinitionID != "wf-test-replace-osd" || listed[0].State != workflows.InstancePending {
+		t.Fatalf("listed[0] = %+v, want the persisted instance", listed[0])
+	}
+
+	if _, err := store.ListWorkflowInstancesByCase(ctx, 999999); !isNotFound(err) {
+		t.Fatalf("unknown case err = %v, want not found", err)
+	}
+}
+
 func TestCreateWorkflowInstanceRejectsInvalidInput(t *testing.T) {
 	store, ctx := workflowStateTestDB(t)
 	caseID := workflowTestCaseID(t, store, ctx, cases.CaseStatusDetected)

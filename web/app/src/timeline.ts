@@ -32,6 +32,12 @@ export function timelinePayloadLabels(event: TimelineEvent): string[] {
   if (typeof payload.previousStatus === "string" && typeof payload.newStatus === "string") {
     labels.push(`${payload.previousStatus} to ${payload.newStatus}`);
   }
+  if (typeof payload.previousState === "string" && typeof payload.newState === "string") {
+    labels.push(`${payload.previousState} to ${payload.newState}`);
+  }
+  if (typeof payload.pausedAtStep === "string") {
+    labels.push(`Paused at ${payload.pausedAtStep}`);
+  }
   if (typeof payload.workflowId === "string") {
     labels.push(payload.workflowId);
   }

@@ -349,6 +349,7 @@ th {
 .compose-form textarea,
 .assignment-form input,
 .workflow-attach-form input,
+.workflow-approve-form input,
 .note-form textarea {
   background: #f4f6f9;
   border: 1px solid #cfd8e0;
@@ -387,6 +388,7 @@ th {
 .note-form button[type="submit"],
 .case-actions button,
 .workflow-attach-form button[type="submit"],
+.workflow-approve-form button[type="submit"],
 .token-form-row button {
   background: #1f5f8b;
   border: 0;
@@ -404,6 +406,7 @@ th {
 .note-form button:disabled,
 .case-actions button:disabled,
 .workflow-attach-form button:disabled,
+.workflow-approve-form button:disabled,
 .token-form-row button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -453,12 +456,46 @@ th {
   padding-top: 12px;
 }
 
-.case-workflow-attach {
+.case-workflows {
   border-top: 1px solid #e3e8ef;
+  display: grid;
+  gap: 10px;
   padding-top: 12px;
 }
 
-.workflow-attach-form {
+.workflow-instance-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.workflow-instance-row {
+  background: #f7f9fc;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.workflow-instance-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.workflow-instance-meta {
+  color: #51636e;
+  font-size: 13px;
+  margin: 0;
+}
+
+.workflow-attach-form,
+.workflow-approve-form {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -466,6 +503,11 @@ th {
 
 .workflow-attach-form input {
   min-width: 160px;
+}
+
+.workflow-approve-form input {
+  flex: 1;
+  min-width: 200px;
 }
 
 .note-list {

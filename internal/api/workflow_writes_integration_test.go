@@ -106,11 +106,11 @@ func TestAttachWorkflowCreatesInstanceJobsAndTimelineEvent(t *testing.T) {
 	if instance.WorkflowID != "replace-osd" || instance.WorkflowVersion != 1 {
 		t.Fatalf("instance = %+v, want replace-osd v1", instance)
 	}
-	if instance.State != "pending" {
-		t.Fatalf("state = %q, want pending", instance.State)
+	if instance.State != "waiting_for_approval" {
+		t.Fatalf("state = %q, want waiting_for_approval", instance.State)
 	}
-	if instance.CurrentStep != nil {
-		t.Fatalf("currentStep = %v, want null", *instance.CurrentStep)
+	if instance.CurrentStep == nil || *instance.CurrentStep != "approve-destroy" {
+		t.Fatalf("currentStep = %v, want approve-destroy", instance.CurrentStep)
 	}
 
 	jobs := workflowJobsForInstance(t, instance.ID)
@@ -143,8 +143,8 @@ func TestAttachWorkflowCreatesInstanceJobsAndTimelineEvent(t *testing.T) {
 	if err := json.NewDecoder(timeline.Body).Decode(&events); err != nil {
 		t.Fatalf("decode timeline: %v", err)
 	}
-	if len(events) != 2 || events[1].Type != cases.TimelineEventWorkflowAttached {
-		t.Fatalf("events = %+v, want case_detected then workflow_attached", events)
+	if len(events) != 4 || events[1].Type != cases.TimelineEventWorkflowAttached {
+		t.Fatalf("events = %+v, want detected, attached, then two advancement events", events)
 	}
 	attach := events[1]
 	if attach.Actor.Type != cases.TimelineActorUser || attach.Actor.ID != "write-operator" || attach.Actor.DisplayName != "Write Operator" {

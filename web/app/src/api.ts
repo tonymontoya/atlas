@@ -311,6 +311,41 @@ export async function attachCaseWorkflow(
   });
 }
 
+export async function loadCaseWorkflows(
+  id: number,
+  signal?: AbortSignal,
+): Promise<WorkflowInstanceRecord[]> {
+  return request<WorkflowInstanceRecord[]>(`/api/v1/cases/${id}/workflows`, signal);
+}
+
+export type WorkflowApprovalRecord = {
+  id: number;
+  workflowInstanceId: number;
+  gateId: string;
+  approverId: string;
+  approverDisplayName: string;
+  reason: string | null;
+  createdAt: string;
+};
+
+export async function approveWorkflowGate(
+  instanceID: number,
+  gateId: string,
+  reason: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<WorkflowApprovalRecord> {
+  return request<WorkflowApprovalRecord>(
+    `/api/v1/workflow-instances/${instanceID}/approvals`,
+    signal,
+    token,
+    {
+      method: "POST",
+      body: JSON.stringify(reason === "" ? { gateId } : { gateId, reason }),
+    },
+  );
+}
+
 export async function loadCaseNotes(
   id: number,
   signal?: AbortSignal,
