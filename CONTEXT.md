@@ -76,8 +76,12 @@ _Avoid_: Command, script
 A unit of human work that may be assigned and may exist without automation.
 _Avoid_: Job, ticket
 
+**Workflow Gate**:
+A point in a Workflow Instance where execution pauses until an Approval or Operator action allows it to continue.
+_Avoid_: Checkpoint, barrier
+
 **Approval**:
-An explicit authorization decision allowing a Workflow Instance to continue.
+An explicit authorization decision allowing a Workflow Instance to continue past a Workflow Gate.
 _Avoid_: Sign-off
 
 **Policy**:

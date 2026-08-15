@@ -4,6 +4,20 @@ This file is the first stop for coding agents working in this repository.
 Follow it alongside `CONTRIBUTING.md`, `CONTEXT.md`, `dev-plans/`, and
 `docs/adr/`.
 
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues in this repo; use `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use their default label strings. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.
+
 ## Current Project Posture
 
 Atlas is being built carefully from a fake-provider, local-development scaffold.
