@@ -8,6 +8,7 @@ func TestLoadDefaultsToFakeProvider(t *testing.T) {
 	t.Setenv("ATLAS_PROVIDER_MODE", "")
 	t.Setenv("ATLAS_FAKE_SCENARIO", "")
 	t.Setenv("ATLAS_READ_SOURCE", "")
+	t.Setenv("ATLAS_AGENT_MODE", "")
 
 	cfg := Load()
 	if cfg.HTTPAddr != ":8080" {
@@ -24,5 +25,8 @@ func TestLoadDefaultsToFakeProvider(t *testing.T) {
 	}
 	if cfg.ReadSource != "provider" {
 		t.Fatalf("ReadSource = %q, want provider", cfg.ReadSource)
+	}
+	if cfg.AgentMode != "disabled" {
+		t.Fatalf("AgentMode = %q, want disabled", cfg.AgentMode)
 	}
 }

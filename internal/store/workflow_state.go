@@ -569,6 +569,37 @@ func (s *PostgresStore) RecordApproval(ctx context.Context, input RecordApproval
 	return approval, nil
 }
 
+// ListWorkflowApprovals returns a Workflow Instance's Approval records
+// in creation order.
+func (s *PostgresStore) ListWorkflowApprovals(ctx context.Context, instanceID int64) ([]ApprovalRecord, error) {
+	if instanceID <= 0 {
+		return nil, notFound("workflow instance not found")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, workflow_instance_id, gate_id, approver_id, approver_display_name, reason, created_at
+		FROM workflow_approvals
+		WHERE workflow_instance_id = $1
+		ORDER BY created_at ASC, id ASC
+	`, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	approvals := make([]ApprovalRecord, 0)
+	for rows.Next() {
+		approval, err := scanApprovalRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		approvals = append(approvals, approval)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return approvals, nil
+}
+
 func scanApprovalRecord(row rowScanner) (ApprovalRecord, error) {
 	var approval ApprovalRecord
 	var reason sql.NullString

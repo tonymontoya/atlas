@@ -298,6 +298,22 @@ export type WorkflowInstanceRecord = {
   finishedAt: string | null;
 };
 
+export type WorkflowJobState = "pending" | "dispatched" | "succeeded" | "failed";
+
+export type WorkflowJobRecord = {
+  id: number;
+  workflowInstanceId: number;
+  position: number;
+  stepId: string;
+  operationType: string;
+  state: WorkflowJobState;
+  attempt: number;
+  maxAttempts: number;
+  createdAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
+};
+
 export async function attachCaseWorkflow(
   id: number,
   workflowId: string,
@@ -351,6 +367,13 @@ export async function loadCaseNotes(
   signal?: AbortSignal,
 ): Promise<CaseNote[]> {
   return request<CaseNote[]>(`/api/v1/cases/${id}/notes`, signal);
+}
+
+export async function loadWorkflowJobs(
+  instanceID: number,
+  signal?: AbortSignal,
+): Promise<WorkflowJobRecord[]> {
+  return request<WorkflowJobRecord[]>(`/api/v1/workflow-instances/${instanceID}/jobs`, signal);
 }
 
 async function request<T>(

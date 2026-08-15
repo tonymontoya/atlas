@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tonymontoya/ceph-atlas/internal/agent"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
@@ -11,6 +12,7 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/fake"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
+	"github.com/tonymontoya/ceph-atlas/internal/workflowdispatch"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
 )
 
@@ -24,6 +26,7 @@ type App struct {
 	WorkflowReads       WorkflowReader
 	WorkflowWrites      WorkflowWriter
 	WorkflowRegistry    workflows.Registry
+	WorkflowDispatch    *workflowdispatch.Dispatcher
 	Verifier            *identity.Verifier
 	close               func() error
 }
@@ -51,7 +54,9 @@ type CaseWriter interface {
 }
 
 type WorkflowReader interface {
+	GetWorkflowInstance(ctx context.Context, instanceID int64) (store.WorkflowInstance, error)
 	ListWorkflowInstancesByCase(ctx context.Context, caseID int64) ([]store.WorkflowInstance, error)
+	ListWorkflowJobs(ctx context.Context, instanceID int64) ([]store.WorkflowJob, error)
 }
 
 type WorkflowWriter interface {
@@ -69,6 +74,9 @@ func New(cfg config.Config) *App {
 }
 
 func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
+	if err := validateAgentMode(cfg.AgentMode); err != nil {
+		return nil, err
+	}
 	verifier, err := verifierFromConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -82,12 +90,17 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			return nil, err
 		}
 		postgresStore := store.NewPostgres(db)
-		workflowRegistry, err := defaultWorkflowRegistry()
+		ops, err := operations.DefaultRegistry()
 		if err != nil {
 			_ = db.Close()
 			return nil, err
 		}
-		return &App{
+		workflowRegistry, err := workflows.DefaultRegistry(ops)
+		if err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+		application := &App{
 			Config:              cfg,
 			CephProvider:        postgresStore,
 			InventorySyncRuns:   postgresStore,
@@ -99,20 +112,29 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			WorkflowRegistry:    workflowRegistry,
 			Verifier:            verifier,
 			close:               db.Close,
-		}, nil
+		}
+		// The fake in-process agent loop (ADR-0022) is the only dispatch
+		// path; every other mode leaves instances parked — nothing
+		// dispatches.
+		if cfg.AgentMode == "fake" {
+			application.WorkflowDispatch = workflowdispatch.New(postgresStore, workflowRegistry, agent.NewFake(ops))
+		}
+		return application, nil
 	default:
 		return nil, fmt.Errorf("unsupported read source %q", cfg.ReadSource)
 	}
 }
 
-// defaultWorkflowRegistry builds the Workflow definition registry this Atlas
-// binary ships (ADR-0017).
-func defaultWorkflowRegistry() (workflows.Registry, error) {
-	ops, err := operations.DefaultRegistry()
-	if err != nil {
-		return nil, err
+// validateAgentMode rejects agent modes the app cannot wire. The
+// default outside the fake path is disabled: no dispatcher exists and
+// Workflow Instances rest at their gate or pending.
+func validateAgentMode(mode string) error {
+	switch mode {
+	case "", "disabled", "fake":
+		return nil
+	default:
+		return fmt.Errorf("unsupported agent mode %q", mode)
 	}
-	return workflows.DefaultRegistry(ops)
 }
 
 func verifierFromConfig(cfg config.Config) (*identity.Verifier, error) {

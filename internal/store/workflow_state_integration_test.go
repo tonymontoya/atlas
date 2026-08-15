@@ -489,6 +489,46 @@ func TestRecordApprovalBindsGateAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestListWorkflowApprovalsReturnsCreationOrder(t *testing.T) {
+	store, ctx := workflowStateTestDB(t)
+	instance := attachTestInstance(t, store, ctx)
+	pauseAtGate(t, store, ctx, instance)
+
+	approvals, err := store.ListWorkflowApprovals(ctx, instance.ID)
+	if err != nil {
+		t.Fatalf("ListWorkflowApprovals before any approval: %v", err)
+	}
+	if len(approvals) != 0 {
+		t.Fatalf("approvals = %d, want none", len(approvals))
+	}
+	if unknown, err := store.ListWorkflowApprovals(ctx, 999999); err != nil || len(unknown) != 0 {
+		t.Fatalf("unknown instance = %v, %v, want empty without error", unknown, err)
+	}
+
+	recorded, err := store.RecordApproval(ctx, RecordApprovalInput{
+		InstanceID: instance.ID,
+		GateID:     "approve-destroy",
+		Approver:   manualTestActor(),
+	})
+	if err != nil {
+		t.Fatalf("RecordApproval: %v", err)
+	}
+
+	approvals, err = store.ListWorkflowApprovals(ctx, instance.ID)
+	if err != nil {
+		t.Fatalf("ListWorkflowApprovals: %v", err)
+	}
+	if len(approvals) != 1 {
+		t.Fatalf("approvals = %d, want one", len(approvals))
+	}
+	if approvals[0].ID != recorded.ID || approvals[0].GateID != "approve-destroy" {
+		t.Fatalf("approval = %+v, want the recorded gate approval", approvals[0])
+	}
+	if approvals[0].Approver.Subject != "manual-test-operator" {
+		t.Fatalf("approver = %+v, want the acting operator", approvals[0].Approver)
+	}
+}
+
 func TestRecordApprovalRejectsWrongGateAndNotWaiting(t *testing.T) {
 	store, ctx := workflowStateTestDB(t)
 

@@ -25,6 +25,14 @@ type writeHarness struct {
 
 func newWriteHarness(t *testing.T) *writeHarness {
 	t.Helper()
+	return newWriteHarnessWithAgentMode(t, "")
+}
+
+// newWriteHarnessWithAgentMode builds the PostgreSQL write harness with
+// an explicit ATLAS_AGENT_MODE: "fake" wires the in-process fake agent
+// loop (ADR-0022); anything else dispatches nothing.
+func newWriteHarnessWithAgentMode(t *testing.T, agentMode string) *writeHarness {
+	t.Helper()
 	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
 
@@ -47,6 +55,7 @@ func newWriteHarness(t *testing.T) *writeHarness {
 	application, err := app.NewFromConfig(ctx, config.Config{
 		DatabaseURL:  databaseURL,
 		ReadSource:   "postgres",
+		AgentMode:    agentMode,
 		OIDCIssuer:   "https://atlas-dev-issuer.local",
 		OIDCAudience: "atlas-api",
 		OIDCJWKSURL:  jwks.URL + "/.well-known/jwks.json",

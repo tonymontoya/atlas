@@ -120,6 +120,7 @@ services:
       ATLAS_DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
       ATLAS_PROVIDER_MODE: fake
       ATLAS_READ_SOURCE: postgres
+      ATLAS_AGENT_MODE: fake
       ATLAS_OIDC_ISSUER: http://dev-issuer:8090
       ATLAS_OIDC_AUDIENCE: atlas-api
       ATLAS_OIDC_JWKS_URL: http://dev-issuer:8090/.well-known/jwks.json

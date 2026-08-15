@@ -33,3 +33,12 @@ func TestNewFromConfigRejectsUnsupportedReadSource(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestNewFromConfigRejectsUnsupportedAgentMode(t *testing.T) {
+	_, err := NewFromConfig(context.Background(), config.Config{
+		AgentMode: "eager",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

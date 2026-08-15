@@ -17,12 +17,13 @@ import (
 )
 
 type attachWorkflowResponse struct {
-	ID              int64   `json:"id"`
-	CaseID          int64   `json:"caseId"`
-	WorkflowID      string  `json:"workflowId"`
-	WorkflowVersion int     `json:"workflowVersion"`
-	State           string  `json:"state"`
-	CurrentStep     *string `json:"currentStep"`
+	ID              int64      `json:"id"`
+	CaseID          int64      `json:"caseId"`
+	WorkflowID      string     `json:"workflowId"`
+	WorkflowVersion int        `json:"workflowVersion"`
+	State           string     `json:"state"`
+	CurrentStep     *string    `json:"currentStep"`
+	FinishedAt      *time.Time `json:"finishedAt"`
 }
 
 func workflowJobsForInstance(t *testing.T, instanceID int64) []struct {

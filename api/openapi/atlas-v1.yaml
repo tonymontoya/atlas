@@ -865,7 +865,11 @@ paths:
         gate; approving any other gate is rejected. A second approval of an
         already-passed gate is an idempotent no-op returning the existing
         record without touching the instance. The Approval record is the
-        authorization evidence; no Audit Events are written.
+        authorization evidence; no Audit Events are written. When the fake
+        agent loop is enabled (ATLAS_AGENT_MODE=fake), the resumed instance
+        is also driven through its Jobs synchronously and may reach a
+        terminal state within this request; with the agent loop disabled
+        the instance rests running with pending Jobs.
       security:
         - bearerAuth: []
       parameters:
@@ -889,7 +893,10 @@ paths:
                   reason: Replacement device verified in the maintenance window.
       responses:
         "201":
-          description: Recorded the Approval and advanced the instance past the gate.
+          description: >
+            Recorded the Approval and advanced the instance past the gate;
+            with the fake agent loop enabled the instance has also been
+            driven through its Jobs to a pause or terminal state.
           content:
             application/json:
               schema:
@@ -926,6 +933,47 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: Workflow writes require the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/workflow-instances/{id}/jobs:
+    get:
+      tags:
+        - Cases
+      operationId: listWorkflowJobs
+      summary: List a Workflow Instance's Jobs
+      description: >
+        The instance's Jobs in definition order, with per-Job state and
+        attempt progress (ADR-0019). Job transitions do not write Timeline
+        Events; instance-level state changes do.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "200":
+          description: Jobs ordered by definition position.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkflowJob"
+        "404":
+          description: Workflow Instance not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Workflow reads require the postgres read source.
           content:
             application/json:
               schema:
@@ -1521,6 +1569,66 @@ components:
           type: string
           format: date-time
           description: Set when the instance reaches a terminal state; null before that.
+    WorkflowJobState:
+      type: string
+      description: >
+        Job state machine (ADR-0019): pending, dispatched, or terminal
+        succeeded and failed, where failed may re-enter pending as a retry
+        governed by the definition's retry policy.
+      enum:
+        - pending
+        - dispatched
+        - succeeded
+        - failed
+    WorkflowJob:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workflowInstanceId
+        - position
+        - stepId
+        - operationType
+        - state
+        - attempt
+        - maxAttempts
+        - createdAt
+        - updatedAt
+        - finishedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        workflowInstanceId:
+          type: integer
+          format: int64
+        position:
+          type: integer
+          description: 1-based position in the definition's step order.
+        stepId:
+          type: string
+          description: Definition step id this Job executes.
+        operationType:
+          type: string
+          description: Typed agent operation type (ADR-0018), e.g. DestroyOSD.
+        state:
+          $ref: "#/components/schemas/WorkflowJobState"
+        attempt:
+          type: integer
+          description: Current attempt number; a retry consumes one attempt.
+        maxAttempts:
+          type: integer
+          description: Retry budget from the definition's retry policy.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          description: Set when the Job reaches a terminal state; null before that.
     TimelineEvent:
       type: object
       additionalProperties: false

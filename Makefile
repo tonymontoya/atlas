@@ -58,7 +58,7 @@ db-test:
 		psql "$$admin_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE atlas_test" >/dev/null; \
 	fi; \
 	DATABASE_URL="$$database_url" sh scripts/apply_migrations.sh; \
-	ATLAS_TEST_DATABASE_URL="$$database_url" go test -p 1 ./internal/store ./internal/inventorysync ./internal/casedetection -count=1; \
+	ATLAS_TEST_DATABASE_URL="$$database_url" go test -p 1 ./internal/store ./internal/inventorysync ./internal/casedetection ./internal/workflowdispatch -count=1; \
 	ATLAS_TEST_DATABASE_URL="$$database_url" go test ./internal/api -count=1
 
 fixtures-check:

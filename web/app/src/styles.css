@@ -494,6 +494,36 @@ th {
   margin: 0;
 }
 
+.workflow-job-list {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.workflow-job-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.workflow-job-step {
+  font-weight: 600;
+}
+
+.workflow-job-operation {
+  color: #51636e;
+  flex: 1;
+}
+
+.workflow-job-attempts {
+  color: #51636e;
+}
+
 .workflow-attach-form,
 .workflow-approve-form {
   display: flex;

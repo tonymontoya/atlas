@@ -51,6 +51,7 @@ func (s *Server) routes() []route {
 		{"POST", "/api/v1/cases/{id}/workflows", s.requireIdentity(s.attachWorkflow)},
 		{"GET", "/api/v1/cases/{id}/workflows", s.listCaseWorkflows},
 		{"POST", "/api/v1/workflow-instances/{id}/approvals", s.requireIdentity(s.approveWorkflowGate)},
+		{"GET", "/api/v1/workflow-instances/{id}/jobs", s.listWorkflowJobs},
 	}
 }
 

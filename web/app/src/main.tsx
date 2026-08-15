@@ -12,6 +12,7 @@ import {
   loadCaseWorkflows,
   loadDashboard,
   loadMe,
+  loadWorkflowJobs,
   transitionCase,
   type CaseNote,
   type CaseRecord,
@@ -24,6 +25,7 @@ import {
   type StorageDevice,
   type TimelineEvent,
   type WorkflowInstanceRecord,
+  type WorkflowJobRecord,
 } from "./api";
 import { poolRedundancyLabel, stoppedDaemonCount, storageDeviceOSDLabel } from "./inventory";
 import { availableCaseActions } from "./caseActions";
@@ -48,6 +50,7 @@ function App() {
   const [caseNotesError, setCaseNotesError] = React.useState<string | null>(null);
   const [caseNotesLoading, setCaseNotesLoading] = React.useState(false);
   const [caseWorkflows, setCaseWorkflows] = React.useState<WorkflowInstanceRecord[]>([]);
+  const [caseWorkflowJobs, setCaseWorkflowJobs] = React.useState<Record<number, WorkflowJobRecord[]>>({});
   const [caseWorkflowsError, setCaseWorkflowsError] = React.useState<string | null>(null);
   const [caseWorkflowsLoading, setCaseWorkflowsLoading] = React.useState(false);
   const [token, setToken] = React.useState<string | null>(null);
@@ -95,6 +98,7 @@ function App() {
       setCaseNotesError(null);
       setCaseNotesLoading(false);
       setCaseWorkflows([]);
+      setCaseWorkflowJobs({});
       setCaseWorkflowsError(null);
       setCaseWorkflowsLoading(false);
       return;
@@ -147,6 +151,7 @@ function App() {
           setCaseNotes([]);
           setCaseNotesError(null);
           setCaseWorkflows([]);
+          setCaseWorkflowJobs({});
           setCaseWorkflowsError(null);
           return;
         }
@@ -167,8 +172,23 @@ function App() {
 
         if (workflowsResult.ok) {
           setCaseWorkflows(workflowsResult.workflows);
+          const jobEntries = await Promise.all(
+            workflowsResult.workflows.map(async (instance) => {
+              try {
+                const jobs = await loadWorkflowJobs(instance.id, controller.signal);
+                return [instance.id, jobs] as const;
+              } catch {
+                return [instance.id, []] as const;
+              }
+            }),
+          );
+          if (controller.signal.aborted) {
+            return;
+          }
+          setCaseWorkflowJobs(Object.fromEntries(jobEntries));
         } else {
           setCaseWorkflows([]);
+          setCaseWorkflowJobs({});
           setCaseWorkflowsError(errorMessage(workflowsResult.error));
         }
       } catch (loadError) {
@@ -179,6 +199,7 @@ function App() {
         setCaseTimeline([]);
         setCaseNotes([]);
         setCaseWorkflows([]);
+        setCaseWorkflowJobs({});
         setCaseDetailError(errorMessage(loadError));
         setCaseTimelineError(errorMessage(loadError));
         setCaseNotesError(errorMessage(loadError));
@@ -396,6 +417,7 @@ function App() {
           notesError={caseNotesError}
           notesLoading={caseNotesLoading}
           workflows={caseWorkflows}
+          workflowJobs={caseWorkflowJobs}
           workflowsError={caseWorkflowsError}
           workflowsLoading={caseWorkflowsLoading}
           operator={operator}
@@ -704,6 +726,7 @@ function CaseDetailPanel({
   notesError,
   notesLoading,
   workflows,
+  workflowJobs,
   workflowsError,
   workflowsLoading,
   operator,
@@ -721,6 +744,7 @@ function CaseDetailPanel({
   notesError: string | null;
   notesLoading: boolean;
   workflows: WorkflowInstanceRecord[];
+  workflowJobs: Record<number, WorkflowJobRecord[]>;
   workflowsError: string | null;
   workflowsLoading: boolean;
   operator: Operator | null;
@@ -781,6 +805,7 @@ function CaseDetailPanel({
             error={workflowsError}
             loading={workflowsLoading}
             workflows={workflows}
+            workflowJobs={workflowJobs}
             canAttach={operator !== null && token !== null && availableCaseActions(detail.status).canAttachWorkflow}
             token={token}
             onChanged={onChanged}
@@ -902,6 +927,7 @@ function CaseWorkflows({
   error,
   loading,
   workflows,
+  workflowJobs,
   canAttach,
   token,
   onChanged,
@@ -910,6 +936,7 @@ function CaseWorkflows({
   error: string | null;
   loading: boolean;
   workflows: WorkflowInstanceRecord[];
+  workflowJobs: Record<number, WorkflowJobRecord[]>;
   canAttach: boolean;
   token: string | null;
   onChanged: () => void;
@@ -967,6 +994,24 @@ function CaseWorkflows({
                 {instance.currentStep ? ` · paused at ${instance.currentStep}` : ""}
                 {` · updated ${formatDate(instance.updatedAt)}`}
               </p>
+              {workflowJobs[instance.id]?.length ? (
+                <ul className="workflow-job-list">
+                  {workflowJobs[instance.id].map((job) => (
+                    <li key={job.id} className="workflow-job-row">
+                      <span className="workflow-job-step">{job.stepId}</span>
+                      <span className="workflow-job-operation">{job.operationType}</span>
+                      <span className={`badge ${toneForJobState(job.state)}`}>
+                        {job.state}
+                      </span>
+                      {job.maxAttempts > 1 ? (
+                        <span className="workflow-job-attempts">
+                          {`attempt ${job.attempt}/${job.maxAttempts}`}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               {instance.state === "waiting_for_approval" && instance.currentStep && token ? (
                 <WorkflowApproveForm
                   gateID={instance.currentStep}
@@ -1069,6 +1114,18 @@ function toneForWorkflowState(state: WorkflowInstanceRecord["state"]): string {
     case "waiting_for_approval":
     case "waiting_for_operator":
       return "warn";
+  }
+}
+
+function toneForJobState(state: WorkflowJobRecord["state"]): string {
+  switch (state) {
+    case "succeeded":
+      return "ok";
+    case "failed":
+      return "err";
+    case "pending":
+    case "dispatched":
+      return "neutral";
   }
 }
 

@@ -253,8 +253,74 @@ func (s *Server) approveWorkflowGate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
+		// With the gate passed, the fake agent loop (ADR-0022) drives the
+		// instance through its Jobs synchronously; without a dispatcher
+		// the instance rests running with pending Jobs.
+		if s.app.WorkflowDispatch != nil {
+			if _, err := s.app.WorkflowDispatch.Run(r.Context(), instanceID); err != nil {
+				writeError(w, err)
+				return
+			}
+		}
 		writeJSON(w, http.StatusCreated, newApprovalPayload(approval))
 		return
 	}
 	writeJSON(w, http.StatusOK, newApprovalPayload(approval))
+}
+
+type workflowJobPayload struct {
+	ID                 int64      `json:"id"`
+	WorkflowInstanceID int64      `json:"workflowInstanceId"`
+	Position           int        `json:"position"`
+	StepID             string     `json:"stepId"`
+	OperationType      string     `json:"operationType"`
+	State              string     `json:"state"`
+	Attempt            int        `json:"attempt"`
+	MaxAttempts        int        `json:"maxAttempts"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
+	FinishedAt         *time.Time `json:"finishedAt"`
+}
+
+// listWorkflowJobs returns a Workflow Instance's Jobs in definition
+// order, exposing per-Job progress for the Case detail view.
+func (s *Server) listWorkflowJobs(w http.ResponseWriter, r *http.Request) {
+	if s.app.WorkflowReads == nil {
+		writeError(w, workflowWritesUnsupported())
+		return
+	}
+	instanceID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || instanceID <= 0 {
+		writeError(w, providers.ProviderError{
+			Class:   providers.ErrorNotFound,
+			Message: "workflow instance not found",
+		})
+		return
+	}
+	if _, err := s.app.WorkflowReads.GetWorkflowInstance(r.Context(), instanceID); err != nil {
+		writeError(w, err)
+		return
+	}
+	jobs, err := s.app.WorkflowReads.ListWorkflowJobs(r.Context(), instanceID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	payload := make([]workflowJobPayload, 0, len(jobs))
+	for _, job := range jobs {
+		payload = append(payload, workflowJobPayload{
+			ID:                 job.ID,
+			WorkflowInstanceID: job.WorkflowInstanceID,
+			Position:           job.Position,
+			StepID:             job.StepID,
+			OperationType:      job.OperationType,
+			State:              string(job.State),
+			Attempt:            job.Attempt,
+			MaxAttempts:        job.MaxAttempts,
+			CreatedAt:          job.CreatedAt,
+			UpdatedAt:          job.UpdatedAt,
+			FinishedAt:         job.FinishedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
