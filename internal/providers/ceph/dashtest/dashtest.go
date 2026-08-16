@@ -56,7 +56,7 @@ func New(t *testing.T, mode Mode) *Dashboard {
 		case ModeUnauthorized:
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		default:
-			writeJSON(w, http.StatusCreated, map[string]any{"token": Token})
+			WriteJSON(w, http.StatusCreated, map[string]any{"token": Token})
 		}
 	})
 	guard := func(next http.HandlerFunc) http.HandlerFunc {
@@ -77,10 +77,10 @@ func New(t *testing.T, mode Mode) *Dashboard {
 		}
 	}
 	mux.HandleFunc("GET /api/health/get_cluster_fsid", guard(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, FSID)
+		WriteJSON(w, http.StatusOK, FSID)
 	}))
 	mux.HandleFunc("GET /api/summary", guard(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
+		WriteJSON(w, http.StatusOK, map[string]any{
 			"version":         CephVersion,
 			"health_status":   "HEALTH_OK",
 			"mgr_id":          "x",
@@ -88,7 +88,7 @@ func New(t *testing.T, mode Mode) *Dashboard {
 		})
 	}))
 	mux.HandleFunc("GET /api/health/full", guard(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
+		WriteJSON(w, http.StatusOK, map[string]any{
 			"health": map[string]any{
 				"status":  "HEALTH_OK",
 				"summary": []any{},
@@ -110,7 +110,7 @@ func New(t *testing.T, mode Mode) *Dashboard {
 		})
 	}))
 	mux.HandleFunc("GET /api/daemon", guard(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, []any{
+		WriteJSON(w, http.StatusOK, []any{
 			map[string]any{"daemon_type": "mon", "daemon_id": "a", "daemon_name": "mon.a", "hostname": HostA, "status": 1, "version": CephVersion},
 			map[string]any{"daemon_type": "mon", "daemon_id": "b", "daemon_name": "mon.b", "hostname": HostB, "status": 1, "version": CephVersion},
 			map[string]any{"daemon_type": "mgr", "daemon_id": "a", "daemon_name": "mgr.a", "hostname": HostA, "status": 2, "version": CephVersion},
@@ -119,7 +119,7 @@ func New(t *testing.T, mode Mode) *Dashboard {
 		})
 	}))
 	mux.HandleFunc("GET /api/pool", guard(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, []any{
+		WriteJSON(w, http.StatusOK, []any{
 			map[string]any{"pool": 1, "pool_name": "device_health_metrics", "type": "replicated", "size": 3, "min_size": 2},
 			map[string]any{"pool": 2, "pool_name": ".mgr", "type": "replicated", "size": 3, "min_size": 2},
 		})
@@ -179,7 +179,7 @@ func (d *Dashboard) handleHostItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"hostname": host, "labels": []any{}})
+	WriteJSON(w, http.StatusOK, map[string]any{"hostname": host, "labels": []any{}})
 }
 
 func (d *Dashboard) handleHostInventory(w http.ResponseWriter, host string) {
@@ -212,7 +212,7 @@ func (d *Dashboard) handleHostInventory(w http.ResponseWriter, host string) {
 			},
 		)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"name": host, "devices": devices})
+	WriteJSON(w, http.StatusOK, map[string]any{"name": host, "devices": devices})
 }
 
 func paginate(w http.ResponseWriter, r *http.Request, items []any) {
@@ -227,10 +227,11 @@ func paginate(w http.ResponseWriter, r *http.Request, items []any) {
 		end = offset + limit
 	}
 	w.Header().Set("X-Total-Count", strconv.Itoa(len(items)))
-	writeJSON(w, http.StatusOK, items[offset:end])
+	WriteJSON(w, http.StatusOK, items[offset:end])
 }
 
-func writeJSON(w http.ResponseWriter, status int, body any) {
+// WriteJSON lets bespoke test servers reuse the same JSON response helper.
+func WriteJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)

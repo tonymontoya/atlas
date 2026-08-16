@@ -2,7 +2,6 @@ package ceph
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -228,14 +227,14 @@ func TestReauthOnExpiredToken(t *testing.T) {
 		if r.Method == http.MethodPost && r.URL.Path == "/api/auth" {
 			logins++
 			current = fmt.Sprintf("token-%d", logins)
-			writeJSON(w, http.StatusCreated, loginResponse{Token: current})
+			dashtest.WriteJSON(w, http.StatusCreated, loginResponse{Token: current})
 			return
 		}
 		if logins < 2 || r.Header.Get("Authorization") != "Bearer "+current {
 			http.Error(w, "stale token", http.StatusUnauthorized)
 			return
 		}
-		writeJSON(w, http.StatusOK, []any{})
+		dashtest.WriteJSON(w, http.StatusOK, []any{})
 	}))
 	defer server.Close()
 
@@ -253,10 +252,32 @@ func TestReauthOnExpiredToken(t *testing.T) {
 	}
 }
 
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+func TestForbiddenDoesNotReauth(t *testing.T) {
+	var mu sync.Mutex
+	logins := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.Method == http.MethodPost && r.URL.Path == "/api/auth" {
+			logins++
+			dashtest.WriteJSON(w, http.StatusCreated, loginResponse{Token: "valid-token"})
+			return
+		}
+		http.Error(w, "permission denied", http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	provider, err := New(Config{BaseURL: server.URL, Username: dashtest.Username, Password: dashtest.Password})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+	_, err = provider.Daemons(context.Background())
+	assertProviderErrorClass(t, err, providers.ErrorUnauthorized)
+	mu.Lock()
+	defer mu.Unlock()
+	if logins != 1 {
+		t.Errorf("logins = %d, want 1 (a 403 must not trigger re-auth)", logins)
+	}
 }
 
 func TestConfigValidation(t *testing.T) {

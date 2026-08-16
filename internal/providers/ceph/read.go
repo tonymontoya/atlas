@@ -98,7 +98,7 @@ func (p *Provider) OSDs(ctx context.Context) ([]inventory.OSD, error) {
 		Host struct {
 			Name string `json:"name"`
 		} `json:"host"`
-	}](ctx, p, "/api/osd", nil)
+	}](ctx, p, "/api/osd")
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (p *Provider) Hosts(ctx context.Context) ([]inventory.Host, error) {
 	items, err := getPaged[struct {
 		Hostname string `json:"hostname"`
 		Addr     string `json:"addr"`
-	}](ctx, p, "/api/host", nil)
+	}](ctx, p, "/api/host")
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (p *Provider) Daemons(ctx context.Context) ([]inventory.Daemon, error) {
 		Hostname   string `json:"hostname"`
 		Status     int    `json:"status"`
 		Version    string `json:"version"`
-	}](ctx, p, "/api/daemon", nil)
+	}](ctx, p, "/api/daemon")
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +221,7 @@ func (p *Provider) Pools(ctx context.Context) ([]inventory.Pool, error) {
 		Type     string `json:"type"`
 		Size     *int   `json:"size"`
 		MinSize  *int   `json:"min_size"`
-	}](ctx, p, "/api/pool", nil)
+	}](ctx, p, "/api/pool")
 	if err != nil {
 		return nil, err
 	}

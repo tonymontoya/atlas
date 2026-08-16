@@ -135,6 +135,13 @@ type loginResponse struct {
 	Token string `json:"token"`
 }
 
+// tokenRejected marks a ProviderError caused by HTTP 401 specifically, so
+// getJSON can distinguish "re-auth might help" (401) from "permission
+// denied" (403, same Unauthorized class, no retry).
+type tokenRejected struct {
+	providers.ProviderError
+}
+
 func (p *Provider) authorize(ctx context.Context) error {
 	if err := ctxErr(ctx); err != nil {
 		return err
@@ -201,8 +208,12 @@ func (p *Provider) getJSON(ctx context.Context, path string, query url.Values, o
 	if err == nil {
 		return nil
 	}
-	var providerErrValue providers.ProviderError
-	if errors.As(err, &providerErrValue) && providerErrValue.Class == providers.ErrorUnauthorized {
+	// Re-auth once when the Dashboard rejected the token itself (401).
+	// A 403 means the token is valid but the user lacks permission;
+	// re-logging in would be pointless and could trip the Dashboard's
+	// account lockout on repeated attempts.
+	var rejected tokenRejected
+	if errors.As(err, &rejected) {
 		p.clearToken()
 		if authErr := p.authorize(ctx); authErr != nil {
 			return authErr
@@ -230,6 +241,9 @@ func (p *Provider) getOnce(ctx context.Context, path string, query url.Values, o
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			return tokenRejected{ProviderError: providers.ProviderError{Class: providers.ErrorUnauthorized, Message: fmt.Sprintf("%s returned HTTP 401", path)}}
+		}
 		return classifyStatus(resp.StatusCode, path)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
@@ -238,16 +252,11 @@ func (p *Provider) getOnce(ctx context.Context, path string, query url.Values, o
 	return nil
 }
 
-func getPaged[T any](ctx context.Context, p *Provider, path string, extra url.Values) ([]T, error) {
+func getPaged[T any](ctx context.Context, p *Provider, path string) ([]T, error) {
 	var all []T
 	offset := 0
 	for page := 0; page < maxPages; page++ {
 		query := url.Values{}
-		for key, values := range extra {
-			for _, value := range values {
-				query.Add(key, value)
-			}
-		}
 		query.Set("limit", strconv.Itoa(p.pageSize))
 		query.Set("offset", strconv.Itoa(offset))
 		var items []T
