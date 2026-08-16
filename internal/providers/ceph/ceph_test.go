@@ -288,6 +288,8 @@ func TestConfigValidation(t *testing.T) {
 		{"missing base URL", Config{Username: "u", Password: "p"}},
 		{"missing username", Config{BaseURL: "https://mon.example:8443", Password: "p"}},
 		{"missing password", Config{BaseURL: "https://mon.example:8443", Username: "u"}},
+		{"schemeless base URL", Config{BaseURL: "mon.example:8443", Username: "u", Password: "p"}},
+		{"hostless base URL", Config{BaseURL: "https://", Username: "u", Password: "p"}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

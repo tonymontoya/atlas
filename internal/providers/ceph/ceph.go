@@ -37,29 +37,6 @@ type Config struct {
 	HTTPClient         *http.Client
 }
 
-func (c Config) withDefaults() Config {
-	if c.ClusterName == "" {
-		c.ClusterName = defaultName
-	}
-	return c
-}
-
-func (c Config) validate() error {
-	if c.BaseURL == "" {
-		return errors.New("base URL is required")
-	}
-	if _, err := url.Parse(c.BaseURL); err != nil {
-		return fmt.Errorf("BaseURL %q is not a valid URL: %w", c.BaseURL, err)
-	}
-	if c.Username == "" {
-		return errors.New("username is required")
-	}
-	if c.Password == "" {
-		return errors.New("password is required")
-	}
-	return nil
-}
-
 type Provider struct {
 	baseURL     *url.URL
 	username    string
@@ -73,13 +50,23 @@ type Provider struct {
 }
 
 func New(cfg Config) (*Provider, error) {
-	if err := cfg.validate(); err != nil {
-		return nil, fmt.Errorf("invalid ceph provider config: %w", err)
+	if cfg.BaseURL == "" {
+		return nil, errors.New("invalid ceph provider config: BaseURL is required")
 	}
-	cfg = cfg.withDefaults()
+	// One parse-and-normalize step: the value actually dialed is the
+	// trailing-slash-trimmed one, so it is the one validated here.
 	baseURL, err := url.Parse(strings.TrimRight(cfg.BaseURL, "/"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid ceph provider config: %w", err)
+	if err != nil || baseURL.Scheme == "" || baseURL.Host == "" {
+		return nil, fmt.Errorf("invalid ceph provider config: BaseURL %q must be an absolute URL with a scheme", cfg.BaseURL)
+	}
+	if cfg.Username == "" {
+		return nil, errors.New("invalid ceph provider config: Username is required")
+	}
+	if cfg.Password == "" {
+		return nil, errors.New("invalid ceph provider config: Password is required")
+	}
+	if cfg.ClusterName == "" {
+		cfg.ClusterName = defaultName
 	}
 	client := cfg.HTTPClient
 	if client == nil {
