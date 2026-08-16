@@ -8,6 +8,8 @@ import (
 
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph"
+	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
@@ -142,6 +144,143 @@ func TestRunOncePersistsFakeProviderObservationToPostgres(t *testing.T) {
 		SELECT status, snapshot_id
 		FROM inventory_sync_runs
 		WHERE provider = 'fake' AND scenario = 'reef-osd-down-baremetal'
+		ORDER BY started_at DESC, id DESC
+		LIMIT 1
+	`).Scan(&runStatus, &runSnapshotID); err != nil {
+		t.Fatalf("query sync run: %v", err)
+	}
+	if runStatus != "succeeded" {
+		t.Fatalf("sync run status = %q, want succeeded", runStatus)
+	}
+	if runSnapshotID != result.SnapshotID {
+		t.Fatalf("sync run snapshot = %d, want %d", runSnapshotID, result.SnapshotID)
+	}
+}
+
+func TestRunOncePersistsCephProviderObservationToPostgres(t *testing.T) {
+	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
+	}
+
+	dashboard := dashtest.New(t, dashtest.ModeSuccess)
+	provider, err := ceph.New(ceph.Config{
+		BaseURL:  dashboard.URL(),
+		Username: dashtest.Username,
+		Password: dashtest.Password,
+	})
+	if err != nil {
+		t.Fatalf("ceph.New returned error: %v", err)
+	}
+
+	ctx := context.Background()
+	db, err := store.OpenPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.ExecContext(ctx, `DELETE FROM inventory_sync_runs WHERE provider = 'ceph'`); err != nil {
+		t.Fatalf("delete existing test sync runs: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, dashtest.FSID); err != nil {
+		t.Fatalf("delete existing test cluster: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), `DELETE FROM inventory_sync_runs WHERE provider = 'ceph'`)
+		_, _ = db.ExecContext(context.Background(), `DELETE FROM atlas_clusters WHERE fsid = $1`, dashtest.FSID)
+	})
+
+	writer := store.NewPostgres(db)
+	result, err := RunOnce(ctx, writer, provider, Options{
+		ProviderName: "ceph",
+		ObservedAt:   time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.ClusterID == 0 || result.SnapshotID == 0 {
+		t.Fatalf("result = %+v, want non-zero ids", result)
+	}
+
+	var healthStatus string
+	var checkCount int
+	if err := db.QueryRowContext(ctx, `
+		SELECT status, jsonb_array_length(checks)
+		FROM cluster_current_health
+		WHERE fsid = $1
+	`, dashtest.FSID).Scan(&healthStatus, &checkCount); err != nil {
+		t.Fatalf("query current health: %v", err)
+	}
+	if healthStatus != "HEALTH_OK" {
+		t.Fatalf("health status = %q, want HEALTH_OK", healthStatus)
+	}
+	if checkCount != 1 {
+		t.Fatalf("health check count = %d, want 1", checkCount)
+	}
+
+	var osdCount int
+	var hasDownOSD bool
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*), bool_or(NOT osd_up)
+		FROM cluster_current_osds
+		WHERE fsid = $1
+	`, dashtest.FSID).Scan(&osdCount, &hasDownOSD); err != nil {
+		t.Fatalf("query current osds: %v", err)
+	}
+	if osdCount != 3 {
+		t.Fatalf("OSD count = %d, want 3", osdCount)
+	}
+	if !hasDownOSD {
+		t.Fatal("expected one down OSD")
+	}
+
+	var deviceCount int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM cluster_current_storage_devices
+		WHERE fsid = $1
+	`, dashtest.FSID).Scan(&deviceCount); err != nil {
+		t.Fatalf("query current storage devices: %v", err)
+	}
+	if deviceCount != 3 {
+		t.Fatalf("Storage Device count = %d, want 3", deviceCount)
+	}
+
+	var daemonCount int
+	var stoppedDaemons int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*), count(*) FILTER (WHERE status = 'stopped')
+		FROM cluster_current_daemons
+		WHERE fsid = $1
+	`, dashtest.FSID).Scan(&daemonCount, &stoppedDaemons); err != nil {
+		t.Fatalf("query current daemons: %v", err)
+	}
+	if daemonCount != 5 {
+		t.Fatalf("Ceph Daemon count = %d, want 5", daemonCount)
+	}
+	if stoppedDaemons != 1 {
+		t.Fatalf("stopped Ceph Daemon count = %d, want 1", stoppedDaemons)
+	}
+
+	var poolCount int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM cluster_current_pools
+		WHERE fsid = $1
+	`, dashtest.FSID).Scan(&poolCount); err != nil {
+		t.Fatalf("query current pools: %v", err)
+	}
+	if poolCount != 2 {
+		t.Fatalf("Pool count = %d, want 2", poolCount)
+	}
+
+	var runStatus string
+	var runSnapshotID int64
+	if err := db.QueryRowContext(ctx, `
+		SELECT status, snapshot_id
+		FROM inventory_sync_runs
+		WHERE provider = 'ceph' AND scenario IS NULL
 		ORDER BY started_at DESC, id DESC
 		LIMIT 1
 	`).Scan(&runStatus, &runSnapshotID); err != nil {

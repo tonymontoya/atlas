@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 type Config struct {
 	HTTPAddr          string
@@ -14,6 +17,12 @@ type Config struct {
 	OIDCIssuer        string
 	OIDCAudience      string
 	OIDCJWKSURL       string
+
+	CephDashboardURL         string
+	CephDashboardUser        string
+	CephDashboardPassword    string
+	CephClusterName          string
+	CephDashboardInsecureTLS bool
 }
 
 func Load() Config {
@@ -29,6 +38,12 @@ func Load() Config {
 		OIDCIssuer:        env("ATLAS_OIDC_ISSUER", ""),
 		OIDCAudience:      env("ATLAS_OIDC_AUDIENCE", ""),
 		OIDCJWKSURL:       env("ATLAS_OIDC_JWKS_URL", ""),
+
+		CephDashboardURL:         env("ATLAS_CEPH_DASHBOARD_URL", ""),
+		CephDashboardUser:        env("ATLAS_CEPH_DASHBOARD_USER", ""),
+		CephDashboardPassword:    env("ATLAS_CEPH_DASHBOARD_PASSWORD", ""),
+		CephClusterName:          env("ATLAS_CEPH_CLUSTER_NAME", ""),
+		CephDashboardInsecureTLS: envBool("ATLAS_CEPH_DASHBOARD_INSECURE_TLS", false),
 	}
 }
 
@@ -38,4 +53,16 @@ func env(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func envBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

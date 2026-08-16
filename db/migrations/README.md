@@ -125,3 +125,18 @@ Task completions are the durable evidence that resumes an instance paused
 at `waiting_for_operator` (ADR-0019): after a restart, a recorded
 completion lets the dispatch loop continue past the Task instead of
 pausing again.
+
+## Sync Run Providers and Daemon Statuses
+
+`000010_sync_run_providers.up.sql` widens two checks for the real Ceph
+Dashboard read provider (ADR-0023):
+
+- `inventory_sync_runs.provider` from `fake`-only to `fake` and `ceph`
+  so runs from the Dashboard-backed provider persist. The
+  `inventory_snapshots.provider` check already allowed `ceph`; the alert
+  evaluation tables stay `fake`-only because alert evaluation has no
+  real source yet.
+- `daemon_observations.status` gains the orchestrator statuses
+  `starting`, `error`, and `unknown` alongside `running` and `stopped`.
+  The fake fixtures only produced the original two; the Dashboard
+  daemon list reports the full set.

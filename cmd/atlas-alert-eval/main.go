@@ -12,8 +12,13 @@ import (
 func main() {
 	ctx := context.Background()
 	cfg := config.Load()
-	if cfg.ProviderMode != "fake" {
-		log.Fatalf("atlas-alert-eval only supports fake provider mode in this scaffold, got %q", cfg.ProviderMode)
+	switch cfg.ProviderMode {
+	case "fake", "ceph":
+	default:
+		log.Fatalf("unsupported ATLAS_PROVIDER_MODE %q (supported: fake, ceph)", cfg.ProviderMode)
+	}
+	if cfg.ProviderMode == "ceph" {
+		log.Printf("ATLAS_PROVIDER_MODE=ceph: alert evaluation still reads the fake Prometheus fixtures; a real alert source is not implemented yet")
 	}
 
 	db, err := store.OpenPostgres(ctx, cfg.DatabaseURL)
