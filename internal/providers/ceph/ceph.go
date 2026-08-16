@@ -46,16 +46,16 @@ func (c Config) withDefaults() Config {
 
 func (c Config) validate() error {
 	if c.BaseURL == "" {
-		return errors.New("BaseURL is required")
+		return errors.New("base URL is required")
 	}
 	if _, err := url.Parse(c.BaseURL); err != nil {
 		return fmt.Errorf("BaseURL %q is not a valid URL: %w", c.BaseURL, err)
 	}
 	if c.Username == "" {
-		return errors.New("Username is required")
+		return errors.New("username is required")
 	}
 	if c.Password == "" {
-		return errors.New("Password is required")
+		return errors.New("password is required")
 	}
 	return nil
 }
@@ -163,7 +163,7 @@ func (p *Provider) authorize(ctx context.Context) error {
 	if err != nil {
 		return classifyTransportErr(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusBadRequest {
 		return providerErr(providers.ErrorUnauthorized, "dashboard login rejected with HTTP %d", resp.StatusCode)
 	}
@@ -239,7 +239,7 @@ func (p *Provider) getOnce(ctx context.Context, path string, query url.Values, o
 	if err != nil {
 		return classifyTransportErr(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
 			return tokenRejected{ProviderError: providers.ProviderError{Class: providers.ErrorUnauthorized, Message: fmt.Sprintf("%s returned HTTP 401", path)}}

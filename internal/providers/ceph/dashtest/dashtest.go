@@ -70,7 +70,7 @@ func New(t *testing.T, mode Mode) *Dashboard {
 				http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			case ModeMalformed:
 				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprint(w, `{"not json`)
+				_, _ = fmt.Fprint(w, `{"not json`)
 			default:
 				next(w, r)
 			}
