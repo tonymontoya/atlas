@@ -5,12 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
-	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer"
+	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
@@ -21,20 +20,12 @@ type authTestHarness struct {
 
 func newAuthTestHarness(t *testing.T) *authTestHarness {
 	t.Helper()
-	issuer, err := devissuer.New("https://atlas-dev-issuer.local", "atlas-api")
-	if err != nil {
-		t.Fatalf("create dev issuer: %v", err)
-	}
-	jwks := httptest.NewServer(issuer.Handler())
-	t.Cleanup(jwks.Close)
-	token, err := issuer.IssueToken("operator-1", "Storage Operator", 15*time.Minute)
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
-	}
+	issuer := devissuertest.Start(t)
+	token := issuer.Token(t, "operator-1", "Storage Operator")
 	verifier := identity.NewVerifier(identity.Config{
-		Issuer:   "https://atlas-dev-issuer.local",
-		Audience: "atlas-api",
-		JWKSURL:  jwks.URL + "/.well-known/jwks.json",
+		Issuer:   devissuertest.IssuerURL,
+		Audience: devissuertest.Audience,
+		JWKSURL:  issuer.JWKSURL(),
 	})
 	return &authTestHarness{
 		server: NewServer(&app.App{

@@ -2,7 +2,6 @@ package inventorysync
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -11,32 +10,20 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 func TestRunOncePersistsFakeProviderObservationToPostgres(t *testing.T) {
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-
 	ctx := context.Background()
-	db, err := store.OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
+	db, _ := testdb.Open(t)
 
 	const fsid = "00000000-0000-4000-8000-000000000102"
-	if _, err := db.ExecContext(ctx, `DELETE FROM inventory_sync_runs WHERE provider = 'fake'`); err != nil {
-		t.Fatalf("delete existing test sync runs: %v", err)
+	cleanupFakeSync := func() {
+		testdb.DeleteSyncRuns(t, db, "provider = 'fake'")
+		testdb.DeleteClusters(t, db, "fsid = $1", fsid)
 	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid); err != nil {
-		t.Fatalf("delete existing test cluster: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), `DELETE FROM inventory_sync_runs WHERE provider = 'fake'`)
-		_, _ = db.ExecContext(context.Background(), `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid)
-	})
+	cleanupFakeSync()
+	t.Cleanup(cleanupFakeSync)
 
 	writer := store.NewPostgres(db)
 	result, err := RunFakeOnce(ctx, writer, Options{
@@ -158,11 +145,6 @@ func TestRunOncePersistsFakeProviderObservationToPostgres(t *testing.T) {
 }
 
 func TestRunOncePersistsCephProviderObservationToPostgres(t *testing.T) {
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-
 	dashboard := dashtest.New(t, dashtest.ModeSuccess)
 	provider, err := ceph.New(ceph.Config{
 		BaseURL:  dashboard.URL(),
@@ -174,22 +156,14 @@ func TestRunOncePersistsCephProviderObservationToPostgres(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	db, err := store.OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
+	db, _ := testdb.Open(t)
 
-	if _, err := db.ExecContext(ctx, `DELETE FROM inventory_sync_runs WHERE provider = 'ceph'`); err != nil {
-		t.Fatalf("delete existing test sync runs: %v", err)
+	cleanupCephSync := func() {
+		testdb.DeleteSyncRuns(t, db, "provider = 'ceph'")
+		testdb.DeleteClusters(t, db, "fsid = $1", dashtest.FSID)
 	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, dashtest.FSID); err != nil {
-		t.Fatalf("delete existing test cluster: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), `DELETE FROM inventory_sync_runs WHERE provider = 'ceph'`)
-		_, _ = db.ExecContext(context.Background(), `DELETE FROM atlas_clusters WHERE fsid = $1`, dashtest.FSID)
-	})
+	cleanupCephSync()
+	t.Cleanup(cleanupCephSync)
 
 	writer := store.NewPostgres(db)
 	result, err := RunOnce(ctx, writer, provider, Options{
@@ -295,25 +269,15 @@ func TestRunOncePersistsCephProviderObservationToPostgres(t *testing.T) {
 }
 
 func TestSaveInventoryObservationPreservesDeviceOSDHistory(t *testing.T) {
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-
 	ctx := context.Background()
-	db, err := store.OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
+	db, _ := testdb.Open(t)
 
 	const fsid = "00000000-0000-4000-8000-000000000201"
-	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid); err != nil {
-		t.Fatalf("delete existing test cluster: %v", err)
+	cleanupCluster := func() {
+		testdb.DeleteClusters(t, db, "fsid = $1", fsid)
 	}
-	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid)
-	})
+	cleanupCluster()
+	t.Cleanup(cleanupCluster)
 
 	cluster := fleet.ClusterIdentity{
 		FSID:        fsid,
@@ -391,25 +355,15 @@ func TestSaveInventoryObservationPreservesDeviceOSDHistory(t *testing.T) {
 }
 
 func TestCurrentViewsReflectOnlyLatestSnapshot(t *testing.T) {
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-
 	ctx := context.Background()
-	db, err := store.OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
+	db, _ := testdb.Open(t)
 
 	const fsid = "00000000-0000-4000-8000-000000000202"
-	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid); err != nil {
-		t.Fatalf("delete existing test cluster: %v", err)
+	cleanupCluster := func() {
+		testdb.DeleteClusters(t, db, "fsid = $1", fsid)
 	}
-	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), `DELETE FROM atlas_clusters WHERE fsid = $1`, fsid)
-	})
+	cleanupCluster()
+	t.Cleanup(cleanupCluster)
 
 	cluster := fleet.ClusterIdentity{
 		FSID:        fsid,
@@ -478,24 +432,14 @@ func TestCurrentViewsReflectOnlyLatestSnapshot(t *testing.T) {
 }
 
 func TestRunOnceRecordsFailedSyncRun(t *testing.T) {
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-
 	ctx := context.Background()
-	db, err := store.OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
+	db, _ := testdb.Open(t)
 
-	if _, err := db.ExecContext(ctx, `DELETE FROM inventory_sync_runs WHERE provider = 'fake' AND scenario = 'missing'`); err != nil {
-		t.Fatalf("delete existing failed sync runs: %v", err)
-	}
+	testdb.DeleteSyncRuns(t, db, "provider = 'fake' AND scenario = 'missing'")
+	t.Cleanup(func() { testdb.DeleteSyncRuns(t, db, "provider = 'fake' AND scenario = 'missing'") })
 
 	writer := store.NewPostgres(db)
-	_, err = RunFakeOnce(ctx, writer, Options{
+	_, err := RunFakeOnce(ctx, writer, Options{
 		Scenario:   "missing",
 		ObservedAt: time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC),
 	})

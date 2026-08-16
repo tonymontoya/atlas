@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,14 +20,13 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/inventorysync"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	db := openTestDB(t, ctx, databaseURL)
-	defer func() { _ = db.Close() }()
-	resetInventoryTables(t, ctx, db)
+	db, databaseURL := testdb.Open(t)
+	resetInventoryTables(t, db)
 
 	if _, err := inventorysync.RunFakeOnce(ctx, store.NewPostgres(db), inventorysync.Options{
 		Scenario:   "reef-osd-down-baremetal",
@@ -87,11 +85,9 @@ func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
 }
 
 func TestPostgresReadSourceReturnsNotFoundForEmptyReadModel(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	db := openTestDB(t, ctx, databaseURL)
-	defer func() { _ = db.Close() }()
-	resetInventoryTables(t, ctx, db)
+	db, databaseURL := testdb.Open(t)
+	resetInventoryTables(t, db)
 
 	application, err := app.NewFromConfig(ctx, config.Config{
 		DatabaseURL: databaseURL,
@@ -131,13 +127,11 @@ func TestPostgresReadSourceReturnsNotFoundForEmptyReadModel(t *testing.T) {
 }
 
 func TestPostgresReadSourceListsEmptySyncRuns(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	db := openTestDB(t, ctx, databaseURL)
-	defer func() { _ = db.Close() }()
-	resetInventoryTables(t, ctx, db)
+	db, _ := testdb.Open(t)
+	resetInventoryTables(t, db)
 
-	server := newPostgresServer(t, ctx, databaseURL)
+	server := newPostgresServer(t, ctx)
 	response := serve(server, http.MethodGet, "/api/v1/inventory-sync-runs")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
@@ -155,11 +149,9 @@ func TestPostgresReadSourceListsEmptySyncRuns(t *testing.T) {
 }
 
 func TestPostgresReadSourceListsSucceededAndFailedSyncRuns(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	db := openTestDB(t, ctx, databaseURL)
-	defer func() { _ = db.Close() }()
-	resetInventoryTables(t, ctx, db)
+	db, _ := testdb.Open(t)
+	resetInventoryTables(t, db)
 
 	writer := store.NewPostgres(db)
 	if _, err := inventorysync.RunFakeOnce(ctx, writer, inventorysync.Options{
@@ -175,7 +167,7 @@ func TestPostgresReadSourceListsSucceededAndFailedSyncRuns(t *testing.T) {
 		t.Fatal("expected failed fake sync")
 	}
 
-	server := newPostgresServer(t, ctx, databaseURL)
+	server := newPostgresServer(t, ctx)
 	response := serve(server, http.MethodGet, "/api/v1/inventory-sync-runs")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
@@ -203,9 +195,8 @@ func TestPostgresReadSourceListsSucceededAndFailedSyncRuns(t *testing.T) {
 }
 
 func TestPostgresReadSourceListsAndGetsSeedCases(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	server := newPostgresServer(t, ctx, databaseURL)
+	server := newPostgresServer(t, ctx)
 
 	listResponse := serve(server, http.MethodGet, "/api/v1/cases")
 	if listResponse.Code != http.StatusOK {
@@ -236,9 +227,8 @@ func TestPostgresReadSourceListsAndGetsSeedCases(t *testing.T) {
 }
 
 func TestPostgresReadSourceListsSeedCaseTimeline(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	server := newPostgresServer(t, ctx, databaseURL)
+	server := newPostgresServer(t, ctx)
 
 	listResponse := serve(server, http.MethodGet, "/api/v1/cases")
 	if listResponse.Code != http.StatusOK {
@@ -272,9 +262,8 @@ func TestPostgresReadSourceListsSeedCaseTimeline(t *testing.T) {
 }
 
 func TestPostgresReadSourceReturnsNotFoundForMissingCase(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	server := newPostgresServer(t, ctx, databaseURL)
+	server := newPostgresServer(t, ctx)
 
 	for _, path := range []string{"/api/v1/cases/0", "/api/v1/cases/not-a-number", "/api/v1/cases/999999"} {
 		t.Run(path, func(t *testing.T) {
@@ -298,9 +287,8 @@ func TestPostgresReadSourceReturnsNotFoundForMissingCase(t *testing.T) {
 }
 
 func TestPostgresReadSourceReturnsNotFoundForMissingCaseTimeline(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	server := newPostgresServer(t, ctx, databaseURL)
+	server := newPostgresServer(t, ctx)
 
 	for _, path := range []string{"/api/v1/cases/0/timeline", "/api/v1/cases/not-a-number/timeline", "/api/v1/cases/999999/timeline"} {
 		t.Run(path, func(t *testing.T) {
@@ -323,28 +311,10 @@ func TestPostgresReadSourceReturnsNotFoundForMissingCaseTimeline(t *testing.T) {
 	}
 }
 
-func testDatabaseURL(t *testing.T) string {
-	t.Helper()
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-	return databaseURL
-}
-
-func openTestDB(t *testing.T, ctx context.Context, databaseURL string) *sql.DB {
-	t.Helper()
-	db, err := store.OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	return db
-}
-
-func newPostgresServer(t *testing.T, ctx context.Context, databaseURL string) *Server {
+func newPostgresServer(t *testing.T, ctx context.Context) *Server {
 	t.Helper()
 	application, err := app.NewFromConfig(ctx, config.Config{
-		DatabaseURL: databaseURL,
+		DatabaseURL: testdb.URL(t),
 		ReadSource:  "postgres",
 		AgentMode:   config.AgentModeDisabled,
 	})
@@ -357,14 +327,10 @@ func newPostgresServer(t *testing.T, ctx context.Context, databaseURL string) *S
 	return NewServer(application)
 }
 
-func resetInventoryTables(t *testing.T, ctx context.Context, db *sql.DB) {
+func resetInventoryTables(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.ExecContext(ctx, `DELETE FROM inventory_sync_runs`); err != nil {
-		t.Fatalf("reset sync runs: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM atlas_clusters`); err != nil {
-		t.Fatalf("reset inventory tables: %v", err)
-	}
+	testdb.DeleteSyncRuns(t, db, "TRUE")
+	testdb.DeleteClusters(t, db, "TRUE")
 }
 
 func serve(server *Server, method, path string) *httptest.ResponseRecorder {
@@ -375,12 +341,10 @@ func serve(server *Server, method, path string) *httptest.ResponseRecorder {
 }
 
 func TestPostgresReadSourceListsAlertEvaluationRuns(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
-	db := openTestDB(t, ctx, databaseURL)
-	t.Cleanup(func() { _ = db.Close() })
-	resetDetectionTables(t, ctx, db)
-	t.Cleanup(func() { resetDetectionTables(t, ctx, db) })
+	db, _ := testdb.Open(t)
+	resetDetectionTables(t, db)
+	t.Cleanup(func() { resetDetectionTables(t, db) })
 
 	writer := store.NewPostgres(db)
 	if _, err := casedetection.RunFakeOnce(ctx, writer, casedetection.Options{
@@ -395,7 +359,7 @@ func TestPostgresReadSourceListsAlertEvaluationRuns(t *testing.T) {
 		t.Fatal("expected failed fake alert evaluation")
 	}
 
-	server := newPostgresServer(t, ctx, databaseURL)
+	server := newPostgresServer(t, ctx)
 	response := serve(server, http.MethodGet, "/api/v1/alert-evaluation-runs")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
@@ -429,18 +393,10 @@ func TestPostgresReadSourceListsAlertEvaluationRuns(t *testing.T) {
 	}
 }
 
-func resetDetectionTables(t *testing.T, ctx context.Context, db *sql.DB) {
+func resetDetectionTables(t *testing.T, db *sql.DB) {
 	t.Helper()
-	statements := []string{
-		`DELETE FROM case_alert_dedup WHERE case_id IN (SELECT id FROM cases WHERE title = 'CephOSDDown on osd=1')`,
-		`DELETE FROM cases WHERE title = 'CephOSDDown on osd=1'`,
-		`DELETE FROM alert_evaluation_runs`,
-	}
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("reset detection tables (%q): %v", statement, err)
-		}
-	}
+	testdb.DeleteCases(t, db, "title = 'CephOSDDown on osd=1'")
+	testdb.DeleteAlertRuns(t, db, "TRUE")
 }
 
 func TestAlertEvaluationRunsEndpointRequiresPostgresReadSource(t *testing.T) {

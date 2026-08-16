@@ -13,25 +13,17 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 func TestRunFakeOnceDetectsCaseFromAlerts(t *testing.T) {
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-
 	ctx := context.Background()
-	db, err := store.OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db, _ := testdb.Open(t)
 
 	const fsid = "00000000-0000-4000-8000-000000000102"
 	fingerprint := string(fixtureFingerprint(t))
-	cleanupDetection(t, db, fsid, fingerprint)
-	t.Cleanup(func() { cleanupDetection(t, db, fsid, fingerprint) })
+	cleanupDetection(t, db, fsid)
+	t.Cleanup(func() { cleanupDetection(t, db, fsid) })
 
 	writer := store.NewPostgres(db)
 	if _, err := writer.SaveInventoryObservation(ctx, store.InventoryObservation{
@@ -125,21 +117,12 @@ func TestRunFakeOnceDetectsCaseFromAlerts(t *testing.T) {
 }
 
 func TestRunFakeOnceRecordsProviderErrorClassOnFailure(t *testing.T) {
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-
 	ctx := context.Background()
-	db, err := store.OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db, _ := testdb.Open(t)
 	cleanupDetectionRuns(t, db)
 	t.Cleanup(func() { cleanupDetectionRuns(t, db) })
 
-	_, err = RunFakeOnce(ctx, store.NewPostgres(db), Options{Scenario: "provider-unauthorized"})
+	_, err := RunFakeOnce(ctx, store.NewPostgres(db), Options{Scenario: "provider-unauthorized"})
 	if err == nil {
 		t.Fatal("expected provider error from unauthorized scenario")
 	}
@@ -202,29 +185,15 @@ func loadFixture(t *testing.T, family, scenario, name string, target any) {
 	}
 }
 
-func cleanupDetection(t *testing.T, db *sql.DB, fsid, fingerprint string) {
+func cleanupDetection(t *testing.T, db *sql.DB, fsid string) {
 	t.Helper()
-	ctx := context.Background()
-	statements := []struct {
-		query string
-		args  []any
-	}{
-		{`DELETE FROM case_alert_dedup WHERE fingerprint = $1`, []any{fingerprint}},
-		{`DELETE FROM cases WHERE title = 'CephOSDDown on osd=1'`, nil},
-		{`DELETE FROM alert_evaluation_runs WHERE provider = 'fake'`, nil},
-		{`DELETE FROM inventory_sync_runs WHERE provider = 'fake'`, nil},
-		{`DELETE FROM atlas_clusters WHERE fsid = $1`, []any{fsid}},
-	}
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement.query, statement.args...); err != nil {
-			t.Fatalf("cleanup %q: %v", statement.query, err)
-		}
-	}
+	testdb.DeleteCases(t, db, "title = 'CephOSDDown on osd=1'")
+	testdb.DeleteAlertRuns(t, db, "provider = 'fake'")
+	testdb.DeleteSyncRuns(t, db, "provider = 'fake'")
+	testdb.DeleteClusters(t, db, "fsid = $1", fsid)
 }
 
 func cleanupDetectionRuns(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.ExecContext(context.Background(), `DELETE FROM alert_evaluation_runs WHERE provider = 'fake'`); err != nil {
-		t.Fatalf("cleanup evaluation runs: %v", err)
-	}
+	testdb.DeleteAlertRuns(t, db, "provider = 'fake'")
 }

@@ -4,46 +4,28 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 func detectionTestDB(t *testing.T) (*PostgresStore, context.Context) {
 	t.Helper()
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-	ctx := context.Background()
-	db, err := OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db, _ := testdb.Open(t)
 
 	cleanupDetectionRows(t, db)
 	t.Cleanup(func() { cleanupDetectionRows(t, db) })
-	return NewPostgres(db), ctx
+	return NewPostgres(db), context.Background()
 }
 
 func cleanupDetectionRows(t *testing.T, db *sql.DB) {
 	t.Helper()
-	ctx := context.Background()
-	statements := []string{
-		`DELETE FROM case_alert_dedup WHERE fingerprint LIKE 'detection-test-%'`,
-		`DELETE FROM cases WHERE title LIKE 'detection-test%'`,
-		`DELETE FROM alert_evaluation_runs WHERE provider = 'fake'`,
-		`DELETE FROM atlas_clusters WHERE fsid = '00000000-0000-4000-8000-000000000906'`,
-	}
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("cleanup %q: %v", statement, err)
-		}
-	}
+	testdb.DeleteCases(t, db, "title LIKE 'detection-test%'")
+	testdb.DeleteAlertRuns(t, db, "provider = 'fake'")
+	testdb.DeleteClusters(t, db, "fsid = '00000000-0000-4000-8000-000000000906'")
 }
 
 func detectionCandidate(fingerprint, clusterLabel, state string) AlertCandidate {

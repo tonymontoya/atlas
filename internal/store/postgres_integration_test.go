@@ -2,20 +2,15 @@ package store
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 func TestPostgresStoreListsAndGetsSeedCases(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
+	db, _ := testdb.Open(t)
 	ctx := context.Background()
-	db, err := OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
 
 	store := NewPostgres(db)
 	listed, err := store.ListCases(ctx, 50)
@@ -39,13 +34,8 @@ func TestPostgresStoreListsAndGetsSeedCases(t *testing.T) {
 }
 
 func TestPostgresStoreListsSeedCaseTimeline(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
+	db, _ := testdb.Open(t)
 	ctx := context.Background()
-	db, err := OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
 
 	store := NewPostgres(db)
 	listed, err := store.ListCases(ctx, 50)
@@ -81,40 +71,21 @@ func TestPostgresStoreListsSeedCaseTimeline(t *testing.T) {
 }
 
 func TestPostgresStoreReturnsNotFoundForMissingCase(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
+	db, _ := testdb.Open(t)
 	ctx := context.Background()
-	db, err := OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
 
-	_, err = NewPostgres(db).GetCase(ctx, 999999)
+	_, err := NewPostgres(db).GetCase(ctx, 999999)
 	if err == nil {
 		t.Fatal("expected missing case error")
 	}
 }
 
 func TestPostgresStoreReturnsNotFoundForMissingCaseTimeline(t *testing.T) {
-	databaseURL := testDatabaseURL(t)
+	db, _ := testdb.Open(t)
 	ctx := context.Background()
-	db, err := OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	defer func() { _ = db.Close() }()
 
-	_, err = NewPostgres(db).ListCaseTimeline(ctx, 999999)
+	_, err := NewPostgres(db).ListCaseTimeline(ctx, 999999)
 	if err == nil {
 		t.Fatal("expected missing case timeline error")
 	}
-}
-
-func testDatabaseURL(t *testing.T) string {
-	t.Helper()
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-	return databaseURL
 }

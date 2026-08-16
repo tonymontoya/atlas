@@ -9,13 +9,13 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
-	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer"
+	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 type writeHarness struct {
@@ -46,22 +46,12 @@ func newWriteHarnessWithAgentScenario(t *testing.T, fakeAgentScenario string) *w
 
 func newWriteHarnessWithOptions(t *testing.T, agentMode string, fakeAgentScenario string) *writeHarness {
 	t.Helper()
-	databaseURL := testDatabaseURL(t)
 	ctx := context.Background()
 
-	issuer, err := devissuer.New("https://atlas-dev-issuer.local", "atlas-api")
-	if err != nil {
-		t.Fatalf("create dev issuer: %v", err)
-	}
-	jwks := httptest.NewServer(issuer.Handler())
-	t.Cleanup(jwks.Close)
-	token, err := issuer.IssueToken("write-operator", "Write Operator", 15*time.Minute)
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
-	}
+	issuer := devissuertest.Start(t)
+	token := issuer.Token(t, "write-operator", "Write Operator")
 
-	db := openTestDB(t, ctx, databaseURL)
-	t.Cleanup(func() { _ = db.Close() })
+	db, databaseURL := testdb.Open(t)
 	cleanupManualAPIRows(t, db)
 	t.Cleanup(func() { cleanupManualAPIRows(t, db) })
 
@@ -70,9 +60,9 @@ func newWriteHarnessWithOptions(t *testing.T, agentMode string, fakeAgentScenari
 		ReadSource:        "postgres",
 		AgentMode:         config.AgentMode(agentMode),
 		FakeAgentScenario: fakeAgentScenario,
-		OIDCIssuer:        "https://atlas-dev-issuer.local",
-		OIDCAudience:      "atlas-api",
-		OIDCJWKSURL:       jwks.URL + "/.well-known/jwks.json",
+		OIDCIssuer:        devissuertest.IssuerURL,
+		OIDCAudience:      devissuertest.Audience,
+		OIDCJWKSURL:       issuer.JWKSURL(),
 	})
 	if err != nil {
 		t.Fatalf("new app: %v", err)
@@ -83,17 +73,7 @@ func newWriteHarnessWithOptions(t *testing.T, agentMode string, fakeAgentScenari
 
 func cleanupManualAPIRows(t *testing.T, db *sql.DB) {
 	t.Helper()
-	ctx := context.Background()
-	statements := []string{
-		`DELETE FROM case_notes WHERE body LIKE 'api-manual-test%'`,
-		`DELETE FROM case_timeline_events WHERE case_id IN (SELECT id FROM cases WHERE title LIKE 'api-manual-test%')`,
-		`DELETE FROM cases WHERE title LIKE 'api-manual-test%'`,
-	}
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("cleanup %q: %v", statement, err)
-		}
-	}
+	testdb.DeleteCases(t, db, "title LIKE 'api-manual-test%'")
 }
 
 func (h *writeHarness) do(t *testing.T, method, path string, body any, withToken bool) *httptest.ResponseRecorder {
@@ -218,23 +198,15 @@ func TestCreateCaseRejectsInvalidBodies(t *testing.T) {
 
 func TestCreateCaseRequiresPostgresWriteSource(t *testing.T) {
 	ctx := context.Background()
-	issuer, err := devissuer.New("https://atlas-dev-issuer.local", "atlas-api")
-	if err != nil {
-		t.Fatalf("create dev issuer: %v", err)
-	}
-	jwks := httptest.NewServer(issuer.Handler())
-	t.Cleanup(jwks.Close)
-	token, err := issuer.IssueToken("op", "Op", 15*time.Minute)
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
-	}
+	issuer := devissuertest.Start(t)
+	token := issuer.Token(t, "op", "Op")
 	application, err := app.NewFromConfig(ctx, config.Config{
 		FakeScenario: "reef-healthy-baremetal",
 		ReadSource:   config.ReadSourceProvider,
 		AgentMode:    config.AgentModeDisabled,
-		OIDCIssuer:   "https://atlas-dev-issuer.local",
-		OIDCAudience: "atlas-api",
-		OIDCJWKSURL:  jwks.URL + "/.well-known/jwks.json",
+		OIDCIssuer:   devissuertest.IssuerURL,
+		OIDCAudience: devissuertest.Audience,
+		OIDCJWKSURL:  issuer.JWKSURL(),
 	})
 	if err != nil {
 		t.Fatalf("new app: %v", err)

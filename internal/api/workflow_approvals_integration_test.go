@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 type approvalRecordPayload struct {
@@ -40,8 +40,7 @@ func attachWorkflowForAPI(t *testing.T, harness *writeHarness) (caseID int64, in
 
 func approvalCountForInstance(t *testing.T, instanceID int64) int {
 	t.Helper()
-	db := openTestDB(t, context.Background(), testDatabaseURL(t))
-	defer func() { _ = db.Close() }()
+	db, _ := testdb.Open(t)
 	rows, err := db.Query(`SELECT id FROM workflow_approvals WHERE workflow_instance_id = $1`, instanceID)
 	if err != nil {
 		t.Fatalf("query approvals: %v", err)

@@ -4,44 +4,25 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 func manualWritesTestDB(t *testing.T) (*PostgresStore, context.Context) {
 	t.Helper()
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-	ctx := context.Background()
-	db, err := OpenPostgres(ctx, databaseURL)
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db, _ := testdb.Open(t)
 
 	cleanupManualWriteRows(t, db)
 	t.Cleanup(func() { cleanupManualWriteRows(t, db) })
-	return NewPostgres(db), ctx
+	return NewPostgres(db), context.Background()
 }
 
 func cleanupManualWriteRows(t *testing.T, db *sql.DB) {
 	t.Helper()
-	ctx := context.Background()
-	statements := []string{
-		`DELETE FROM case_notes WHERE body LIKE 'manual-test%'`,
-		`DELETE FROM case_timeline_events WHERE case_id IN (SELECT id FROM cases WHERE title LIKE 'manual-test%')`,
-		`DELETE FROM cases WHERE title LIKE 'manual-test%'`,
-	}
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("cleanup %q: %v", statement, err)
-		}
-	}
+	testdb.DeleteCases(t, db, "title LIKE 'manual-test%'")
 }
 
 func manualTestActor() Actor {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
 )
 
@@ -19,19 +20,7 @@ func workflowStateTestDB(t *testing.T) (*PostgresStore, context.Context) {
 
 func workflowStateCleanup(t *testing.T, store *PostgresStore) {
 	t.Helper()
-	ctx := context.Background()
-	statements := []string{
-		`DELETE FROM workflow_approvals`,
-		`DELETE FROM workflow_jobs`,
-		`DELETE FROM workflow_instances WHERE definition_id LIKE 'wf-test%'`,
-		`DELETE FROM case_timeline_events WHERE case_id IN (SELECT id FROM cases WHERE title LIKE 'manual-test%')`,
-		`DELETE FROM cases WHERE title LIKE 'manual-test%'`,
-	}
-	for _, statement := range statements {
-		if _, err := store.db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("cleanup %q: %v", statement, err)
-		}
-	}
+	testdb.DeleteCases(t, store.db, "title LIKE 'manual-test%'")
 }
 
 func workflowTestCaseID(t *testing.T, store *PostgresStore, ctx context.Context, status cases.CaseStatus) int64 {

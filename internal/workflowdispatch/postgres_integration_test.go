@@ -5,24 +5,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
 )
-
-func testDatabaseURL(t *testing.T) string {
-	t.Helper()
-	databaseURL := os.Getenv("ATLAS_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("set ATLAS_TEST_DATABASE_URL to run PostgreSQL integration test")
-	}
-	return databaseURL
-}
 
 type dispatchDB struct {
 	*store.PostgresStore
@@ -32,11 +23,7 @@ type dispatchDB struct {
 func dispatchTestDB(t *testing.T) (dispatchDB, context.Context) {
 	t.Helper()
 	ctx := context.Background()
-	db, err := store.OpenPostgres(ctx, testDatabaseURL(t))
-	if err != nil {
-		t.Fatalf("open postgres: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db, _ := testdb.Open(t)
 	postgresStore := dispatchDB{PostgresStore: store.NewPostgres(db), db: db}
 	dispatchCleanup(t, postgresStore.db)
 	t.Cleanup(func() { dispatchCleanup(t, postgresStore.db) })
@@ -45,20 +32,7 @@ func dispatchTestDB(t *testing.T) (dispatchDB, context.Context) {
 
 func dispatchCleanup(t *testing.T, db *sql.DB) {
 	t.Helper()
-	ctx := context.Background()
-	statements := []string{
-		`DELETE FROM workflow_task_completions`,
-		`DELETE FROM workflow_approvals`,
-		`DELETE FROM workflow_jobs`,
-		`DELETE FROM workflow_instances`,
-		`DELETE FROM case_timeline_events WHERE case_id IN (SELECT id FROM cases WHERE title LIKE 'dispatch-test%')`,
-		`DELETE FROM cases WHERE title LIKE 'dispatch-test%'`,
-	}
-	for _, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("cleanup %q: %v", statement, err)
-		}
-	}
+	testdb.DeleteCases(t, db, "title LIKE 'dispatch-test%'")
 }
 
 // attachAndApprove drives the store through attach, gate parking, and

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -12,8 +11,9 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
-	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer"
+	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 type attachWorkflowResponse struct {
@@ -34,8 +34,7 @@ func workflowJobsForInstance(t *testing.T, instanceID int64) []struct {
 	MaxAttempts int
 } {
 	t.Helper()
-	db := openTestDB(t, context.Background(), testDatabaseURL(t))
-	t.Cleanup(func() { _ = db.Close() })
+	db, _ := testdb.Open(t)
 	rows, err := db.Query(`
 		SELECT position, step_id, state, attempt, max_attempts
 		FROM workflow_jobs
@@ -243,23 +242,15 @@ func TestAttachWorkflowRequiresPostgresWriteSource(t *testing.T) {
 
 func newFakeWriteHarness(t *testing.T) *writeHarness {
 	t.Helper()
-	issuer, err := devissuer.New("https://atlas-dev-issuer.local", "atlas-api")
-	if err != nil {
-		t.Fatalf("create dev issuer: %v", err)
-	}
-	jwks := httptest.NewServer(issuer.Handler())
-	t.Cleanup(jwks.Close)
-	token, err := issuer.IssueToken("op", "Op", 15*time.Minute)
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
-	}
+	issuer := devissuertest.Start(t)
+	token := issuer.Token(t, "op", "Op")
 	application, err := app.NewFromConfig(context.Background(), config.Config{
 		FakeScenario: "reef-healthy-baremetal",
 		ReadSource:   config.ReadSourceProvider,
 		AgentMode:    config.AgentModeDisabled,
-		OIDCIssuer:   "https://atlas-dev-issuer.local",
-		OIDCAudience: "atlas-api",
-		OIDCJWKSURL:  jwks.URL + "/.well-known/jwks.json",
+		OIDCIssuer:   devissuertest.IssuerURL,
+		OIDCAudience: devissuertest.Audience,
+		OIDCJWKSURL:  issuer.JWKSURL(),
 	})
 	if err != nil {
 		t.Fatalf("new app: %v", err)
