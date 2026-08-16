@@ -18,6 +18,11 @@ What exists today:
   writes, and Workflow attach/approve/resume forms
 - PostgreSQL persistence with plain SQL migrations
 - Fake-provider inventory fixtures and an inventory sync command
+- A read-only real Ceph provider: `ATLAS_PROVIDER_MODE=ceph` points the
+  inventory sync command at a live Ceph Dashboard REST API with a dedicated
+  read-only user (ADR-0023). Explicit opt-in; local development and tests
+  never require a real cluster (the provider is tested against an in-process
+  fake Dashboard)
 - Fake-provider alert evaluation that automatically creates a Case (with
   Timeline Events and deduplication) from a firing alert
 - Seeded read-only Case and Case Timeline records
@@ -31,8 +36,9 @@ What exists today:
 
 What does not exist yet:
 
-- Real Ceph or Rook providers (the only provider is the fake provider; alert
-  detection reads fake Prometheus fixtures, not a live Prometheus)
+- Rook providers, a real alert source (alert detection reads fake Prometheus
+  fixtures, not a live Prometheus), and pointing the API read source at a live
+  cluster
 - A real Atlas Agent or any mutating operation against Ceph (the fake Agent
   adapter only simulates Job execution)
 - RBAC, policy, and Audit Events (any authenticated operator can approve
@@ -49,7 +55,10 @@ The MVP is single-zone and aims to prove the core Atlas loop:
 4. execute one tightly scoped workflow through an Atlas Agent
 5. surface attention, assignments, approvals, and maintenance in the UI
 
-Near-term work moves from the fake provider to read-only real Ceph and Rook providers. Federated global control-plane behavior remains a design goal, not an MVP requirement.
+Near-term work moves from the fake provider toward Rook providers and a real
+alert source; the read-only real Ceph provider landed in the v0.6.0 line.
+Federated global control-plane behavior remains a design goal, not an MVP
+requirement.
 
 ## Versioning
 
@@ -153,6 +162,38 @@ Stop the full stack with:
 ```sh
 make dev-stack-down
 ```
+
+### Point inventory sync at a real Ceph cluster
+
+The read-only real Ceph provider (ADR-0023) syncs inventory from a live
+Ceph Dashboard REST API. It is explicit opt-in: the default local paths and
+the dev stack never use it, and no credentials are required anywhere else.
+
+Prerequisites on the Ceph side:
+
+- Ceph 18 (Reef) with the Dashboard mgr module enabled and reachable
+- a dedicated Dashboard user with a read-only role (for example
+  `atlas-reader`)
+
+Then run one sync with:
+
+```sh
+ATLAS_PROVIDER_MODE=ceph \
+ATLAS_CEPH_DASHBOARD_URL=https://mon.example.invalid:8443 \
+ATLAS_CEPH_DASHBOARD_USER=atlas-reader \
+ATLAS_CEPH_DASHBOARD_PASSWORD='…' \
+ATLAS_CEPH_CLUSTER_NAME=reef-lab \
+go run ./cmd/atlas-inventory-sync
+```
+
+`ATLAS_CEPH_CLUSTER_NAME` is optional (defaults to `ceph`) because the
+Dashboard API does not expose a cluster name. For lab clusters with
+self-signed certificates, set `ATLAS_CEPH_DASHBOARD_INSECURE_TLS=true`.
+
+Scope notes: this path is read-only and writes one observation batch per
+run through the same persistence as the fake provider; alert evaluation
+still reads the fake Prometheus fixtures, and the API read source
+(`ATLAS_READ_SOURCE`) still serves from the fake provider or PostgreSQL.
 
 ## Contributing
 

@@ -37,6 +37,12 @@ The current implementation supports:
   authenticated manual Case write endpoints (create, transition, assign,
   note) verified through OIDC bearer tokens (ADR-0016).
 - A fake inventory sync command that writes one observation batch to PostgreSQL.
+- A read-only real Ceph provider over the Ceph Dashboard REST API (ADR-0023):
+  `ATLAS_PROVIDER_MODE=ceph` points inventory sync at a live Dashboard with a
+  dedicated read-only user. Explicit opt-in only — no default local path uses
+  credentials or real clusters. Tests run against an in-process fake Dashboard
+  (`internal/providers/ceph/dashtest`), never real Ceph. Alert evaluation and
+  the API read source (`ATLAS_READ_SOURCE`) still use fake/postgres sources.
 - Fake alert evaluation that creates and deduplicates Cases from alerts.
 - Seeded read-only case records in PostgreSQL.
 - Seeded read-only Case Timeline records in PostgreSQL.

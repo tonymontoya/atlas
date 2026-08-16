@@ -297,7 +297,16 @@ Suggested local environment names:
 - `ATLAS_KUBECONFIG`
 - `ATLAS_AGENT_MUTATION_ENABLED`
 
-These names are suggestions for future implementation, not current code.
+These names are suggestions for future implementation, not current code —
+except the read-only Ceph path implemented in the v0.6.0 line (ADR-0023):
+`ATLAS_PROVIDER_MODE=ceph` selects the bare-metal Dashboard provider for the
+inventory sync command, configured through `ATLAS_CEPH_DASHBOARD_URL`,
+`ATLAS_CEPH_DASHBOARD_USER`, `ATLAS_CEPH_DASHBOARD_PASSWORD`, optional
+`ATLAS_CEPH_CLUSTER_NAME`, and optional
+`ATLAS_CEPH_DASHBOARD_INSECURE_TLS`. This path is an explicit opt-in: the
+default remains `fake`, no ordinary local development or test path reads
+these variables, and selecting `ceph` without a complete configuration
+fails fast.
 
 ---
 

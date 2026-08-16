@@ -118,6 +118,11 @@ Should include:
   completion, retry past scripted transient Job failures, terminal
   succeeded/failed states, and restart re-dispatch under the original
   idempotency key
+- ceph-mode inventory sync (v0.6.0 line): one `RunOnce` batch from the
+  bare-metal Dashboard provider against the in-process fake Dashboard
+  (`dashtest`), persisted through the same observation/run path as the
+  fake provider, including the provider-error failure record — covered;
+  real-cluster sync stays manual Tier 5 validation
 
 Should require:
 
@@ -148,7 +153,9 @@ Ensure all provider implementations obey the same Atlas-facing contracts.
 
 Should include:
 
-- `CephReadProvider` contract tests
+- `CephReadProvider` contract tests (covered: the fake provider and the
+  bare-metal Dashboard provider both run the shared suite; the Dashboard
+  provider skips the `Partial` scenario per ADR-0023)
 - `CephSafetyProvider` read-only decision contract tests
 - `RookDeploymentProvider` contract tests
 - `AgentEvidenceProvider` fake/read-only contract tests
@@ -316,6 +323,9 @@ MVP tests should cover:
 - append-only audit table behavior once audit exists
 - durable workflow state persistence (instance and Job state machines,
   approvals, task completions — covered since v0.5.0)
+- provider-scoped check constraints keep the fake and ceph sync-run and
+  observation rows honest (migration 000010 — covered since the v0.6.0
+  line)
 
 Do not introduce Redis or NATS test dependencies until code paths require them.
 

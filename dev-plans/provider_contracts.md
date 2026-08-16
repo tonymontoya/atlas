@@ -2,8 +2,9 @@
 **Version:** 0.1 (Draft)  
 **Status:** Design with partial implementation — the CephReadProvider read
 surface (§10) and the ObservabilityProvider `CurrentAlerts` method (§11) are
-implemented against the fake provider with shared contract suites; remaining
-methods and real-Ceph/Rook/Prometheus implementations are unimplemented.  
+implemented against the fake provider and the bare-metal Ceph Dashboard
+provider (ADR-0023, `internal/providers/ceph`) with shared contract suites;
+remaining methods and Rook/Prometheus implementations are unimplemented.  
 **Audience:** Engineering, Architecture, Product, Contributors  
 **Project:** Atlas
 
@@ -192,7 +193,10 @@ Provider methods should normalize failures into a small set of error classes.
 Note on `Partial`: the Atlas read model currently represents `Partial` as an
 error with no partial payload; the provider aborts the collection rather than
 returning partial data. A partial-result shape (data plus error) may be
-introduced when a consumer needs it.
+introduced when a consumer needs it. The bare-metal Dashboard provider cannot
+produce `Partial` from real HTTP semantics (ADR-0023); the shared contract
+suite lets a provider's scenario factory return nil to skip that scenario,
+and the Dashboard provider does so.
 
 ---
 
