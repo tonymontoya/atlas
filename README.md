@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/atlas-logo.png" alt="Atlas logo" width="192">
+</p>
+
 # Atlas
 
 Atlas is an open-source operations platform for Ceph. It focuses on how organizations operate Ceph fleets: cases, workflows, policy, audit, RBAC, inventory, and safe automation.
