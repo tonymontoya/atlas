@@ -25,6 +25,9 @@ type ReadProvider interface {
 	providers.CephReadProvider
 }
 
+// Return nil for a scenario the implementation cannot produce (for example
+// Partial over an HTTP transport that never yields partial payloads); the
+// suite skips that scenario.
 type ReadProviderFactory func(t *testing.T, scenario Scenario) ReadProvider
 
 func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
@@ -191,7 +194,12 @@ func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 			})
 			for _, s := range errorScenarios {
 				t.Run(string(s.scenario), func(t *testing.T) {
-					err := method.call(context.Background(), factory(t, s.scenario))
+					p := factory(t, s.scenario)
+					if p == nil {
+						t.Logf("provider does not produce scenario %q; skipping", s.scenario)
+						return
+					}
+					err := method.call(context.Background(), p)
 					assertErrorClass(t, err, s.class)
 				})
 			}
