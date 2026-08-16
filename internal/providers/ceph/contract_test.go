@@ -3,6 +3,7 @@ package ceph
 import (
 	"testing"
 
+	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/contracttest"
 )
 
@@ -11,18 +12,27 @@ func TestCephReadProviderContract(t *testing.T) {
 }
 
 func scenarioFactory(t *testing.T, scenario contracttest.Scenario) contracttest.ReadProvider {
+	var mode dashtest.Mode
 	switch scenario {
 	case contracttest.ScenarioSuccess:
-		return newFakeDashboard(t, modeSuccess).provider(t)
+		mode = dashtest.ModeSuccess
 	case contracttest.ScenarioUnavailable:
-		return newFakeDashboard(t, modeUnavailable).provider(t)
+		mode = dashtest.ModeUnavailable
 	case contracttest.ScenarioUnauthorized:
-		return newFakeDashboard(t, modeUnauthorized).provider(t)
+		mode = dashtest.ModeUnauthorized
 	case contracttest.ScenarioMalformed:
-		return newFakeDashboard(t, modeMalformed).provider(t)
+		mode = dashtest.ModeMalformed
 	case contracttest.ScenarioPartial:
 		return nil
 	}
-	t.Fatalf("unhandled scenario %q", scenario)
-	return nil
+	dashboard := dashtest.New(t, mode)
+	provider, err := New(Config{
+		BaseURL:  dashboard.URL(),
+		Username: dashtest.Username,
+		Password: dashtest.Password,
+	})
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+	return provider
 }

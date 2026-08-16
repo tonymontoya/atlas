@@ -7,283 +7,39 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 )
 
-const (
-	testFSID     = "00000000-0000-4000-8000-000000000201"
-	testVersion  = "18.2.4"
-	testUsername = "atlas-reader"
-	testPassword = "atlas-reader-password"
-	testToken    = "dashboard-test-token"
-
-	hostA = "host-a.example.invalid"
-	hostB = "host-b.example.invalid"
-)
-
-type fakeMode string
-
-const (
-	modeSuccess      fakeMode = "success"
-	modeUnavailable  fakeMode = "unavailable"
-	modeUnauthorized fakeMode = "unauthorized"
-	modeMalformed    fakeMode = "malformed"
-)
-
-type fakeDashboard struct {
-	t       *testing.T
-	mode    fakeMode
-	server  *httptest.Server
-	mu      sync.Mutex
-	logins  int
-	osdReqs []string
-}
-
-func newFakeDashboard(t *testing.T, mode fakeMode) *fakeDashboard {
-	fake := &fakeDashboard{t: t, mode: mode}
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/auth", fake.handleAuth)
-	mux.HandleFunc("GET /api/health/get_cluster_fsid", fake.requireToken(fake.serveString(testFSID)))
-	mux.HandleFunc("GET /api/summary", fake.requireToken(fake.handleSummary))
-	mux.HandleFunc("GET /api/health/full", fake.requireToken(fake.handleHealthFull))
-	mux.HandleFunc("GET /api/osd", fake.requireToken(fake.handleOSDs))
-	mux.HandleFunc("GET /api/host", fake.requireToken(fake.handleHosts))
-	mux.HandleFunc("GET /api/daemon", fake.requireToken(fake.handleDaemons))
-	mux.HandleFunc("GET /api/pool", fake.requireToken(fake.handlePools))
-	mux.HandleFunc("GET /api/host/", fake.requireToken(fake.handleHostItem))
-	fake.server = httptest.NewServer(mux)
-	t.Cleanup(fake.server.Close)
-	return fake
-}
-
-func (f *fakeDashboard) provider(t *testing.T) *Provider {
+func newTestProvider(t *testing.T, mode dashtest.Mode) (*Provider, *dashtest.Dashboard) {
 	t.Helper()
+	dashboard := dashtest.New(t, mode)
 	provider, err := New(Config{
-		BaseURL:  f.server.URL,
-		Username: testUsername,
-		Password: testPassword,
+		BaseURL:  dashboard.URL(),
+		Username: dashtest.Username,
+		Password: dashtest.Password,
 	})
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
-	return provider
-}
-
-func (f *fakeDashboard) handleAuth(w http.ResponseWriter, r *http.Request) {
-	f.mu.Lock()
-	f.logins++
-	f.mu.Unlock()
-	switch f.mode {
-	case modeUnavailable:
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
-	case modeUnauthorized:
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
-	default:
-		writeJSON(w, http.StatusCreated, loginResponse{Token: testToken})
-	}
-}
-
-func (f *fakeDashboard) requireToken(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+testToken {
-			http.Error(w, "unauthenticated", http.StatusUnauthorized)
-			return
-		}
-		switch f.mode {
-		case modeUnavailable:
-			http.Error(w, "unavailable", http.StatusServiceUnavailable)
-		case modeMalformed:
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"not json`)
-		default:
-			next(w, r)
-		}
-	}
-}
-
-func (f *fakeDashboard) serveString(body string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, body)
-	}
-}
-
-func (f *fakeDashboard) handleSummary(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"version":         testVersion,
-		"health_status":   "HEALTH_OK",
-		"mgr_id":          "x",
-		"executing_tasks": []any{},
-	})
-}
-
-func (f *fakeDashboard) handleHealthFull(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"health": map[string]any{
-			"status":  "HEALTH_OK",
-			"summary": []any{},
-			"checks": []any{
-				map[string]any{
-					"type":     "OSD_DOWN",
-					"severity": "HEALTH_WARN",
-					"summary":  "1 osd down",
-				},
-			},
-		},
-	})
-}
-
-type fakeOSD struct {
-	ID   int `json:"id"`
-	Up   int `json:"up"`
-	In   int `json:"in"`
-	Host struct {
-		Name string `json:"name"`
-	} `json:"host"`
-}
-
-func (f *fakeDashboard) osds() []fakeOSD {
-	return []fakeOSD{
-		{ID: 0, Up: 1, In: 1, Host: hostNode(hostA)},
-		{ID: 1, Up: 1, In: 1, Host: hostNode(hostB)},
-		{ID: 2, Up: 0, In: 1, Host: hostNode(hostB)},
-	}
-}
-
-func hostNode(name string) struct {
-	Name string `json:"name"`
-} {
-	return struct {
-		Name string `json:"name"`
-	}{Name: name}
-}
-
-func (f *fakeDashboard) handleOSDs(w http.ResponseWriter, r *http.Request) {
-	f.mu.Lock()
-	f.osdReqs = append(f.osdReqs, r.URL.Query().Get("offset")+"/"+r.URL.Query().Get("limit"))
-	f.mu.Unlock()
-	osds := f.osds()
-	items := make([]any, 0, len(osds))
-	for _, osd := range osds {
-		items = append(items, osd)
-	}
-	paginate(w, r, items)
-}
-
-func (f *fakeDashboard) handleHosts(w http.ResponseWriter, r *http.Request) {
-	paginate(w, r, []any{
-		map[string]any{"hostname": hostA, "addr": "10.10.0.11", "labels": []any{}, "ceph_version": testVersion},
-		map[string]any{"hostname": hostB, "addr": "10.10.0.12", "labels": []any{}, "ceph_version": testVersion},
-	})
-}
-
-func (f *fakeDashboard) handleHostItem(w http.ResponseWriter, r *http.Request) {
-	rest := r.URL.Path[len("/api/host/"):]
-	host, subpath, _ := strings.Cut(rest, "/")
-	switch host {
-	case hostA, hostB:
-	default:
-		http.Error(w, "host not found", http.StatusNotFound)
-		return
-	}
-	if subpath == "inventory" {
-		f.handleHostInventory(w, r, host)
-		return
-	}
-	if subpath != "" {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"hostname": host, "labels": []any{}})
-}
-
-func (f *fakeDashboard) handleHostInventory(w http.ResponseWriter, r *http.Request, host string) {
-	devices := []any{}
-	switch host {
-	case hostA:
-		devices = append(devices, map[string]any{
-			"path":                "/dev/nvme0n1",
-			"device_id":           "nvme-serial-a1",
-			"human_readable_type": "ssd",
-			"available":           false,
-			"osd_ids":             []int{0},
-		})
-	case hostB:
-		devices = append(devices,
-			map[string]any{
-				"path":                "/dev/sda",
-				"device_id":           "ata-serial-b1",
-				"human_readable_type": "hdd",
-				"osd_ids":             []int{},
-				"lvs": []any{
-					map[string]any{"name": "osd-block-1", "osd_id": "1"},
-				},
-			},
-			map[string]any{
-				"path":                "/dev/sdb",
-				"device_id":           "ata-serial-b2",
-				"human_readable_type": "hdd",
-				"available":           true,
-			},
-		)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"name": host, "devices": devices})
-}
-
-func (f *fakeDashboard) handleDaemons(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []any{
-		map[string]any{"daemon_type": "mon", "daemon_id": "a", "daemon_name": "mon.a", "hostname": hostA, "status": 1, "version": testVersion},
-		map[string]any{"daemon_type": "mon", "daemon_id": "b", "daemon_name": "mon.b", "hostname": hostB, "status": 1, "version": testVersion},
-		map[string]any{"daemon_type": "mgr", "daemon_id": "a", "daemon_name": "mgr.a", "hostname": hostA, "status": 2, "version": testVersion},
-		map[string]any{"daemon_type": "osd", "daemon_id": "0", "daemon_name": "osd.0", "hostname": hostA, "status": 1, "version": testVersion},
-		map[string]any{"daemon_type": "osd", "daemon_id": "1", "daemon_name": "osd.1", "hostname": hostB, "status": 0, "version": testVersion},
-	})
-}
-
-func (f *fakeDashboard) handlePools(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, []any{
-		map[string]any{"pool": 1, "pool_name": "device_health_metrics", "type": "replicated", "size": 3, "min_size": 2},
-		map[string]any{"pool": 2, "pool_name": ".mgr", "type": "replicated", "size": 3, "min_size": 2},
-	})
-}
-
-func paginate(w http.ResponseWriter, r *http.Request, items []any) {
-	query := r.URL.Query()
-	offset, _ := strconv.Atoi(query.Get("offset"))
-	limit, _ := strconv.Atoi(query.Get("limit"))
-	if offset < 0 || offset > len(items) {
-		offset = len(items)
-	}
-	end := len(items)
-	if limit > 0 && offset+limit < end {
-		end = offset + limit
-	}
-	w.Header().Set("X-Total-Count", strconv.Itoa(len(items)))
-	writeJSON(w, http.StatusOK, items[offset:end])
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+	return provider, dashboard
 }
 
 func TestClusterIdentity(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	identity, err := fake.provider(t).ClusterIdentity(context.Background())
+	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
+	identity, err := provider.ClusterIdentity(context.Background())
 	if err != nil {
 		t.Fatalf("ClusterIdentity returned error: %v", err)
 	}
-	if identity.FSID != testFSID {
-		t.Errorf("FSID = %q, want %q", identity.FSID, testFSID)
+	if identity.FSID != dashtest.FSID {
+		t.Errorf("FSID = %q, want %q", identity.FSID, dashtest.FSID)
 	}
-	if identity.CephVersion != testVersion {
-		t.Errorf("CephVersion = %q, want %q", identity.CephVersion, testVersion)
+	if identity.CephVersion != dashtest.CephVersion {
+		t.Errorf("CephVersion = %q, want %q", identity.CephVersion, dashtest.CephVersion)
 	}
 	if identity.Name != defaultName {
 		t.Errorf("Name = %q, want default %q", identity.Name, defaultName)
@@ -294,11 +50,11 @@ func TestClusterIdentity(t *testing.T) {
 }
 
 func TestClusterIdentityConfiguredName(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
+	dashboard := dashtest.New(t, dashtest.ModeSuccess)
 	provider, err := New(Config{
-		BaseURL:     fake.server.URL,
-		Username:    testUsername,
-		Password:    testPassword,
+		BaseURL:     dashboard.URL(),
+		Username:    dashtest.Username,
+		Password:    dashtest.Password,
 		ClusterName: "reef-lab",
 	})
 	if err != nil {
@@ -314,8 +70,8 @@ func TestClusterIdentityConfiguredName(t *testing.T) {
 }
 
 func TestHealthNormalizesChecksAndSummary(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	health, err := fake.provider(t).Health(context.Background())
+	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
+	health, err := provider.Health(context.Background())
 	if err != nil {
 		t.Fatalf("Health returned error: %v", err)
 	}
@@ -328,8 +84,8 @@ func TestHealthNormalizesChecksAndSummary(t *testing.T) {
 }
 
 func TestOSDsNormalizesIntFlagsAndCrushHost(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	osds, err := fake.provider(t).OSDs(context.Background())
+	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
+	osds, err := provider.OSDs(context.Background())
 	if err != nil {
 		t.Fatalf("OSDs returned error: %v", err)
 	}
@@ -339,14 +95,13 @@ func TestOSDsNormalizesIntFlagsAndCrushHost(t *testing.T) {
 	if osds[2].Up || !osds[2].In {
 		t.Errorf("osd 2 flags = up %v in %v, want down and in", osds[2].Up, osds[2].In)
 	}
-	if osds[0].Host != hostA {
-		t.Errorf("osd 0 host = %q, want %q", osds[0].Host, hostA)
+	if osds[0].Host != dashtest.HostA {
+		t.Errorf("osd 0 host = %q, want %q", osds[0].Host, dashtest.HostA)
 	}
 }
 
 func TestOSDPagination(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	provider := fake.provider(t)
+	provider, dashboard := newTestProvider(t, dashtest.ModeSuccess)
 	provider.pageSize = 2
 	osds, err := provider.OSDs(context.Background())
 	if err != nil {
@@ -355,37 +110,35 @@ func TestOSDPagination(t *testing.T) {
 	if len(osds) != 3 {
 		t.Fatalf("len(OSDs) = %d, want 3 across pages", len(osds))
 	}
-	fake.mu.Lock()
-	defer fake.mu.Unlock()
-	if len(fake.osdReqs) != 2 {
-		t.Fatalf("osd requests = %v, want two pages", fake.osdReqs)
+	requests := dashboard.OSDRequests()
+	if len(requests) != 2 {
+		t.Fatalf("osd requests = %v, want two pages", requests)
 	}
-	if fake.osdReqs[0] != "0/2" || fake.osdReqs[1] != "2/2" {
-		t.Errorf("osd request offsets = %v, want [0/2 2/2]", fake.osdReqs)
+	if requests[0] != "0/2" || requests[1] != "2/2" {
+		t.Errorf("osd request offsets = %v, want [0/2 2/2]", requests)
 	}
 }
 
 func TestHosts(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	hosts, err := fake.provider(t).Hosts(context.Background())
+	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
+	hosts, err := provider.Hosts(context.Background())
 	if err != nil {
 		t.Fatalf("Hosts returned error: %v", err)
 	}
 	if len(hosts) != 2 {
 		t.Fatalf("len(Hosts) = %d, want 2", len(hosts))
 	}
-	if hosts[0].Name != hostA || hosts[0].Address != "10.10.0.11" {
-		t.Errorf("hosts[0] = %+v, want %s at 10.10.0.11", hosts[0], hostA)
+	if hosts[0].Name != dashtest.HostA || hosts[0].Address != "10.10.0.11" {
+		t.Errorf("hosts[0] = %+v, want %s at 10.10.0.11", hosts[0], dashtest.HostA)
 	}
 }
 
 func TestHostDevicesNormalizesIdentityAndOSDs(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	provider := fake.provider(t)
+	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
 
-	devicesA, err := provider.HostDevices(context.Background(), hostA)
+	devicesA, err := provider.HostDevices(context.Background(), dashtest.HostA)
 	if err != nil {
-		t.Fatalf("HostDevices(%s) returned error: %v", hostA, err)
+		t.Fatalf("HostDevices(%s) returned error: %v", dashtest.HostA, err)
 	}
 	if len(devicesA) != 1 {
 		t.Fatalf("len(devicesA) = %d, want 1", len(devicesA))
@@ -394,9 +147,9 @@ func TestHostDevicesNormalizesIdentityAndOSDs(t *testing.T) {
 		t.Errorf("devicesA[0] = %+v, want nvme-serial-a1 with osd id 0", devicesA[0])
 	}
 
-	devicesB, err := provider.HostDevices(context.Background(), hostB)
+	devicesB, err := provider.HostDevices(context.Background(), dashtest.HostB)
 	if err != nil {
-		t.Fatalf("HostDevices(%s) returned error: %v", hostB, err)
+		t.Fatalf("HostDevices(%s) returned error: %v", dashtest.HostB, err)
 	}
 	if len(devicesB) != 2 {
 		t.Fatalf("len(devicesB) = %d, want 2", len(devicesB))
@@ -410,14 +163,14 @@ func TestHostDevicesNormalizesIdentityAndOSDs(t *testing.T) {
 }
 
 func TestHostDevicesUnknownHostIsNotFound(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	_, err := fake.provider(t).HostDevices(context.Background(), "host-device-probe.example.invalid")
+	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
+	_, err := provider.HostDevices(context.Background(), "host-device-probe.example.invalid")
 	assertProviderErrorClass(t, err, providers.ErrorNotFound)
 }
 
 func TestDaemonsNormalizesStatusEnum(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	daemons, err := fake.provider(t).Daemons(context.Background())
+	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
+	daemons, err := provider.Daemons(context.Background())
 	if err != nil {
 		t.Fatalf("Daemons returned error: %v", err)
 	}
@@ -437,8 +190,8 @@ func TestDaemonsNormalizesStatusEnum(t *testing.T) {
 }
 
 func TestPools(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	pools, err := fake.provider(t).Pools(context.Background())
+	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
+	pools, err := provider.Pools(context.Background())
 	if err != nil {
 		t.Fatalf("Pools returned error: %v", err)
 	}
@@ -454,10 +207,10 @@ func TestPools(t *testing.T) {
 }
 
 func TestUnavailableWhenServerIsDown(t *testing.T) {
-	fake := newFakeDashboard(t, modeSuccess)
-	url := fake.server.URL
-	fake.server.Close()
-	provider, err := New(Config{BaseURL: url, Username: testUsername, Password: testPassword})
+	dashboard := dashtest.New(t, dashtest.ModeSuccess)
+	url := dashboard.URL()
+	dashboard.Close()
+	provider, err := New(Config{BaseURL: url, Username: dashtest.Username, Password: dashtest.Password})
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -486,7 +239,7 @@ func TestReauthOnExpiredToken(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider, err := New(Config{BaseURL: server.URL, Username: testUsername, Password: testPassword})
+	provider, err := New(Config{BaseURL: server.URL, Username: dashtest.Username, Password: dashtest.Password})
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -498,6 +251,12 @@ func TestReauthOnExpiredToken(t *testing.T) {
 	if logins != 2 {
 		t.Errorf("logins = %d, want 2 (initial plus one re-auth)", logins)
 	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 func TestConfigValidation(t *testing.T) {
