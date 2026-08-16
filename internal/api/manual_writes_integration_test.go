@@ -25,7 +25,7 @@ type writeHarness struct {
 
 func newWriteHarness(t *testing.T) *writeHarness {
 	t.Helper()
-	return newWriteHarnessWithAgentMode(t, "")
+	return newWriteHarnessWithAgentMode(t, "disabled")
 }
 
 // newWriteHarnessWithAgentMode builds the PostgreSQL write harness with
@@ -68,7 +68,7 @@ func newWriteHarnessWithOptions(t *testing.T, agentMode string, fakeAgentScenari
 	application, err := app.NewFromConfig(ctx, config.Config{
 		DatabaseURL:       databaseURL,
 		ReadSource:        "postgres",
-		AgentMode:         agentMode,
+		AgentMode:         config.AgentMode(agentMode),
 		FakeAgentScenario: fakeAgentScenario,
 		OIDCIssuer:        "https://atlas-dev-issuer.local",
 		OIDCAudience:      "atlas-api",
@@ -230,6 +230,8 @@ func TestCreateCaseRequiresPostgresWriteSource(t *testing.T) {
 	}
 	application, err := app.NewFromConfig(ctx, config.Config{
 		FakeScenario: "reef-healthy-baremetal",
+		ReadSource:   config.ReadSourceProvider,
+		AgentMode:    config.AgentModeDisabled,
 		OIDCIssuer:   "https://atlas-dev-issuer.local",
 		OIDCAudience: "atlas-api",
 		OIDCJWKSURL:  jwks.URL + "/.well-known/jwks.json",

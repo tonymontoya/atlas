@@ -40,6 +40,7 @@ func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
 	application, err := app.NewFromConfig(ctx, config.Config{
 		DatabaseURL: databaseURL,
 		ReadSource:  "postgres",
+		AgentMode:   config.AgentModeDisabled,
 	})
 	if err != nil {
 		t.Fatalf("new app: %v", err)
@@ -95,6 +96,7 @@ func TestPostgresReadSourceReturnsNotFoundForEmptyReadModel(t *testing.T) {
 	application, err := app.NewFromConfig(ctx, config.Config{
 		DatabaseURL: databaseURL,
 		ReadSource:  "postgres",
+		AgentMode:   config.AgentModeDisabled,
 	})
 	if err != nil {
 		t.Fatalf("new app: %v", err)
@@ -344,6 +346,7 @@ func newPostgresServer(t *testing.T, ctx context.Context, databaseURL string) *S
 	application, err := app.NewFromConfig(ctx, config.Config{
 		DatabaseURL: databaseURL,
 		ReadSource:  "postgres",
+		AgentMode:   config.AgentModeDisabled,
 	})
 	if err != nil {
 		t.Fatalf("new app: %v", err)

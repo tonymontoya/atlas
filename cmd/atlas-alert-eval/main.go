@@ -11,13 +11,11 @@ import (
 
 func main() {
 	ctx := context.Background()
-	cfg := config.Load()
-	switch cfg.ProviderMode {
-	case "fake", "ceph":
-	default:
-		log.Fatalf("unsupported ATLAS_PROVIDER_MODE %q (supported: fake, ceph)", cfg.ProviderMode)
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
 	}
-	if cfg.ProviderMode == "ceph" {
+	if cfg.ProviderMode == config.ProviderModeCeph {
 		log.Printf("ATLAS_PROVIDER_MODE=ceph: alert evaluation still reads the fake Prometheus fixtures; a real alert source is not implemented yet")
 	}
 

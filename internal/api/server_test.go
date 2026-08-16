@@ -48,6 +48,8 @@ func TestClusterEndpointUsesFakeProvider(t *testing.T) {
 func TestClusterEndpointDefaultsToFakeProviderThroughConfig(t *testing.T) {
 	application, err := app.NewFromConfig(t.Context(), config.Config{
 		FakeScenario: "reef-healthy-baremetal",
+		ReadSource:   config.ReadSourceProvider,
+		AgentMode:    config.AgentModeDisabled,
 	})
 	if err != nil {
 		t.Fatalf("NewFromConfig returned error: %v", err)

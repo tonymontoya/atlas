@@ -194,6 +194,12 @@ go run ./cmd/atlas-inventory-sync
 Dashboard API does not expose a cluster name. For lab clusters with
 self-signed certificates, set `ATLAS_CEPH_DASHBOARD_INSECURE_TLS=true`.
 
+Atlas validates its environment at startup and fails fast: every problem
+is reported in one error naming the offending `ATLAS_*` variables.
+`ATLAS_PROVIDER_MODE=ceph` requires the Dashboard URL to be an absolute
+URL with a scheme plus the read-only credentials, in every command —
+including `atlas-alert-eval`, whose alert source is still fake.
+
 Scope notes: this path is read-only and writes one observation batch per
 run through the same persistence as the fake provider; alert evaluation
 still reads the fake Prometheus fixtures, and the API read source

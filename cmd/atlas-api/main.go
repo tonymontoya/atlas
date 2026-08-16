@@ -11,7 +11,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
 	application, err := app.NewFromConfig(context.Background(), cfg)
 	if err != nil {
 		log.Fatal(err)

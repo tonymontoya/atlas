@@ -255,6 +255,8 @@ func newFakeWriteHarness(t *testing.T) *writeHarness {
 	}
 	application, err := app.NewFromConfig(context.Background(), config.Config{
 		FakeScenario: "reef-healthy-baremetal",
+		ReadSource:   config.ReadSourceProvider,
+		AgentMode:    config.AgentModeDisabled,
 		OIDCIssuer:   "https://atlas-dev-issuer.local",
 		OIDCAudience: "atlas-api",
 		OIDCJWKSURL:  jwks.URL + "/.well-known/jwks.json",

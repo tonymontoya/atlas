@@ -75,17 +75,22 @@ func New(cfg config.Config) *App {
 }
 
 func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
-	if err := validateAgentMode(cfg.AgentMode); err != nil {
-		return nil, err
+	// config.Load performs the environment-facing validation. The
+	// switches below keep their default arms as backstops for direct
+	// construction in tests; canonical values never reach them.
+	switch cfg.AgentMode {
+	case config.AgentModeDisabled, config.AgentModeFake:
+	default:
+		return nil, fmt.Errorf("unsupported agent mode %q", cfg.AgentMode)
 	}
 	verifier, err := verifierFromConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 	switch cfg.ReadSource {
-	case "", "provider":
+	case config.ReadSourceProvider:
 		return &App{Config: cfg, CephProvider: fake.New(fake.DefaultFixtureRoot(), cfg.FakeScenario), Verifier: verifier}, nil
-	case "postgres":
+	case config.ReadSourcePostgres:
 		db, err := store.OpenPostgres(ctx, cfg.DatabaseURL)
 		if err != nil {
 			return nil, err
@@ -118,7 +123,7 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 		// path; every other mode leaves instances parked — nothing
 		// dispatches. The scenario scripts fake agent failures
 		// (ATLAS_FAKE_AGENT_SCENARIO); an unknown name fails startup.
-		if cfg.AgentMode == "fake" {
+		if cfg.AgentMode == config.AgentModeFake {
 			fakeAgent, err := agent.NewFakeWithScenario(ops, cfg.FakeAgentScenario)
 			if err != nil {
 				_ = db.Close()
@@ -132,18 +137,10 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 }
 
-// validateAgentMode rejects agent modes the app cannot wire. The
-// default outside the fake path is disabled: no dispatcher exists and
-// Workflow Instances rest at their gate or pending.
-func validateAgentMode(mode string) error {
-	switch mode {
-	case "", "disabled", "fake":
-		return nil
-	default:
-		return fmt.Errorf("unsupported agent mode %q", mode)
-	}
-}
-
+// verifierFromConfig builds the OIDC bearer-token verifier (ADR-0016).
+// config.Load enforces the all-or-none trio rule against the
+// environment; the counting here is the backstop for direct struct
+// construction.
 func verifierFromConfig(cfg config.Config) (*identity.Verifier, error) {
 	set := 0
 	for _, value := range []string{cfg.OIDCIssuer, cfg.OIDCAudience, cfg.OIDCJWKSURL} {

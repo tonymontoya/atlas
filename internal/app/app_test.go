@@ -10,6 +10,8 @@ import (
 func TestNewFromConfigDefaultsToProviderReadSource(t *testing.T) {
 	application, err := NewFromConfig(context.Background(), config.Config{
 		FakeScenario: "reef-healthy-baremetal",
+		ReadSource:   config.ReadSourceProvider,
+		AgentMode:    config.AgentModeDisabled,
 	})
 	if err != nil {
 		t.Fatalf("NewFromConfig returned error: %v", err)
@@ -27,7 +29,7 @@ func TestNewFromConfigDefaultsToProviderReadSource(t *testing.T) {
 
 func TestNewFromConfigRejectsUnsupportedReadSource(t *testing.T) {
 	_, err := NewFromConfig(context.Background(), config.Config{
-		ReadSource: "unsupported",
+		ReadSource: config.ReadSource("unsupported"),
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -36,7 +38,7 @@ func TestNewFromConfigRejectsUnsupportedReadSource(t *testing.T) {
 
 func TestNewFromConfigRejectsUnsupportedAgentMode(t *testing.T) {
 	_, err := NewFromConfig(context.Background(), config.Config{
-		AgentMode: "eager",
+		AgentMode: config.AgentMode("eager"),
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -45,8 +47,8 @@ func TestNewFromConfigRejectsUnsupportedAgentMode(t *testing.T) {
 
 func TestNewFromConfigRejectsUnknownFakeAgentScenario(t *testing.T) {
 	_, err := NewFromConfig(context.Background(), config.Config{
-		ReadSource:        "postgres",
-		AgentMode:         "fake",
+		ReadSource:        config.ReadSourcePostgres,
+		AgentMode:         config.AgentModeFake,
 		FakeAgentScenario: "nonsense",
 	})
 	if err == nil {
