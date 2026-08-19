@@ -175,10 +175,21 @@ Raw upstream payloads may be stored as evidence when useful, but they must be cl
 
 # 5. Shared Error Classes
 
-Provider methods should normalize failures into a small set of error classes.
+These error classes are Atlas's shared failure vocabulary, used by every
+layer: providers normalize upstream failures into them, the REST API maps
+them to the wire (`ErrorClass` in the OpenAPI contract), sync and
+evaluation runs persist them in `error_class` columns, and store/API
+rejections (closed Cases, missing records, unauthenticated or unsupported
+requests) speak them directly. The canonical Go home is the leaf package
+`internal/apperr` (ADR-0024), whose enum mirrors the public wire enum
+exactly — the twelve classes in the table below.
+
+Atlas methods should normalize failures into these classes.
 
 | Error Class | Meaning | Example |
 |---|---|---|
+| `Internal` | Unexpected failure with no more specific class. Only constructed at fallback and failure-classification boundaries. | Unmapped error in the API error writer. |
+| `InvalidRequest` | Caller supplied unusable input. | Create-Case payload missing its title. |
 | `Unavailable` | Provider endpoint cannot be reached. | Ceph Dashboard unreachable. |
 | `Unauthorized` | Credentials are missing or insufficient. | OIDC token lacks Ceph API access. |
 | `Unsupported` | Provider cannot support the requested method for this cluster. | Rook-only method on bare-metal cluster. |

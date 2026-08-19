@@ -68,7 +68,8 @@ A fixture may be an error envelope instead of normalized data:
 }
 ```
 
-The fake provider returns a `ProviderError` of the given class. `class` must
+The fake provider returns an `apperr.Error` (the Atlas error taxonomy,
+ADR-0024) of the given class. `class` must
 be one of the shared error classes in `dev-plans/provider_contracts.md` §5;
 anything else normalizes to `MalformedResponse`. A `Partial` directive means
 the simulated upstream could not finish collection; the current read model
