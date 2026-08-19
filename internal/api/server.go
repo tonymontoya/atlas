@@ -76,6 +76,14 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// actorFromRequest converts the authenticated identity into the actor
+// the durable writes attribute. Write handlers run behind
+// requireIdentity, so the identity is always present.
+func actorFromRequest(r *http.Request) store.Actor {
+	actor, _ := identity.FromContext(r.Context())
+	return store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName}
+}
+
 func (s *Server) requireIdentity(next func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.app.Verifier == nil {

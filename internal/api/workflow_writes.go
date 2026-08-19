@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
@@ -97,8 +96,7 @@ func (s *Server) attachWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, _ := identity.FromContext(r.Context())
-	instance, err := s.app.WorkflowLifecycle.Attach(r.Context(), store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName}, id, request.WorkflowID, request.WorkflowVersion)
+	instance, err := s.app.WorkflowLifecycle.Attach(r.Context(), actorFromRequest(r), id, request.WorkflowID, request.WorkflowVersion)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -108,7 +106,7 @@ func (s *Server) attachWorkflow(w http.ResponseWriter, r *http.Request) {
 
 // listCaseWorkflows returns a Case's Workflow Instances in creation order.
 func (s *Server) listCaseWorkflows(w http.ResponseWriter, r *http.Request) {
-	if s.app.WorkflowReads == nil || s.app.WorkflowLifecycle == nil {
+	if s.app.WorkflowLifecycle == nil {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}
@@ -174,8 +172,7 @@ func (s *Server) approveWorkflowGate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, _ := identity.FromContext(r.Context())
-	result, err := s.app.WorkflowLifecycle.ApproveGate(r.Context(), store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName}, instanceID, request.GateID, request.Reason)
+	result, err := s.app.WorkflowLifecycle.ApproveGate(r.Context(), actorFromRequest(r), instanceID, request.GateID, request.Reason)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -215,8 +212,7 @@ func (s *Server) completeWorkflowTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, _ := identity.FromContext(r.Context())
-	result, err := s.app.WorkflowLifecycle.CompleteTask(r.Context(), store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName}, instanceID, request.TaskID, request.Note)
+	result, err := s.app.WorkflowLifecycle.CompleteTask(r.Context(), actorFromRequest(r), instanceID, request.TaskID, request.Note)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -267,7 +263,7 @@ type workflowJobPayload struct {
 // listWorkflowJobs returns a Workflow Instance's Jobs in definition
 // order, exposing per-Job progress for the Case detail view.
 func (s *Server) listWorkflowJobs(w http.ResponseWriter, r *http.Request) {
-	if s.app.WorkflowReads == nil || s.app.WorkflowLifecycle == nil {
+	if s.app.WorkflowLifecycle == nil {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}

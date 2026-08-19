@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
@@ -56,13 +55,12 @@ func (s *Server) createCase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, _ := identity.FromContext(r.Context())
 	created, err := s.app.CaseWrites.CreateManualCase(r.Context(), store.ManualCaseInput{
 		Title:       request.Title,
 		Summary:     request.Summary,
 		Severity:    request.Severity,
 		ClusterFSID: request.ClusterFSID,
-		Actor:       store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
+		Actor:       actorFromRequest(r),
 	})
 	if err != nil {
 		writeError(w, err)
@@ -93,11 +91,10 @@ func (s *Server) transitionCase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, _ := identity.FromContext(r.Context())
 	updated, err := s.app.CaseWrites.TransitionCase(r.Context(), store.CaseTransitionInput{
 		CaseID: id,
 		To:     target,
-		Actor:  store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
+		Actor:  actorFromRequest(r),
 	})
 	if err != nil {
 		writeError(w, err)
@@ -132,12 +129,11 @@ func (s *Server) assignCase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, _ := identity.FromContext(r.Context())
 	updated, err := s.app.CaseWrites.AssignCase(r.Context(), store.CaseAssignmentInput{
 		CaseID:              id,
 		Assignee:            request.Assignee,
 		AssigneeDisplayName: request.AssigneeDisplayName,
-		Actor:               store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
+		Actor:               actorFromRequest(r),
 	})
 	if err != nil {
 		writeError(w, err)
@@ -167,11 +163,10 @@ func (s *Server) addCaseNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor, _ := identity.FromContext(r.Context())
 	note, err := s.app.CaseWrites.AddCaseNote(r.Context(), store.CaseNoteInput{
 		CaseID: id,
 		Body:   request.Body,
-		Actor:  store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
+		Actor:  actorFromRequest(r),
 	})
 	if err != nil {
 		writeError(w, err)

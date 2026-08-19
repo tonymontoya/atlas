@@ -37,21 +37,12 @@ func NewLifecycle(store LifecycleStore, defs workflows.Registry, dispatch *Dispa
 	return &Lifecycle{store: store, defs: defs, dispatch: dispatch}
 }
 
-// ApproveGateResult reports the durable Approval record and whether
-// this call advanced the instance past its gate. A replay of an
-// already-recorded approval returns the existing record with Advanced
+// RecordResult reports a durable record write and whether this call
+// advanced the instance past the step it was paused at. A replay of an
+// already-recorded write returns the existing record with Advanced
 // false and touches nothing.
-type ApproveGateResult struct {
-	Record   store.ApprovalRecord
-	Advanced bool
-}
-
-// CompleteTaskResult reports the durable Task completion record and
-// whether this call resumed the instance past its task. A replay of an
-// already-recorded completion returns the existing record with Advanced
-// false and touches nothing.
-type CompleteTaskResult struct {
-	Record   store.TaskCompletionRecord
+type RecordResult[T any] struct {
+	Record   T
 	Advanced bool
 }
 
@@ -132,7 +123,7 @@ func (l *Lifecycle) advanceToFirstGate(ctx context.Context, instance store.Workf
 // ADR-0021). A second approval of an already-passed gate is an
 // idempotent no-op returning the existing record without touching the
 // instance.
-func (l *Lifecycle) ApproveGate(ctx context.Context, actor store.Actor, instanceID int64, gateID, reason string) (ApproveGateResult, error) {
+func (l *Lifecycle) ApproveGate(ctx context.Context, actor store.Actor, instanceID int64, gateID, reason string) (RecordResult[store.ApprovalRecord], error) {
 	approval, err := l.store.RecordApproval(ctx, store.RecordApprovalInput{
 		InstanceID: instanceID,
 		GateID:     gateID,
@@ -140,36 +131,18 @@ func (l *Lifecycle) ApproveGate(ctx context.Context, actor store.Actor, instance
 		Reason:     reason,
 	})
 	if err != nil {
-		return ApproveGateResult{}, err
+		return RecordResult[store.ApprovalRecord]{}, err
 	}
 
 	// The record already existing means the gate was passed before; the
 	// approval authorizes nothing further (ADR-0020). Otherwise this call
 	// recorded the first approval, and the instance is still paused at the
 	// gate: advance it.
-	instance, err := l.store.GetWorkflowInstance(ctx, instanceID)
+	advanced, err := l.resumeIfPausedAt(ctx, actor, instanceID, workflows.InstanceWaitingForApproval, gateID)
 	if err != nil {
-		return ApproveGateResult{}, err
+		return RecordResult[store.ApprovalRecord]{}, err
 	}
-	if instance.State == workflows.InstanceWaitingForApproval && instance.CurrentStep != nil && *instance.CurrentStep == gateID {
-		if _, err := l.store.TransitionWorkflowInstance(ctx, store.WorkflowInstanceTransitionInput{
-			InstanceID: instanceID,
-			To:         workflows.InstanceRunning,
-			Actor:      &actor,
-		}); err != nil {
-			return ApproveGateResult{}, err
-		}
-		// With the gate passed, the agent loop (ADR-0022) drives the
-		// instance through its Jobs; without a dispatcher the instance
-		// rests running with pending Jobs.
-		if l.dispatch != nil {
-			if _, err := l.dispatch.Run(ctx, instanceID); err != nil {
-				return ApproveGateResult{}, err
-			}
-		}
-		return ApproveGateResult{Record: approval, Advanced: true}, nil
-	}
-	return ApproveGateResult{Record: approval}, nil
+	return RecordResult[store.ApprovalRecord]{Record: approval, Advanced: advanced}, nil
 }
 
 // CompleteTask records the durable, immutable Task completion for the
@@ -177,7 +150,7 @@ func (l *Lifecycle) ApproveGate(ctx context.Context, actor store.Actor, instance
 // (ADR-0019). A second completion of an already-passed task is an
 // idempotent no-op returning the existing record without touching the
 // instance.
-func (l *Lifecycle) CompleteTask(ctx context.Context, actor store.Actor, instanceID int64, taskID, note string) (CompleteTaskResult, error) {
+func (l *Lifecycle) CompleteTask(ctx context.Context, actor store.Actor, instanceID int64, taskID, note string) (RecordResult[store.TaskCompletionRecord], error) {
 	completion, err := l.store.RecordTaskCompletion(ctx, store.RecordTaskCompletionInput{
 		InstanceID: instanceID,
 		TaskID:     taskID,
@@ -185,34 +158,45 @@ func (l *Lifecycle) CompleteTask(ctx context.Context, actor store.Actor, instanc
 		Note:       note,
 	})
 	if err != nil {
-		return CompleteTaskResult{}, err
+		return RecordResult[store.TaskCompletionRecord]{}, err
 	}
 
 	// The record already existing means the task was passed before; the
 	// completion authorizes nothing further. Otherwise this call
 	// recorded the first completion, and the instance is still paused at
 	// the task: resume it.
+	advanced, err := l.resumeIfPausedAt(ctx, actor, instanceID, workflows.InstanceWaitingForOperator, taskID)
+	if err != nil {
+		return RecordResult[store.TaskCompletionRecord]{}, err
+	}
+	return RecordResult[store.TaskCompletionRecord]{Record: completion, Advanced: advanced}, nil
+}
+
+// resumeIfPausedAt advances the instance past the step it is paused at
+// and hands it to the Dispatcher: with the step passed, the agent loop
+// (ADR-0022) drives the instance through its Jobs; without a dispatcher
+// the instance rests running with pending Jobs. An instance no longer
+// paused at that step — the record was a replay of a passed step —
+// touches nothing and reports not advanced.
+func (l *Lifecycle) resumeIfPausedAt(ctx context.Context, actor store.Actor, instanceID int64, state workflows.InstanceState, stepID string) (bool, error) {
 	instance, err := l.store.GetWorkflowInstance(ctx, instanceID)
 	if err != nil {
-		return CompleteTaskResult{}, err
+		return false, err
 	}
-	if instance.State == workflows.InstanceWaitingForOperator && instance.CurrentStep != nil && *instance.CurrentStep == taskID {
-		if _, err := l.store.TransitionWorkflowInstance(ctx, store.WorkflowInstanceTransitionInput{
-			InstanceID: instanceID,
-			To:         workflows.InstanceRunning,
-			Actor:      &actor,
-		}); err != nil {
-			return CompleteTaskResult{}, err
-		}
-		// With the task done, the agent loop (ADR-0022) drives the
-		// instance through its remaining Jobs; without a dispatcher the
-		// instance rests running with pending Jobs.
-		if l.dispatch != nil {
-			if _, err := l.dispatch.Run(ctx, instanceID); err != nil {
-				return CompleteTaskResult{}, err
-			}
-		}
-		return CompleteTaskResult{Record: completion, Advanced: true}, nil
+	if instance.State != state || instance.CurrentStep == nil || *instance.CurrentStep != stepID {
+		return false, nil
 	}
-	return CompleteTaskResult{Record: completion}, nil
+	if _, err := l.store.TransitionWorkflowInstance(ctx, store.WorkflowInstanceTransitionInput{
+		InstanceID: instanceID,
+		To:         workflows.InstanceRunning,
+		Actor:      &actor,
+	}); err != nil {
+		return false, err
+	}
+	if l.dispatch != nil {
+		if _, err := l.dispatch.Run(ctx, instanceID); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
