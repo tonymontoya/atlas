@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
@@ -139,7 +140,7 @@ func runningReplaceOSD(t *testing.T) *memStore {
 			{ID: 103, WorkflowInstanceID: 42, Position: 5, StepID: "verify-osd", OperationType: "VerifyOSD", State: workflows.JobPending, Attempt: 1, MaxAttempts: 3},
 		},
 		approvals: []store.ApprovalRecord{
-			{ID: 9, WorkflowInstanceID: 42, GateID: "approve-destroy", Approver: store.Actor{Subject: "op-1", DisplayName: "Operator One"}},
+			{ID: 9, WorkflowInstanceID: 42, GateID: "approve-destroy", Approver: actor.Actor{Subject: "op-1", DisplayName: "Operator One"}},
 		},
 		target: cases.Case{ID: 7, ClusterFSID: "11111111-1111-4000-8000-000000000101"},
 	}
@@ -150,7 +151,7 @@ func runningReplaceOSD(t *testing.T) *memStore {
 func completeReplaceDevice(mem *memStore) {
 	mem.taskCompletions = append(mem.taskCompletions, store.TaskCompletionRecord{
 		ID: 11, WorkflowInstanceID: 42, TaskID: "replace-device",
-		Operator: store.Actor{Subject: "op-1", DisplayName: "Operator One"},
+		Operator: actor.Actor{Subject: "op-1", DisplayName: "Operator One"},
 	})
 }
 

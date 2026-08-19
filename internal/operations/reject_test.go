@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 )
 
 func validEnvelope(t *testing.T) RequestEnvelope {
@@ -12,7 +14,7 @@ func validEnvelope(t *testing.T) RequestEnvelope {
 	return RequestEnvelope{
 		WorkflowInstanceID: 347,
 		JobID:              2,
-		Actor:              Actor{Subject: "operator-1", DisplayName: "Operator One"},
+		Actor:              actor.Actor{Subject: "operator-1", DisplayName: "Operator One"},
 		IdempotencyKey:     "replace-osd-347-job-2",
 		AuditCorrelationID: "audit-7f3k",
 		OperationType:      "CollectHostEvidence",

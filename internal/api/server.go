@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
-	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
 type Server struct {
@@ -80,9 +80,9 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 // actorFromRequest converts the authenticated identity into the actor
 // the durable writes attribute. Write handlers run behind
 // requireIdentity, so the identity is always present.
-func actorFromRequest(r *http.Request) store.Actor {
-	actor, _ := identity.FromContext(r.Context())
-	return store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName}
+func actorFromRequest(r *http.Request) actor.Actor {
+	id, _ := identity.FromContext(r.Context())
+	return actor.Actor{Subject: id.Subject, DisplayName: id.DisplayName}
 }
 
 func (s *Server) requireIdentity(next func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
@@ -207,18 +208,18 @@ func requestEnvelope(definition workflows.Definition, target cases.Case, instanc
 	if err != nil {
 		return operations.RequestEnvelope{}, err
 	}
-	actor := operations.Actor{Subject: "atlas", DisplayName: "Atlas"}
+	envelopeActor := actor.Actor{Subject: "atlas", DisplayName: "Atlas"}
 	var approval *operations.ApprovalContext
 	// The latest Approval record authorizes this run.
 	if len(approvals) > 0 {
 		latest := approvals[len(approvals)-1]
-		actor = operations.Actor{Subject: latest.Approver.Subject, DisplayName: latest.Approver.DisplayName}
+		envelopeActor = actor.Actor{Subject: latest.Approver.Subject, DisplayName: latest.Approver.DisplayName}
 		approval = &operations.ApprovalContext{ApprovalID: latest.ID, Approver: latest.Approver.Subject}
 	}
 	return operations.RequestEnvelope{
 		WorkflowInstanceID: instance.ID,
 		JobID:              job.ID,
-		Actor:              actor,
+		Actor:              envelopeActor,
 		Approval:           approval,
 		IdempotencyKey:     fmt.Sprintf("instance-%d-job-%d-attempt-%d", instance.ID, job.ID, job.Attempt),
 		AuditCorrelationID: fmt.Sprintf("workflow-%d-job-%d-attempt-%d", instance.ID, job.ID, job.Attempt),

@@ -5,13 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-)
 
-// Actor identifies the verified operator a request is executed for.
-type Actor struct {
-	Subject     string `json:"subject"`
-	DisplayName string `json:"displayName"`
-}
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
+)
 
 // ApprovalContext carries the Approval evidence a request executes under
 // (ADR-0020). It is optional until policy requires it for an operation.
@@ -26,7 +22,7 @@ type ApprovalContext struct {
 type RequestEnvelope struct {
 	WorkflowInstanceID int64            `json:"workflowInstanceId"`
 	JobID              int64            `json:"jobId"`
-	Actor              Actor            `json:"actor"`
+	Actor              actor.Actor      `json:"actor"`
 	Approval           *ApprovalContext `json:"approval,omitempty"`
 	IdempotencyKey     string           `json:"idempotencyKey"`
 	AuditCorrelationID string           `json:"auditCorrelationId"`

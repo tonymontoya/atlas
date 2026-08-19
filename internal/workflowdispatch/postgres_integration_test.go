@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
@@ -39,7 +40,7 @@ func dispatchCleanup(t *testing.T, db *sql.DB) {
 // parking, and approval — exactly as the API does, leaving a running
 // instance. The Lifecycle carries no dispatcher so the test drives Job
 // execution itself.
-func attachAndApprove(t *testing.T, postgresStore *store.PostgresStore, ctx context.Context, actor store.Actor) store.WorkflowInstance {
+func attachAndApprove(t *testing.T, postgresStore *store.PostgresStore, ctx context.Context, actor actor.Actor) store.WorkflowInstance {
 	t.Helper()
 	target, err := postgresStore.CreateManualCase(ctx, store.ManualCaseInput{
 		Title:       "dispatch-test replace target",
@@ -94,7 +95,7 @@ func testDispatcherWithScenario(t *testing.T, postgresStore *store.PostgresStore
 // resumePastTask performs the Operator's task completion and resume
 // through the Lifecycle, exactly as the API resume endpoint does,
 // without dispatching.
-func resumePastTask(t *testing.T, postgresStore *store.PostgresStore, ctx context.Context, instance store.WorkflowInstance, actor store.Actor) store.WorkflowInstance {
+func resumePastTask(t *testing.T, postgresStore *store.PostgresStore, ctx context.Context, instance store.WorkflowInstance, actor actor.Actor) store.WorkflowInstance {
 	t.Helper()
 	lifecycle := NewLifecycle(postgresStore, replaceOSDRegistry(t), nil)
 	if _, err := lifecycle.CompleteTask(ctx, actor, instance.ID, "replace-device", "device swapped"); err != nil {
@@ -109,7 +110,7 @@ func resumePastTask(t *testing.T, postgresStore *store.PostgresStore, ctx contex
 
 func TestRunPausesAtTaskAndResumesToSucceededAgainstPostgres(t *testing.T) {
 	postgresStore, ctx := dispatchTestDB(t)
-	actor := store.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
+	actor := actor.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
 	approved := attachAndApprove(t, postgresStore.PostgresStore, ctx, actor)
 	dispatcher := testDispatcher(t, postgresStore.PostgresStore)
 
@@ -199,7 +200,7 @@ func TestRunPausesAtTaskAndResumesToSucceededAgainstPostgres(t *testing.T) {
 // succeeded.
 func TestRunRetriesTransientFailureAgainstPostgres(t *testing.T) {
 	postgresStore, ctx := dispatchTestDB(t)
-	actor := store.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
+	actor := actor.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
 	approved := attachAndApprove(t, postgresStore.PostgresStore, ctx, actor)
 	dispatcher := testDispatcherWithScenario(t, postgresStore.PostgresStore, agent.ScenarioDispatchFailsOnce)
 
@@ -233,7 +234,7 @@ func TestRunRetriesTransientFailureAgainstPostgres(t *testing.T) {
 // terminally without dispatching later Jobs.
 func TestRunFailsInstanceWhenRetriesExhaustAgainstPostgres(t *testing.T) {
 	postgresStore, ctx := dispatchTestDB(t)
-	actor := store.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
+	actor := actor.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
 	approved := attachAndApprove(t, postgresStore.PostgresStore, ctx, actor)
 	dispatcher := testDispatcherWithScenario(t, postgresStore.PostgresStore, agent.ScenarioJobFailure)
 
@@ -274,7 +275,7 @@ func TestRunFailsInstanceWhenRetriesExhaustAgainstPostgres(t *testing.T) {
 // and then terminal succeeded.
 func TestRunResumesFromDurableStateAfterRestart(t *testing.T) {
 	postgresStore, ctx := dispatchTestDB(t)
-	actor := store.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
+	actor := actor.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
 	approved := attachAndApprove(t, postgresStore.PostgresStore, ctx, actor)
 
 	// Durable state a killed process leaves mid-loop: the evidence Job
@@ -350,7 +351,7 @@ func TestRunResumesFromDurableStateAfterRestart(t *testing.T) {
 // crash the way a real out-of-process agent would (ADR-0018).
 func TestDuplicateDispatchDoesNotRepeatWorkAgainstPostgres(t *testing.T) {
 	postgresStore, ctx := dispatchTestDB(t)
-	actor := store.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
+	actor := actor.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
 	approved := attachAndApprove(t, postgresStore.PostgresStore, ctx, actor)
 
 	ops, err := operations.DefaultRegistry()
@@ -390,7 +391,7 @@ func TestDuplicateDispatchDoesNotRepeatWorkAgainstPostgres(t *testing.T) {
 	preCrash, err := json.Marshal(operations.RequestEnvelope{
 		WorkflowInstanceID: approved.ID,
 		JobID:              jobs[1].ID,
-		Actor:              operations.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
+		Actor:              actor,
 		IdempotencyKey:     fmt.Sprintf("instance-%d-job-%d-attempt-1", approved.ID, jobs[1].ID),
 		AuditCorrelationID: fmt.Sprintf("workflow-%d-job-%d-attempt-1", approved.ID, jobs[1].ID),
 		OperationType:      jobs[1].OperationType,
@@ -457,7 +458,7 @@ func (c *countingAdapter) callsFor(operationType string) int {
 
 func TestRunIsIdempotentForTerminalInstances(t *testing.T) {
 	postgresStore, ctx := dispatchTestDB(t)
-	actor := store.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
+	actor := actor.Actor{Subject: "dispatch-operator", DisplayName: "Dispatch Operator"}
 	approved := attachAndApprove(t, postgresStore.PostgresStore, ctx, actor)
 	dispatcher := testDispatcher(t, postgresStore.PostgresStore)
 

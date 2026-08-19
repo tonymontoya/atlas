@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 )
@@ -17,7 +18,7 @@ import (
 type timelineEvent struct {
 	Type    cases.TimelineEventType
 	Message string
-	Actor   *Actor
+	Actor   *actor.Actor
 	Payload any
 }
 

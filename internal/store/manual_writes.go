@@ -8,46 +8,41 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 )
 
 const caseColumns = "id, title, summary, status, severity, source, cluster_fsid::text, assignee, assignee_display_name, created_at, updated_at, closed_at"
 
-// Actor identifies the verified operator responsible for a manual write.
-type Actor struct {
-	Subject     string
-	DisplayName string
-}
-
 type ManualCaseInput struct {
 	Title       string
 	Summary     string
 	Severity    string
 	ClusterFSID string
-	Actor       Actor
+	Actor       actor.Actor
 }
 
 type CaseTransitionInput struct {
 	CaseID int64
 	To     cases.CaseStatus
-	Actor  Actor
+	Actor  actor.Actor
 }
 
 type CaseAssignmentInput struct {
 	CaseID              int64
 	Assignee            string
 	AssigneeDisplayName string
-	Actor               Actor
+	Actor               actor.Actor
 }
 
 type CaseNoteInput struct {
 	CaseID int64
 	Body   string
-	Actor  Actor
+	Actor  actor.Actor
 }
 
-func validateActor(actor Actor) error {
+func validateActor(actor actor.Actor) error {
 	if actor.Subject == "" {
 		return inputError("actor subject is required")
 	}

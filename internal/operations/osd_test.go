@@ -3,6 +3,8 @@ package operations
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 )
 
 func TestDecodeRequestRoundTripsOSDOperations(t *testing.T) {
@@ -30,7 +32,7 @@ func TestDecodeRequestRoundTripsOSDOperations(t *testing.T) {
 			envelope := RequestEnvelope{
 				WorkflowInstanceID: 347,
 				JobID:              5,
-				Actor:              Actor{Subject: "operator-1", DisplayName: "Operator One"},
+				Actor:              actor.Actor{Subject: "operator-1", DisplayName: "Operator One"},
 				Approval:           test.approval,
 				IdempotencyKey:     "replace-osd-347-job-5",
 				AuditCorrelationID: "audit-7f3k",

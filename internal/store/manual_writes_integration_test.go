@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
@@ -25,8 +26,8 @@ func cleanupManualWriteRows(t *testing.T, db *sql.DB) {
 	testdb.DeleteCases(t, db, "title LIKE 'manual-test%'")
 }
 
-func manualTestActor() Actor {
-	return Actor{Subject: "manual-test-operator", DisplayName: "Manual Test Operator"}
+func manualTestActor() actor.Actor {
+	return actor.Actor{Subject: "manual-test-operator", DisplayName: "Manual Test Operator"}
 }
 
 func TestCreateManualCaseWritesCaseAndDetectionEvent(t *testing.T) {
@@ -75,8 +76,8 @@ func TestCreateManualCaseRejectsInvalidInput(t *testing.T) {
 		{"empty summary", ManualCaseInput{Title: "t", Summary: "", Severity: "medium", Actor: manualTestActor()}},
 		{"unknown severity", ManualCaseInput{Title: "t", Summary: "s", Severity: "severe", Actor: manualTestActor()}},
 		{"invalid cluster fsid", ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", ClusterFSID: "not-a-uuid", Actor: manualTestActor()}},
-		{"actor without subject", ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", Actor: Actor{Subject: "", DisplayName: "Name"}}},
-		{"actor without display name", ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", Actor: Actor{Subject: "subj", DisplayName: ""}}},
+		{"actor without subject", ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", Actor: actor.Actor{Subject: "", DisplayName: "Name"}}},
+		{"actor without display name", ManualCaseInput{Title: "t", Summary: "s", Severity: "medium", Actor: actor.Actor{Subject: "subj", DisplayName: ""}}},
 	}
 	for _, input := range inputs {
 		t.Run(input.name, func(t *testing.T) {

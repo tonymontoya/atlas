@@ -3,6 +3,7 @@ package workflowdispatch
 import (
 	"context"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
@@ -53,7 +54,7 @@ type RecordResult[T any] struct {
 // definition's first Approval Gate, with the Atlas system actor
 // attributing the advancement Timeline Events; without a gate the
 // instance rests pending.
-func (l *Lifecycle) Attach(ctx context.Context, actor store.Actor, caseID int64, workflowID string, workflowVersion int) (store.WorkflowInstance, error) {
+func (l *Lifecycle) Attach(ctx context.Context, actor actor.Actor, caseID int64, workflowID string, workflowVersion int) (store.WorkflowInstance, error) {
 	definition, ok := l.defs.Get(workflowID, workflowVersion)
 	if !ok {
 		return store.WorkflowInstance{}, apperr.Error{
@@ -123,7 +124,7 @@ func (l *Lifecycle) advanceToFirstGate(ctx context.Context, instance store.Workf
 // ADR-0021). A second approval of an already-passed gate is an
 // idempotent no-op returning the existing record without touching the
 // instance.
-func (l *Lifecycle) ApproveGate(ctx context.Context, actor store.Actor, instanceID int64, gateID, reason string) (RecordResult[store.ApprovalRecord], error) {
+func (l *Lifecycle) ApproveGate(ctx context.Context, actor actor.Actor, instanceID int64, gateID, reason string) (RecordResult[store.ApprovalRecord], error) {
 	approval, err := l.store.RecordApproval(ctx, store.RecordApprovalInput{
 		InstanceID: instanceID,
 		GateID:     gateID,
@@ -150,7 +151,7 @@ func (l *Lifecycle) ApproveGate(ctx context.Context, actor store.Actor, instance
 // (ADR-0019). A second completion of an already-passed task is an
 // idempotent no-op returning the existing record without touching the
 // instance.
-func (l *Lifecycle) CompleteTask(ctx context.Context, actor store.Actor, instanceID int64, taskID, note string) (RecordResult[store.TaskCompletionRecord], error) {
+func (l *Lifecycle) CompleteTask(ctx context.Context, actor actor.Actor, instanceID int64, taskID, note string) (RecordResult[store.TaskCompletionRecord], error) {
 	completion, err := l.store.RecordTaskCompletion(ctx, store.RecordTaskCompletionInput{
 		InstanceID: instanceID,
 		TaskID:     taskID,
@@ -178,7 +179,7 @@ func (l *Lifecycle) CompleteTask(ctx context.Context, actor store.Actor, instanc
 // the instance rests running with pending Jobs. An instance no longer
 // paused at that step — the record was a replay of a passed step —
 // touches nothing and reports not advanced.
-func (l *Lifecycle) resumeIfPausedAt(ctx context.Context, actor store.Actor, instanceID int64, state workflows.InstanceState, stepID string) (bool, error) {
+func (l *Lifecycle) resumeIfPausedAt(ctx context.Context, actor actor.Actor, instanceID int64, state workflows.InstanceState, stepID string) (bool, error) {
 	instance, err := l.store.GetWorkflowInstance(ctx, instanceID)
 	if err != nil {
 		return false, err

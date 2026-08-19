@@ -3,6 +3,8 @@ package operations
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 )
 
 func TestDecodeRequestRoundTripsCollectHostEvidence(t *testing.T) {
@@ -10,7 +12,7 @@ func TestDecodeRequestRoundTripsCollectHostEvidence(t *testing.T) {
 	envelope := RequestEnvelope{
 		WorkflowInstanceID: 347,
 		JobID:              2,
-		Actor:              Actor{Subject: "operator-1", DisplayName: "Operator One"},
+		Actor:              actor.Actor{Subject: "operator-1", DisplayName: "Operator One"},
 		Approval:           &ApprovalContext{ApprovalID: 9, Approver: "approver-1"},
 		IdempotencyKey:     "replace-osd-347-job-2",
 		AuditCorrelationID: "audit-7f3k",
@@ -30,7 +32,7 @@ func TestDecodeRequestRoundTripsCollectHostEvidence(t *testing.T) {
 	if request.Envelope.WorkflowInstanceID != 347 || request.Envelope.JobID != 2 {
 		t.Fatalf("ids = %d/%d, want 347/2", request.Envelope.WorkflowInstanceID, request.Envelope.JobID)
 	}
-	if request.Envelope.Actor != (Actor{Subject: "operator-1", DisplayName: "Operator One"}) {
+	if request.Envelope.Actor != (actor.Actor{Subject: "operator-1", DisplayName: "Operator One"}) {
 		t.Fatalf("actor = %+v", request.Envelope.Actor)
 	}
 	if request.Envelope.Approval == nil || request.Envelope.Approval.ApprovalID != 9 || request.Envelope.Approval.Approver != "approver-1" {
@@ -56,7 +58,7 @@ func TestDecodeRequestRoundTripsEnvelopeWithoutApproval(t *testing.T) {
 	envelope := RequestEnvelope{
 		WorkflowInstanceID: 1,
 		JobID:              1,
-		Actor:              Actor{Subject: "operator-1"},
+		Actor:              actor.Actor{Subject: "operator-1"},
 		IdempotencyKey:     "key-1",
 		AuditCorrelationID: "audit-1",
 		OperationType:      "CollectHostEvidence",

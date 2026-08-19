@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
@@ -176,7 +177,7 @@ func TestCreateWorkflowInstanceRejectsInvalidInput(t *testing.T) {
 		{"duplicate step ids", func(i *CreateWorkflowInstanceInput) {
 			i.Jobs = append(i.Jobs, WorkflowJobInput{StepID: "collect-evidence", OperationType: "VerifyOSD", MaxAttempts: 2})
 		}},
-		{"actor without subject", func(i *CreateWorkflowInstanceInput) { i.Actor = Actor{Subject: "", DisplayName: "Name"} }},
+		{"actor without subject", func(i *CreateWorkflowInstanceInput) { i.Actor = actor.Actor{Subject: "", DisplayName: "Name"} }},
 	}
 	for _, m := range mutators {
 		t.Run(m.name, func(t *testing.T) {
@@ -253,7 +254,7 @@ func TestWorkflowInstanceLifecycleTransitions(t *testing.T) {
 		InstanceID: instance.ID,
 		To:         workflows.InstanceWaitingForApproval,
 		AtStep:     "approve-destroy",
-		Actor:      &[]Actor{manualTestActor()}[0],
+		Actor:      &[]actor.Actor{manualTestActor()}[0],
 	})
 	if err != nil {
 		t.Fatalf("running -> waiting_for_approval: %v", err)
@@ -538,7 +539,7 @@ func TestRecordApprovalRejectsWrongGateAndNotWaiting(t *testing.T) {
 	if _, err := store.RecordApproval(ctx, RecordApprovalInput{InstanceID: pending.ID, GateID: "", Approver: manualTestActor()}); !isInvalidInput(err) {
 		t.Fatalf("empty gate error = %v, want InvalidRequest", err)
 	}
-	if _, err := store.RecordApproval(ctx, RecordApprovalInput{InstanceID: pending.ID, GateID: "approve-destroy", Approver: Actor{Subject: "", DisplayName: "X"}}); !isInvalidInput(err) {
+	if _, err := store.RecordApproval(ctx, RecordApprovalInput{InstanceID: pending.ID, GateID: "approve-destroy", Approver: actor.Actor{Subject: "", DisplayName: "X"}}); !isInvalidInput(err) {
 		t.Fatalf("bad approver error = %v, want InvalidRequest", err)
 	}
 }
@@ -651,7 +652,7 @@ func TestRecordTaskCompletionRejectsWrongTaskAndNotWaiting(t *testing.T) {
 	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: pending.ID, TaskID: "", Operator: manualTestActor()}); !isInvalidInput(err) {
 		t.Fatalf("empty task error = %v, want InvalidRequest", err)
 	}
-	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: pending.ID, TaskID: "replace-device", Operator: Actor{Subject: "", DisplayName: "X"}}); !isInvalidInput(err) {
+	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: pending.ID, TaskID: "replace-device", Operator: actor.Actor{Subject: "", DisplayName: "X"}}); !isInvalidInput(err) {
 		t.Fatalf("bad operator error = %v, want InvalidRequest", err)
 	}
 }

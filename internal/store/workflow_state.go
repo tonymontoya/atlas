@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
 )
@@ -30,7 +31,7 @@ type CreateWorkflowInstanceInput struct {
 	DefinitionID      string
 	DefinitionVersion int
 	Jobs              []WorkflowJobInput
-	Actor             Actor
+	Actor             actor.Actor
 }
 
 // WorkflowInstance is the durable state machine row for one Workflow
@@ -296,7 +297,7 @@ type WorkflowInstanceTransitionInput struct {
 	InstanceID int64
 	To         workflows.InstanceState
 	AtStep     string
-	Actor      *Actor
+	Actor      *actor.Actor
 }
 
 // TransitionWorkflowInstance advances a Workflow Instance under a row
@@ -462,7 +463,7 @@ func lockWorkflowJobForUpdate(ctx context.Context, tx *sql.Tx, jobID int64) (Wor
 type RecordApprovalInput struct {
 	InstanceID int64
 	GateID     string
-	Approver   Actor
+	Approver   actor.Actor
 	Reason     string
 }
 
@@ -473,7 +474,7 @@ type ApprovalRecord struct {
 	ID                 int64
 	WorkflowInstanceID int64
 	GateID             string
-	Approver           Actor
+	Approver           actor.Actor
 	Reason             *string
 	CreatedAt          time.Time
 }
@@ -602,7 +603,7 @@ const taskCompletionColumns = "id, workflow_instance_id, task_id, operator_id, o
 type RecordTaskCompletionInput struct {
 	InstanceID int64
 	TaskID     string
-	Operator   Actor
+	Operator   actor.Actor
 	Note       string
 }
 
@@ -613,7 +614,7 @@ type TaskCompletionRecord struct {
 	ID                 int64
 	WorkflowInstanceID int64
 	TaskID             string
-	Operator           Actor
+	Operator           actor.Actor
 	Note               *string
 	CreatedAt          time.Time
 }

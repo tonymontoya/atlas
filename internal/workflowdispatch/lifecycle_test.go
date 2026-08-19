@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
@@ -105,8 +106,8 @@ func gatelessRegistry(t *testing.T) *workflows.CodeRegistry {
 
 const attachCaseID = 7
 
-func operatorActor() store.Actor {
-	return store.Actor{Subject: "op-1", DisplayName: "Operator One"}
+func operatorActor() actor.Actor {
+	return actor.Actor{Subject: "op-1", DisplayName: "Operator One"}
 }
 
 // parkedReplaceOSD runs Attach against a fresh memStore and returns the
@@ -255,7 +256,7 @@ func TestApproveGateReplayIsIdempotentNoOp(t *testing.T) {
 	callsAfterFirst := len(mem.instanceCalls)
 	stateAfterFirst := mem.instance.State
 
-	second, err := lifecycle.ApproveGate(context.Background(), store.Actor{Subject: "op-2", DisplayName: "Operator Two"}, parked.ID, "approve-destroy", "")
+	second, err := lifecycle.ApproveGate(context.Background(), actor.Actor{Subject: "op-2", DisplayName: "Operator Two"}, parked.ID, "approve-destroy", "")
 	if err != nil {
 		t.Fatalf("replayed ApproveGate: %v", err)
 	}
@@ -329,7 +330,7 @@ func TestCompleteTaskReplayIsIdempotentNoOp(t *testing.T) {
 	}
 	callsAfterFirst := len(mem.instanceCalls)
 
-	second, err := lifecycle.CompleteTask(context.Background(), store.Actor{Subject: "op-2", DisplayName: "Operator Two"}, parked.ID, "replace-device", "")
+	second, err := lifecycle.CompleteTask(context.Background(), actor.Actor{Subject: "op-2", DisplayName: "Operator Two"}, parked.ID, "replace-device", "")
 	if err != nil {
 		t.Fatalf("replayed CompleteTask: %v", err)
 	}
