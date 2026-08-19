@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,7 +8,6 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
-	"github.com/tonymontoya/ceph-atlas/internal/workflows"
 )
 
 func workflowWritesUnsupported() providers.ProviderError {
@@ -67,14 +65,14 @@ func newApprovalPayload(record store.ApprovalRecord) approvalPayload {
 	}
 }
 
-// attachWorkflow attaches a Workflow to a Case: the definition is resolved
-// in the code registry (ADR-0017) before any store call, and only Job steps
-// become Job rows — Gates and Tasks are not Jobs (ADR-0019). The instance
-// then advances from pending through running to a pause at the definition's
-// first Approval Gate, with the Atlas system actor attributing the
-// advancement Timeline Events; without a gate the instance rests pending.
+// attachWorkflow attaches a Workflow to a Case through the Workflow
+// Lifecycle (ADR-0017, ADR-0019): the definition is resolved in the
+// code registry, only Job steps become Job rows, and the instance
+// advances to a pause at the definition's first Approval Gate. The
+// handler decodes and validates the request; the choreography lives in
+// internal/workflowdispatch.
 func (s *Server) attachWorkflow(w http.ResponseWriter, r *http.Request) {
-	if s.app.WorkflowWrites == nil || s.app.WorkflowRegistry == nil {
+	if s.app.WorkflowLifecycle == nil {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}
@@ -99,40 +97,8 @@ func (s *Server) attachWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	definition, ok := s.app.WorkflowRegistry.Get(request.WorkflowID, request.WorkflowVersion)
-	if !ok {
-		writeError(w, providers.ProviderError{
-			Class:   providers.ErrorNotFound,
-			Message: "workflow definition not found",
-		})
-		return
-	}
-
-	jobs := make([]store.WorkflowJobInput, 0, len(definition.Steps))
-	for _, step := range definition.Steps {
-		if jobStep, ok := step.(workflows.JobStep); ok {
-			jobs = append(jobs, store.WorkflowJobInput{
-				StepID:        jobStep.ID,
-				OperationType: jobStep.OperationType,
-				MaxAttempts:   jobStep.Retry.MaxAttempts,
-			})
-		}
-	}
-
 	actor, _ := identity.FromContext(r.Context())
-	instance, err := s.app.WorkflowWrites.CreateWorkflowInstance(r.Context(), store.CreateWorkflowInstanceInput{
-		CaseID:            id,
-		DefinitionID:      definition.ID,
-		DefinitionVersion: definition.Version,
-		Jobs:              jobs,
-		Actor:             store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
-	})
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	instance, err = s.advanceToFirstGate(r.Context(), instance)
+	instance, err := s.app.WorkflowLifecycle.Attach(r.Context(), store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName}, id, request.WorkflowID, request.WorkflowVersion)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -140,40 +106,9 @@ func (s *Server) attachWorkflow(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, newWorkflowInstancePayload(instance))
 }
 
-// advanceToFirstGate moves a freshly attached instance from pending through
-// running to waiting_for_approval at the definition's first Approval Gate.
-// Gateless definitions leave the instance where it is.
-func (s *Server) advanceToFirstGate(ctx context.Context, instance store.WorkflowInstance) (store.WorkflowInstance, error) {
-	var gateID string
-	definition, ok := s.app.WorkflowRegistry.Get(instance.DefinitionID, instance.DefinitionVersion)
-	if ok {
-		for _, step := range definition.Steps {
-			if gate, isGate := step.(workflows.ApprovalGate); isGate {
-				gateID = gate.ID
-				break
-			}
-		}
-	}
-	if gateID == "" || instance.State != workflows.InstancePending {
-		return instance, nil
-	}
-
-	if _, err := s.app.WorkflowWrites.TransitionWorkflowInstance(ctx, store.WorkflowInstanceTransitionInput{
-		InstanceID: instance.ID,
-		To:         workflows.InstanceRunning,
-	}); err != nil {
-		return store.WorkflowInstance{}, err
-	}
-	return s.app.WorkflowWrites.TransitionWorkflowInstance(ctx, store.WorkflowInstanceTransitionInput{
-		InstanceID: instance.ID,
-		To:         workflows.InstanceWaitingForApproval,
-		AtStep:     gateID,
-	})
-}
-
 // listCaseWorkflows returns a Case's Workflow Instances in creation order.
 func (s *Server) listCaseWorkflows(w http.ResponseWriter, r *http.Request) {
-	if s.app.WorkflowReads == nil {
+	if s.app.WorkflowReads == nil || s.app.WorkflowLifecycle == nil {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}
@@ -212,11 +147,13 @@ func workflowInstanceNotFound() providers.ProviderError {
 }
 
 // approveWorkflowGate records the durable, immutable Approval for the gate
-// the instance is paused at and advances the instance past it (ADR-0020,
-// ADR-0021). A second approval of an already-passed gate is an idempotent
-// no-op returning the existing record without touching the instance.
+// the instance is paused at and advances the instance past it through the
+// Workflow Lifecycle (ADR-0020, ADR-0021). A second approval of an
+// already-passed gate is an idempotent no-op returning the existing record
+// without touching the instance — the handler answers 201 for the advancing
+// first approval and 200 for the replay.
 func (s *Server) approveWorkflowGate(w http.ResponseWriter, r *http.Request) {
-	if s.app.WorkflowWrites == nil {
+	if s.app.WorkflowLifecycle == nil {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}
@@ -238,57 +175,26 @@ func (s *Server) approveWorkflowGate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor, _ := identity.FromContext(r.Context())
-	approval, err := s.app.WorkflowWrites.RecordApproval(r.Context(), store.RecordApprovalInput{
-		InstanceID: instanceID,
-		GateID:     request.GateID,
-		Approver:   store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
-		Reason:     request.Reason,
-	})
+	result, err := s.app.WorkflowLifecycle.ApproveGate(r.Context(), store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName}, instanceID, request.GateID, request.Reason)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-
-	// The record already existing means the gate was passed before; the
-	// approval authorizes nothing further (ADR-0020). Otherwise this call
-	// recorded the first approval, and the instance is still paused at the
-	// gate: advance it.
-	instance, err := s.app.WorkflowWrites.GetWorkflowInstance(r.Context(), instanceID)
-	if err != nil {
-		writeError(w, err)
-		return
+	status := http.StatusOK
+	if result.Advanced {
+		status = http.StatusCreated
 	}
-	if instance.State == workflows.InstanceWaitingForApproval && instance.CurrentStep != nil && *instance.CurrentStep == request.GateID {
-		if _, err := s.app.WorkflowWrites.TransitionWorkflowInstance(r.Context(), store.WorkflowInstanceTransitionInput{
-			InstanceID: instanceID,
-			To:         workflows.InstanceRunning,
-			Actor:      &store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
-		}); err != nil {
-			writeError(w, err)
-			return
-		}
-		// With the gate passed, the fake agent loop (ADR-0022) drives the
-		// instance through its Jobs synchronously; without a dispatcher
-		// the instance rests running with pending Jobs.
-		if s.app.WorkflowDispatch != nil {
-			if _, err := s.app.WorkflowDispatch.Run(r.Context(), instanceID); err != nil {
-				writeError(w, err)
-				return
-			}
-		}
-		writeJSON(w, http.StatusCreated, newApprovalPayload(approval))
-		return
-	}
-	writeJSON(w, http.StatusOK, newApprovalPayload(approval))
+	writeJSON(w, status, newApprovalPayload(result.Record))
 }
 
 // completeWorkflowTask records the durable, immutable Task completion
 // for the human Task the instance is paused at and resumes the instance
-// past it (ADR-0019). A second completion of an already-passed task is
-// an idempotent no-op returning the existing record without touching
-// the instance.
+// past it through the Workflow Lifecycle (ADR-0019). A second
+// completion of an already-passed task is an idempotent no-op returning
+// the existing record without touching the instance — the handler
+// answers 201 for the resuming first completion and 200 for the replay.
 func (s *Server) completeWorkflowTask(w http.ResponseWriter, r *http.Request) {
-	if s.app.WorkflowWrites == nil {
+	if s.app.WorkflowLifecycle == nil {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}
@@ -310,48 +216,16 @@ func (s *Server) completeWorkflowTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor, _ := identity.FromContext(r.Context())
-	completion, err := s.app.WorkflowWrites.RecordTaskCompletion(r.Context(), store.RecordTaskCompletionInput{
-		InstanceID: instanceID,
-		TaskID:     request.TaskID,
-		Operator:   store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
-		Note:       request.Note,
-	})
+	result, err := s.app.WorkflowLifecycle.CompleteTask(r.Context(), store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName}, instanceID, request.TaskID, request.Note)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-
-	// The record already existing means the task was passed before; the
-	// completion authorizes nothing further. Otherwise this call
-	// recorded the first completion, and the instance is still paused at
-	// the task: resume it.
-	instance, err := s.app.WorkflowWrites.GetWorkflowInstance(r.Context(), instanceID)
-	if err != nil {
-		writeError(w, err)
-		return
+	status := http.StatusOK
+	if result.Advanced {
+		status = http.StatusCreated
 	}
-	if instance.State == workflows.InstanceWaitingForOperator && instance.CurrentStep != nil && *instance.CurrentStep == request.TaskID {
-		if _, err := s.app.WorkflowWrites.TransitionWorkflowInstance(r.Context(), store.WorkflowInstanceTransitionInput{
-			InstanceID: instanceID,
-			To:         workflows.InstanceRunning,
-			Actor:      &store.Actor{Subject: actor.Subject, DisplayName: actor.DisplayName},
-		}); err != nil {
-			writeError(w, err)
-			return
-		}
-		// With the task done, the fake agent loop (ADR-0022) drives the
-		// instance through its remaining Jobs synchronously; without a
-		// dispatcher the instance rests running with pending Jobs.
-		if s.app.WorkflowDispatch != nil {
-			if _, err := s.app.WorkflowDispatch.Run(r.Context(), instanceID); err != nil {
-				writeError(w, err)
-				return
-			}
-		}
-		writeJSON(w, http.StatusCreated, newTaskCompletionPayload(completion))
-		return
-	}
-	writeJSON(w, http.StatusOK, newTaskCompletionPayload(completion))
+	writeJSON(w, status, newTaskCompletionPayload(result.Record))
 }
 
 type taskCompletionPayload struct {
@@ -393,7 +267,7 @@ type workflowJobPayload struct {
 // listWorkflowJobs returns a Workflow Instance's Jobs in definition
 // order, exposing per-Job progress for the Case detail view.
 func (s *Server) listWorkflowJobs(w http.ResponseWriter, r *http.Request) {
-	if s.app.WorkflowReads == nil {
+	if s.app.WorkflowReads == nil || s.app.WorkflowLifecycle == nil {
 		writeError(w, workflowWritesUnsupported())
 		return
 	}

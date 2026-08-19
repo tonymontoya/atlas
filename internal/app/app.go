@@ -24,9 +24,7 @@ type App struct {
 	Cases               CaseReader
 	CaseWrites          CaseWriter
 	WorkflowReads       WorkflowReader
-	WorkflowWrites      WorkflowWriter
-	WorkflowRegistry    workflows.Registry
-	WorkflowDispatch    *workflowdispatch.Dispatcher
+	WorkflowLifecycle   *workflowdispatch.Lifecycle
 	Verifier            *identity.Verifier
 	close               func() error
 }
@@ -57,14 +55,6 @@ type WorkflowReader interface {
 	GetWorkflowInstance(ctx context.Context, instanceID int64) (store.WorkflowInstance, error)
 	ListWorkflowInstancesByCase(ctx context.Context, caseID int64) ([]store.WorkflowInstance, error)
 	ListWorkflowJobs(ctx context.Context, instanceID int64) ([]store.WorkflowJob, error)
-}
-
-type WorkflowWriter interface {
-	CreateWorkflowInstance(ctx context.Context, input store.CreateWorkflowInstanceInput) (store.WorkflowInstance, error)
-	GetWorkflowInstance(ctx context.Context, instanceID int64) (store.WorkflowInstance, error)
-	TransitionWorkflowInstance(ctx context.Context, input store.WorkflowInstanceTransitionInput) (store.WorkflowInstance, error)
-	RecordApproval(ctx context.Context, input store.RecordApprovalInput) (store.ApprovalRecord, error)
-	RecordTaskCompletion(ctx context.Context, input store.RecordTaskCompletionInput) (store.TaskCompletionRecord, error)
 }
 
 func New(cfg config.Config) *App {
@@ -106,6 +96,19 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			_ = db.Close()
 			return nil, err
 		}
+		// The fake in-process agent loop (ADR-0022) is the only dispatch
+		// path; every other mode leaves instances parked — nothing
+		// dispatches. The scenario scripts fake agent failures
+		// (ATLAS_FAKE_AGENT_SCENARIO); an unknown name fails startup.
+		var dispatch *workflowdispatch.Dispatcher
+		if cfg.AgentMode == config.AgentModeFake {
+			fakeAgent, err := agent.NewFakeWithScenario(ops, cfg.FakeAgentScenario)
+			if err != nil {
+				_ = db.Close()
+				return nil, err
+			}
+			dispatch = workflowdispatch.New(postgresStore, workflowRegistry, fakeAgent)
+		}
 		application := &App{
 			Config:              cfg,
 			CephProvider:        postgresStore,
@@ -114,22 +117,9 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			Cases:               postgresStore,
 			CaseWrites:          postgresStore,
 			WorkflowReads:       postgresStore,
-			WorkflowWrites:      postgresStore,
-			WorkflowRegistry:    workflowRegistry,
+			WorkflowLifecycle:   workflowdispatch.NewLifecycle(postgresStore, workflowRegistry, dispatch),
 			Verifier:            verifier,
 			close:               db.Close,
-		}
-		// The fake in-process agent loop (ADR-0022) is the only dispatch
-		// path; every other mode leaves instances parked — nothing
-		// dispatches. The scenario scripts fake agent failures
-		// (ATLAS_FAKE_AGENT_SCENARIO); an unknown name fails startup.
-		if cfg.AgentMode == config.AgentModeFake {
-			fakeAgent, err := agent.NewFakeWithScenario(ops, cfg.FakeAgentScenario)
-			if err != nil {
-				_ = db.Close()
-				return nil, err
-			}
-			application.WorkflowDispatch = workflowdispatch.New(postgresStore, workflowRegistry, fakeAgent)
 		}
 		return application, nil
 	default:
