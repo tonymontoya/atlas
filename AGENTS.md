@@ -6,6 +6,25 @@ Follow it alongside `CONTRIBUTING.md`, `CONTEXT.md`, `dev-plans/`, and
 
 ## Agent skills
 
+The agentic-engineering skill set is vendored into this repository at
+`.agents/skills/`, so every contributor — human or agent — has access to the
+same process. OpenCode and other agents-compatible tools discover them
+automatically; the repository copy is canonical for work in this repo.
+
+### Main flow: idea → ship
+
+1. `/grill-with-docs` — interview to sharpen the idea; captures `CONTEXT.md` + ADRs.
+2. `/to-tickets` or `/to-spec` — publish Definition-of-Done tickets to the tracker.
+3. `/implement` — build, driving `/tdd`, closing with `/code-review`.
+
+Use `/ask-ai` any time you're unsure which skill fits. The `/setup-skills`
+precondition (tracker, labels, doc layout) is already satisfied — see the
+subsections below and `docs/agents/`.
+
+These skills describe how the maintainer works. They are an offer, not a
+gate: contributors may follow any process they like. Changes are judged on
+tests, lint, and documentation staying in sync.
+
 ### Issue tracker
 
 Issues live as GitHub issues in this repo; use `gh` CLI. See `docs/agents/issue-tracker.md`.
