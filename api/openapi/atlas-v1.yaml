@@ -1269,6 +1269,9 @@ components:
       enum:
         - running
         - stopped
+        - starting
+        - error
+        - unknown
     Pool:
       type: object
       additionalProperties: false

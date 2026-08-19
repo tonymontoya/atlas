@@ -47,7 +47,7 @@ export type Daemon = {
   type: "mon" | "mgr" | "osd" | "mds" | "rgw";
   name: string;
   host: string;
-  status: "running" | "stopped";
+  status: "running" | "stopped" | "starting" | "error" | "unknown";
   version?: string;
 };
 
