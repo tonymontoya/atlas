@@ -1,6 +1,6 @@
 # Atlas Product Requirements Document (PRD)
-**Version:** 0.1 (Draft)  
-**Status:** Product Requirements Document  
+**Version:** 0.2 (Draft)  
+**Status:** Product Requirements Document — realigned 2026-08-19: Atlas 1.0 is the production-usable single-zone release formerly scoped as "MVP"; the former "Version 1" enterprise vision is the post-1.0 direction. See `dev-plans/roadmap.md`.  
 **Audience:** Engineering, Architecture, UX, Contributors  
 **Project:** Atlas
 
@@ -8,19 +8,19 @@
 
 # 1. Purpose
 
-This document defines the functional and non-functional requirements for Atlas Version 1.
+This document defines the functional and non-functional requirements for the Atlas product.
 
 The purpose of this document is to define **what** Atlas must do.
 
 Implementation details belong in architecture documents.
 
-The first implementation slice is defined separately in `dev-plans/mvp.md`. MVP is intentionally narrower than the full Version 1 vision and starts with a single-zone deployment.
+The v1.0 scope is defined separately in `dev-plans/mvp.md`. v1.0 is intentionally narrower than the long-term product vision and starts with a single-zone deployment. The version ladder from the current line to 1.0 lives in `dev-plans/roadmap.md`.
 
 ---
 
-# 1.1 MVP Relationship
+# 1.1 v1.0 Relationship
 
-Atlas MVP shall prove the core operational loop before implementing the full enterprise platform:
+Atlas 1.0 shall prove the core operational loop before implementing the broader enterprise platform:
 
 - observe Ceph
 - create or update Cases
@@ -30,7 +30,7 @@ Atlas MVP shall prove the core operational loop before implementing the full ent
 - record Audit Events and Timeline Events
 - verify the result
 
-Federation, global dashboards, cross-zone workflows, and mandatory enterprise integrations beyond the MVP set are deferred until after the single-zone operating model is proven.
+Federation, global dashboards, cross-zone workflows, and mandatory enterprise integrations beyond the v1.0 set are deferred until after the single-zone operating model is proven.
 
 ---
 
@@ -59,7 +59,7 @@ Atlas addresses these challenges while remaining complementary to Ceph.
 
 # 4. Product Goals
 
-Atlas Version 1 shall:
+Atlas shall (long-term product goals; the v1.0 subset is defined in `dev-plans/mvp.md`):
 
 - Provide a secure operational interface for Ceph.
 - Eliminate routine SSH usage.
@@ -74,7 +74,7 @@ Atlas Version 1 shall:
 
 # 5. Success Criteria
 
-Atlas V1 is considered successful when organizations can:
+Atlas is considered successful when organizations can:
 
 - Perform routine Ceph administration without SSH.
 - Execute common maintenance using standardized workflows.
@@ -180,6 +180,9 @@ Understand what happened.
 - External ticket tracker integration
 - Ceph operations
 
+This is the long-term product scope. The v1.0 subset is defined in
+`dev-plans/mvp.md`, and the sequence to it in `dev-plans/roadmap.md`.
+
 ---
 
 ## Out of Scope
@@ -197,6 +200,8 @@ Understand what happened.
 ---
 
 # 8. Functional Requirements
+
+These requirements describe the long-term product. v1.0 implements the subset defined in `dev-plans/mvp.md`; the rest follow post-1.0 per `dev-plans/roadmap.md`.
 
 ---
 
@@ -607,22 +612,18 @@ Every module shall support automated testing.
 
 # 11. Integrations
 
-## MVP Mandatory
+## v1.0 Mandatory
 
-- Ceph
+- Ceph (bare-metal)
 - OIDC
-- Prometheus
-- Chat notifications (for example, Slack)
+- Prometheus (live metrics and alert context)
 
 Identity-provider support is delivered through OIDC compatibility; Okta is one compatible example.
 
-## MVP Optional
+## Post-1.0
 
-- NetBox
-- External ticket tracker (for example, Jira)
-
-## V1 Candidates After MVP
-
+- Rook-managed Ceph as an equal first-class cluster type
+- Chat notifications (for example, Slack)
 - NetBox as required inventory synchronization
 - OpenSearch/Splunk contextual log links
 - External ticket tracker work request creation (for example, Jira)
@@ -632,11 +633,11 @@ Identity-provider support is delivered through OIDC compatibility; Okta is one c
 
 # 12. Acceptance Criteria
 
-MVP is complete when:
+Atlas 1.0 is complete when:
 
 ✓ Operator logs in using OIDC
 
-✓ Fleet inventory synchronizes automatically
+✓ Inventory synchronizes automatically for registered clusters
 
 ✓ RBAC controls access
 
@@ -646,8 +647,6 @@ MVP is complete when:
 
 ✓ Every operation is audited
 
-✓ Chat notifications function
-
 ✓ Prometheus metrics are visible
 
 ✓ Regional Atlas functions as a single-zone deployment
@@ -656,7 +655,11 @@ MVP is complete when:
 
 ✓ Atlas Agents execute only typed, approved operations
 
-Post-MVP V1 is complete when:
+Post-1.0 deliverables include:
+
+✓ Rook-managed Ceph is an equal first-class cluster type
+
+✓ Chat notifications function
 
 ✓ NetBox inventory synchronization works when enabled
 
@@ -690,7 +693,9 @@ Post-MVP V1 is complete when:
 
 ---
 
-# 15. Version 1 Deliverables
+# 15. Deliverables
+
+Long-term deliverables; the v1.0 subset is defined in `dev-plans/mvp.md`.
 
 ## Platform
 
@@ -699,7 +704,7 @@ Post-MVP V1 is complete when:
 - REST API
 - Web UI
 
-Post-MVP:
+Post-1.0:
 
 - Federated architecture
 - Global Control Plane
@@ -728,12 +733,13 @@ Post-MVP:
 
 ## Integrations
 
-- Ceph
+- Ceph (bare-metal)
 - Prometheus
+
+Post-1.0:
+
+- Rook-managed Ceph
 - Chat notifications (for example, Slack)
-
-Post-MVP:
-
 - NetBox
 - OpenSearch/Splunk
 - External ticket tracker (for example, Jira)
@@ -742,9 +748,12 @@ Post-MVP:
 
 ## Operations
 
-Initial workflow library:
+v1.0 ships one workflow end to end:
 
 - Replace OSD
+
+Post-1.0 workflow library:
+
 - Drain Host
 - Restart Daemon
 - Create Pool
@@ -755,9 +764,11 @@ Initial workflow library:
 
 ---
 
-# 16. Post-V1 Roadmap
+# 16. Post-1.0 Roadmap
 
-Potential future capabilities:
+The committed post-1.0 sequence — Rook-managed Ceph, chat notifications, the
+enterprise integration line, then federation — lives in `dev-plans/roadmap.md`.
+Beyond that, potential future capabilities:
 
 - Optional ceph-mgr module
 - AI-assisted operational summaries
@@ -770,7 +781,7 @@ Potential future capabilities:
 - Advanced chat bot interactions
 - Public automation SDKs
 
-These items are intentionally excluded from the Version 1 commitment.
+These items are intentionally excluded from the v1.0 commitment.
 
 ---
 

@@ -84,18 +84,22 @@ What does not exist yet:
 
 ## Roadmap
 
-The MVP is single-zone and aims to prove the core Atlas loop:
+Atlas is working toward a production-usable single-zone 1.0. Each 0.x minor
+is a coherent development milestone; stability commitments begin at 1.0.0.
+The full ladder lives in [`dev-plans/roadmap.md`](dev-plans/roadmap.md).
 
-1. synchronize Ceph inventory for one zone
-2. create and manage operational cases
-3. enforce basic RBAC and audit
-4. execute one tightly scoped workflow through an Atlas Agent
-5. surface attention, assignments, approvals, and maintenance in the UI
+- **v0.7 — Real Reads:** cluster registration, API reads against a live
+  cluster, and a real Prometheus alert source creating Cases automatically
+- **v0.8 — Safety Chain:** hierarchical RBAC, policy evaluation, and
+  immutable Audit Events
+- **v0.9 — Real Agent:** mutual TLS, typed approved operations, and the
+  Replace OSD workflow executing real mutations end to end
+- **v1.0 — Ship:** deployment artifacts, bootstrap runbook, user docs, and
+  a security review — usable by a stranger, single-zone
 
-Near-term work moves from the fake provider toward Rook providers and a real
-alert source; the read-only real Ceph provider landed in the v0.6.0 line.
-Federated global control-plane behavior remains a design goal, not an MVP
-requirement.
+After 1.0: Rook-managed Ceph support, chat notifications, and the broader
+enterprise platform direction (NetBox, log links, external ticket trackers,
+federation).
 
 ## Versioning
 
@@ -117,7 +121,8 @@ The `/api/v1` path segment identifies the REST API contract direction; during
 - `dev-plans/prd.md` - product requirements
 - `dev-plans/hld.md` - high-level architecture
 - `dev-plans/domain_model.md` - canonical product language
-- `dev-plans/mvp.md` - first implementation slice
+- `dev-plans/mvp.md` - v1.0 scope document
+- `dev-plans/roadmap.md` - version ladder to 1.0 and post-1.0 direction
 - `dev-plans/scale_tiers.md` - scale targets by deployment tier
 - `dev-plans/environment_context.md` - example operating environment context and portability rules
 - `dev-plans/ceph_compatibility.md` - Ceph version and cluster type compatibility posture

@@ -1,6 +1,6 @@
-# Atlas MVP Scope
-**Version:** 0.1 (Draft)  
-**Status:** Pre-development Scope Document  
+# Atlas v1.0 Scope
+**Version:** 0.2 (Draft)  
+**Status:** v1.0 Scope Document — realigned 2026-08-19; this milestone was formerly called "MVP". See `dev-plans/roadmap.md` for the ladder to 1.0.  
 **Audience:** Engineering, Architecture, Product, Contributors  
 **Project:** Atlas
 
@@ -8,17 +8,17 @@
 
 # 1. Purpose
 
-This document defines the first implementation slice for Atlas.
+This document defines the scope of Atlas 1.0 — the first production-usable, single-zone release, and the first release carrying stability commitments.
 
-The MVP should prove that Atlas can safely turn Ceph operational intent into governed, auditable work. It should not attempt to deliver the full V1 enterprise platform.
+v1.0 should prove that Atlas can safely turn Ceph operational intent into governed, auditable work. It should not attempt to deliver the broader enterprise platform, which follows post-1.0.
 
 ---
 
-# 2. MVP Thesis
+# 2. v1.0 Thesis
 
-Atlas MVP is a single-zone operations platform for one or more Ceph clusters in one operational boundary.
+Atlas 1.0 is a single-zone operations platform for one or more Ceph clusters in one operational boundary.
 
-The MVP must prove the core Atlas loop:
+v1.0 must prove the core Atlas loop:
 
 1. observe Ceph inventory and health
 2. create or update a Case
@@ -30,7 +30,7 @@ The MVP must prove the core Atlas loop:
 
 ---
 
-# 3. MVP In Scope
+# 3. v1.0 In Scope
 
 ## Platform
 
@@ -43,11 +43,14 @@ The MVP must prove the core Atlas loop:
 - Web UI consuming REST API v1
 - PostgreSQL persistence
 
+Rook-managed Ceph remains an equal first-class cluster type in the data
+model, but its provider lands post-1.0 as the first follow-on slice (see
+`dev-plans/roadmap.md`).
+
 ## Inventory
 
 - Cluster registration
 - Cluster type: bare-metal Ceph
-- Cluster type: Rook-managed Ceph
 - Host inventory
 - Storage Device inventory
 - OSD inventory
@@ -80,23 +83,24 @@ The MVP must prove the core Atlas loop:
 
 ## Integrations
 
-- Ceph: required
+- Ceph (bare-metal): required
 - OIDC: required
-- Prometheus: required for health and alert context
-- Chat notifications (for example, Slack): required for notifications only
-- NetBox: optional read-only sync during MVP
-- External ticket tracker (for example, Jira): optional external work request creation
-- OpenSearch/Splunk: deferred to V1 unless needed for a pilot
+- Prometheus: required for health and alert context, including a live alert source
+
+Deferred to post-1.0: Rook-managed Ceph, chat notifications, NetBox, the
+external ticket tracker, and OpenSearch/Splunk (see `dev-plans/roadmap.md`).
 
 ---
 
-# 4. MVP Out of Scope
+# 4. v1.0 Out of Scope
 
 - Global Control Plane
 - multi-zone synchronization
 - cross-zone workflows
 - WAN conflict resolution
 - global dashboards
+- Rook-managed Ceph provider (first post-1.0 slice)
+- chat notifications
 - arbitrary shell execution
 - SSH proxying
 - generic remote execution
@@ -114,7 +118,7 @@ The MVP must prove the core Atlas loop:
 
 # 5. First Workflow: Replace OSD
 
-Replace OSD is the MVP tracer-bullet workflow because it exercises the main Atlas concepts without requiring federation.
+Replace OSD is the v1.0 tracer-bullet workflow because it exercises the main Atlas concepts without requiring federation.
 
 The workflow should include:
 
@@ -130,18 +134,18 @@ The workflow should include:
 - Audit Events for every privileged action
 - Timeline Events for user-facing progress
 
-The MVP may support dry-run execution before real mutation if needed to validate the safety model.
+v1.0 may support dry-run execution before real mutation if needed to validate the safety model.
 
 ---
 
-# 6. MVP Acceptance Criteria
+# 6. v1.0 Acceptance Criteria
 
-MVP is complete when:
+Atlas 1.0 is complete when:
 
 - an operator can log in through OIDC
 - a Ceph cluster can be registered
 - inventory sync creates Clusters, Hosts, Storage Devices, OSDs, MONs, MGRs, and Pools
-- a failed OSD can create a Case automatically
+- a real Prometheus alert for a failed OSD can create a Case automatically
 - an operator can create and assign a Case manually
 - RBAC prevents unauthorized users from executing privileged actions
 - policy can require Approval before a Workflow continues
@@ -149,15 +153,16 @@ MVP is complete when:
 - an Atlas Agent executes only typed, approved operations
 - privileged operations create immutable Audit Events
 - Case Timeline Events show user-facing progress
-- Chat notifications are sent for Case and Approval changes
 - the system can restart without losing Workflow progress
 
 ---
 
-# 7. Non-MVP V1 Candidates
+# 7. Post-1.0 Candidates
 
-These remain important for V1 but should follow the MVP:
+These remain important but follow v1.0:
 
+- Rook-managed Ceph provider
+- chat notifications
 - NetBox as a required inventory source
 - OpenSearch/Splunk contextual log links
 - An external ticket tracker as a required integration
@@ -181,4 +186,4 @@ These remain important for V1 but should follow the MVP:
 - Do not add generic remote execution to Atlas Agents.
 - Do not make AWX or Ansible a runtime dependency.
 - Existing AWX jobs, Ansible playbooks, and runbooks may be used only as discovery and migration inputs.
-- Keep MVP data models compatible with future federation, but do not implement federation early.
+- Keep v1.0 data models compatible with future federation, but do not implement federation early.
