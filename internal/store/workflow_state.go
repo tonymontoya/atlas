@@ -73,9 +73,7 @@ func (s *PostgresStore) CreateWorkflowInstance(ctx context.Context, input Create
 
 	occurredAt := time.Now().UTC()
 	return runTransition(ctx, s.db,
-		func(ctx context.Context, tx *sql.Tx) (cases.Case, error) {
-			return lockCaseForUpdate(ctx, tx, input.CaseID)
-		},
+		lockCase(input.CaseID),
 		func(targetCase cases.Case) error {
 			if targetCase.Status == cases.CaseStatusClosed {
 				return errors.New("case is closed")
@@ -321,9 +319,7 @@ func (s *PostgresStore) TransitionWorkflowInstance(ctx context.Context, input Wo
 
 	occurredAt := time.Now().UTC()
 	return runTransition(ctx, s.db,
-		func(ctx context.Context, tx *sql.Tx) (WorkflowInstance, error) {
-			return lockWorkflowInstanceForUpdate(ctx, tx, input.InstanceID)
-		},
+		lockInstance(input.InstanceID),
 		func(current WorkflowInstance) error {
 			return workflows.CanTransitionInstance(current.State, target)
 		},
@@ -434,6 +430,14 @@ func (s *PostgresStore) TransitionWorkflowJob(ctx context.Context, input Workflo
 			return updated, nil
 		},
 	)
+}
+
+// lockInstance adapts lockWorkflowInstanceForUpdate into a runTransition
+// lock function.
+func lockInstance(instanceID int64) func(context.Context, *sql.Tx) (WorkflowInstance, error) {
+	return func(ctx context.Context, tx *sql.Tx) (WorkflowInstance, error) {
+		return lockWorkflowInstanceForUpdate(ctx, tx, instanceID)
+	}
 }
 
 func lockWorkflowJobForUpdate(ctx context.Context, tx *sql.Tx, jobID int64) (WorkflowJob, error) {

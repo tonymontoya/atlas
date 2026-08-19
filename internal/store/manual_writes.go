@@ -132,9 +132,7 @@ func (s *PostgresStore) TransitionCase(ctx context.Context, input CaseTransition
 
 	occurredAt := time.Now().UTC()
 	return runTransition(ctx, s.db,
-		func(ctx context.Context, tx *sql.Tx) (cases.Case, error) {
-			return lockCaseForUpdate(ctx, tx, input.CaseID)
-		},
+		lockCase(input.CaseID),
 		func(current cases.Case) error {
 			return cases.CanTransition(current.Status, target)
 		},
@@ -190,9 +188,7 @@ func (s *PostgresStore) AssignCase(ctx context.Context, input CaseAssignmentInpu
 
 	occurredAt := time.Now().UTC()
 	return runTransition(ctx, s.db,
-		func(ctx context.Context, tx *sql.Tx) (cases.Case, error) {
-			return lockCaseForUpdate(ctx, tx, input.CaseID)
-		},
+		lockCase(input.CaseID),
 		func(current cases.Case) error {
 			if current.Status == cases.CaseStatusClosed {
 				return errors.New("case is closed")
@@ -361,6 +357,13 @@ func lockCaseForUpdate(ctx context.Context, tx *sql.Tx, caseID int64) (cases.Cas
 		return cases.Case{}, err
 	}
 	return current, nil
+}
+
+// lockCase adapts lockCaseForUpdate into a runTransition lock function.
+func lockCase(caseID int64) func(context.Context, *sql.Tx) (cases.Case, error) {
+	return func(ctx context.Context, tx *sql.Tx) (cases.Case, error) {
+		return lockCaseForUpdate(ctx, tx, caseID)
+	}
 }
 
 func nullableString(value sql.NullString) *string {
