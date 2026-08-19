@@ -213,7 +213,7 @@ func requestEnvelope(definition workflows.Definition, target cases.Case, instanc
 	// The latest Approval record authorizes this run.
 	if len(approvals) > 0 {
 		latest := approvals[len(approvals)-1]
-		envelopeActor = actor.Actor{Subject: latest.Approver.Subject, DisplayName: latest.Approver.DisplayName}
+		envelopeActor = latest.Approver
 		approval = &operations.ApprovalContext{ApprovalID: latest.ID, Approver: latest.Approver.Subject}
 	}
 	return operations.RequestEnvelope{
