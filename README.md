@@ -8,6 +8,39 @@ Atlas is an open-source operations platform for Ceph. It focuses on how organiza
 
 Atlas is not a replacement for Ceph, Ceph Dashboard, Prometheus, Grafana, NetBox, OpenSearch, Splunk, or configuration management. It is the operational control plane that coordinates work across those systems.
 
+## The problem Atlas solves
+
+Ceph tells you *that* something is wrong — an OSD is down, a pool is near full, a host needs draining. It deliberately does not govern *how your team responds*. Operating a fleet today usually means some mix of these:
+
+- Runbooks and tribal knowledge: the recovery procedure for a failed
+  Storage Device lives in a wiki page, a chat thread, or one engineer's
+  head, and drifts from what the cluster actually needs.
+- Approval by chat: the destructive step between "we should replace this
+  device" and `ceph orch osd rm` is a thumbs-up emoji with no durable
+  record of who authorized what, when, or why.
+- Risky manual mutations: operators paste commands against production
+  storage, where a typo or a stale runbook can turn one dead drive into
+  an outage.
+- No operational history: once the incident closes, the reasoning, the
+  approvals, and the exact steps taken are scattered or gone — nothing
+  helps the next person facing the same failure.
+
+Atlas closes that gap by making the *response itself* a durable, governed
+object. A firing condition becomes a Case. A Case carries a Workflow:
+typed, auditable steps where read-only collection runs automatically,
+destructive mutations pause at an Approval Gate until a human records
+authorization, and physical work pauses as a human Task. Every
+transition — who did what, under whose approval, with what outcome — is
+recorded on the Case Timeline. The result is a fleet where the safe path
+is also the easy path, and where the operational history compounds
+instead of evaporating.
+
+If you want to contribute, these are the seams we are actively building:
+the Case and Workflow model, the typed Agent operation contract, the
+provider layer that reads real Ceph, and the attention-driven UI that
+surfaces what needs a human. See [Status](#status) for what exists
+today and [Roadmap](#roadmap) for where it goes next.
+
 ## Status
 
 Atlas is in active early development as an open design-and-prototype project. It is **not production-ready** and should not be used to operate real Ceph clusters yet.
