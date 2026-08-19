@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 )
 
@@ -40,4 +41,44 @@ func writeTimelineEvent(ctx context.Context, tx *sql.Tx, caseID int64, occurredA
 		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8::jsonb)
 	`, caseID, event.Type, event.Message, occurredAt, actorType, actorID, actorDisplayName, payload)
 	return err
+}
+
+// runTransition executes one guarded transition on locked state: it
+// begins the transaction, locks the target rows, evaluates the guard
+// against the locked state, applies the writes, and commits. Writes are
+// therefore always preceded by the lock, and a guard failure is always
+// a Conflict on the current state. Pre-transaction validation
+// (InvalidRequest) and NotFound mapping stay with the call site and the
+// lock function. Idempotent no-ops short-circuit inside apply; the
+// transaction still commits.
+func runTransition[L, R any](ctx context.Context, db *sql.DB,
+	lock func(context.Context, *sql.Tx) (L, error),
+	guard func(L) error,
+	apply func(context.Context, *sql.Tx, L) (R, error),
+) (R, error) {
+	var zero R
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return zero, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	locked, err := lock(ctx, tx)
+	if err != nil {
+		return zero, err
+	}
+	if err := guard(locked); err != nil {
+		return zero, apperr.Error{Class: apperr.Conflict, Message: err.Error()}
+	}
+
+	result, err := apply(ctx, tx, locked)
+	if err != nil {
+		return zero, err
+	}
+	if err := tx.Commit(); err != nil {
+		return zero, err
+	}
+	return result, nil
 }

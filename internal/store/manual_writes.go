@@ -131,60 +131,50 @@ func (s *PostgresStore) TransitionCase(ctx context.Context, input CaseTransition
 	}
 
 	occurredAt := time.Now().UTC()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return cases.Case{}, err
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
+	return runTransition(ctx, s.db,
+		func(ctx context.Context, tx *sql.Tx) (cases.Case, error) {
+			return lockCaseForUpdate(ctx, tx, input.CaseID)
+		},
+		func(current cases.Case) error {
+			return cases.CanTransition(current.Status, target)
+		},
+		func(ctx context.Context, tx *sql.Tx, current cases.Case) (cases.Case, error) {
+			var closedAt sql.NullTime
+			if target == cases.CaseStatusClosed {
+				closedAt = sql.NullTime{Time: occurredAt, Valid: true}
+			}
+			row := tx.QueryRowContext(ctx, `
+				UPDATE cases
+				SET status = $2, closed_at = $3, updated_at = $4
+				WHERE id = $1
+				RETURNING `+caseColumns,
+				input.CaseID, target, closedAt, occurredAt)
+			updated, err := scanCase(row)
+			if err != nil {
+				return cases.Case{}, err
+			}
 
-	current, err := lockCaseForUpdate(ctx, tx, input.CaseID)
-	if err != nil {
-		return cases.Case{}, err
-	}
-	if err := cases.CanTransition(current.Status, target); err != nil {
-		return cases.Case{}, apperr.Error{Class: apperr.Conflict, Message: err.Error()}
-	}
-
-	var closedAt sql.NullTime
-	if target == cases.CaseStatusClosed {
-		closedAt = sql.NullTime{Time: occurredAt, Valid: true}
-	}
-	row := tx.QueryRowContext(ctx, `
-		UPDATE cases
-		SET status = $2, closed_at = $3, updated_at = $4
-		WHERE id = $1
-		RETURNING `+caseColumns,
-		input.CaseID, target, closedAt, occurredAt)
-	updated, err := scanCase(row)
-	if err != nil {
-		return cases.Case{}, err
-	}
-
-	eventType := cases.TimelineEventCaseStatusChanged
-	message := fmt.Sprintf("Case status changed to %s.", target)
-	if target == cases.CaseStatusTriaged {
-		eventType = cases.TimelineEventCaseTriaged
-		message = "Case triaged."
-	}
-	event := timelineEvent{
-		Type:    eventType,
-		Message: message,
-		Actor:   &input.Actor,
-		Payload: struct {
-			PreviousStatus cases.CaseStatus `json:"previousStatus"`
-			NewStatus      cases.CaseStatus `json:"newStatus"`
-		}{PreviousStatus: current.Status, NewStatus: target},
-	}
-	if err := writeTimelineEvent(ctx, tx, input.CaseID, occurredAt, event); err != nil {
-		return cases.Case{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return cases.Case{}, err
-	}
-	return updated, nil
+			eventType := cases.TimelineEventCaseStatusChanged
+			message := fmt.Sprintf("Case status changed to %s.", target)
+			if target == cases.CaseStatusTriaged {
+				eventType = cases.TimelineEventCaseTriaged
+				message = "Case triaged."
+			}
+			event := timelineEvent{
+				Type:    eventType,
+				Message: message,
+				Actor:   &input.Actor,
+				Payload: struct {
+					PreviousStatus cases.CaseStatus `json:"previousStatus"`
+					NewStatus      cases.CaseStatus `json:"newStatus"`
+				}{PreviousStatus: current.Status, NewStatus: target},
+			}
+			if err := writeTimelineEvent(ctx, tx, input.CaseID, occurredAt, event); err != nil {
+				return cases.Case{}, err
+			}
+			return updated, nil
+		},
+	)
 }
 
 func (s *PostgresStore) AssignCase(ctx context.Context, input CaseAssignmentInput) (cases.Case, error) {
@@ -199,70 +189,61 @@ func (s *PostgresStore) AssignCase(ctx context.Context, input CaseAssignmentInpu
 	}
 
 	occurredAt := time.Now().UTC()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return cases.Case{}, err
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
+	return runTransition(ctx, s.db,
+		func(ctx context.Context, tx *sql.Tx) (cases.Case, error) {
+			return lockCaseForUpdate(ctx, tx, input.CaseID)
+		},
+		func(current cases.Case) error {
+			if current.Status == cases.CaseStatusClosed {
+				return errors.New("case is closed")
+			}
+			return nil
+		},
+		func(ctx context.Context, tx *sql.Tx, current cases.Case) (cases.Case, error) {
+			if current.Assignee == input.Assignee {
+				return current, nil
+			}
 
-	current, err := lockCaseForUpdate(ctx, tx, input.CaseID)
-	if err != nil {
-		return cases.Case{}, err
-	}
-	if current.Status == cases.CaseStatusClosed {
-		return cases.Case{}, apperr.Error{Class: apperr.Conflict, Message: "case is closed"}
-	}
-	if current.Assignee == input.Assignee {
-		if err := tx.Commit(); err != nil {
-			return cases.Case{}, err
-		}
-		return current, nil
-	}
+			var assignee sql.NullString
+			var assigneeDisplayName sql.NullString
+			if input.Assignee != "" {
+				assignee = sql.NullString{String: input.Assignee, Valid: true}
+				assigneeDisplayName = sql.NullString{String: input.AssigneeDisplayName, Valid: true}
+			}
+			row := tx.QueryRowContext(ctx, `
+				UPDATE cases
+				SET assignee = $2, assignee_display_name = $3, updated_at = $4
+				WHERE id = $1
+				RETURNING `+caseColumns,
+				input.CaseID, assignee, assigneeDisplayName, occurredAt)
+			updated, err := scanCase(row)
+			if err != nil {
+				return cases.Case{}, err
+			}
 
-	var assignee sql.NullString
-	var assigneeDisplayName sql.NullString
-	if input.Assignee != "" {
-		assignee = sql.NullString{String: input.Assignee, Valid: true}
-		assigneeDisplayName = sql.NullString{String: input.AssigneeDisplayName, Valid: true}
-	}
-	row := tx.QueryRowContext(ctx, `
-		UPDATE cases
-		SET assignee = $2, assignee_display_name = $3, updated_at = $4
-		WHERE id = $1
-		RETURNING `+caseColumns,
-		input.CaseID, assignee, assigneeDisplayName, occurredAt)
-	updated, err := scanCase(row)
-	if err != nil {
-		return cases.Case{}, err
-	}
-
-	message := "Case unassigned."
-	if input.Assignee != "" {
-		message = fmt.Sprintf("Case assigned to %s.", input.AssigneeDisplayName)
-		if current.Assignee != "" {
-			message = fmt.Sprintf("Case reassigned to %s.", input.AssigneeDisplayName)
-		}
-	}
-	previousAssignee := nullableString(sql.NullString{String: current.Assignee, Valid: current.Assignee != ""})
-	event := timelineEvent{
-		Type:    cases.TimelineEventCaseAssigned,
-		Message: message,
-		Actor:   &input.Actor,
-		Payload: struct {
-			PreviousAssignee *string `json:"previousAssignee"`
-			NewAssignee      *string `json:"newAssignee"`
-		}{PreviousAssignee: previousAssignee, NewAssignee: nullableString(assignee)},
-	}
-	if err := writeTimelineEvent(ctx, tx, input.CaseID, occurredAt, event); err != nil {
-		return cases.Case{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return cases.Case{}, err
-	}
-	return updated, nil
+			message := "Case unassigned."
+			if input.Assignee != "" {
+				message = fmt.Sprintf("Case assigned to %s.", input.AssigneeDisplayName)
+				if current.Assignee != "" {
+					message = fmt.Sprintf("Case reassigned to %s.", input.AssigneeDisplayName)
+				}
+			}
+			previousAssignee := nullableString(sql.NullString{String: current.Assignee, Valid: current.Assignee != ""})
+			event := timelineEvent{
+				Type:    cases.TimelineEventCaseAssigned,
+				Message: message,
+				Actor:   &input.Actor,
+				Payload: struct {
+					PreviousAssignee *string `json:"previousAssignee"`
+					NewAssignee      *string `json:"newAssignee"`
+				}{PreviousAssignee: previousAssignee, NewAssignee: nullableString(assignee)},
+			}
+			if err := writeTimelineEvent(ctx, tx, input.CaseID, occurredAt, event); err != nil {
+				return cases.Case{}, err
+			}
+			return updated, nil
+		},
+	)
 }
 
 func (s *PostgresStore) AddCaseNote(ctx context.Context, input CaseNoteInput) (cases.CaseNote, error) {
