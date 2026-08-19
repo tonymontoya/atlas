@@ -27,6 +27,7 @@ type memStore struct {
 	target          cases.Case
 	jobCalls        []store.WorkflowJobTransitionInput
 	instanceCalls   []store.WorkflowInstanceTransitionInput
+	createInput     *store.CreateWorkflowInstanceInput
 	getCaseErr      error
 }
 

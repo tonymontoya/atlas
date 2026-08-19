@@ -35,8 +35,10 @@ func dispatchCleanup(t *testing.T, db *sql.DB) {
 	testdb.DeleteCases(t, db, "title LIKE 'dispatch-test%'")
 }
 
-// attachAndApprove drives the store through attach, gate parking, and
-// approval exactly as the API does, leaving a running instance.
+// attachAndApprove drives the Lifecycle choreography — attach, gate
+// parking, and approval — exactly as the API does, leaving a running
+// instance. The Lifecycle carries no dispatcher so the test drives Job
+// execution itself.
 func attachAndApprove(t *testing.T, postgresStore *store.PostgresStore, ctx context.Context, actor store.Actor) store.WorkflowInstance {
 	t.Helper()
 	target, err := postgresStore.CreateManualCase(ctx, store.ManualCaseInput{
@@ -49,39 +51,19 @@ func attachAndApprove(t *testing.T, postgresStore *store.PostgresStore, ctx cont
 	if err != nil {
 		t.Fatalf("CreateManualCase: %v", err)
 	}
-	instance, err := postgresStore.CreateWorkflowInstance(ctx, store.CreateWorkflowInstanceInput{
-		CaseID:            target.ID,
-		DefinitionID:      "replace-osd",
-		DefinitionVersion: 1,
-		Jobs: []store.WorkflowJobInput{
-			{StepID: "collect-evidence", OperationType: "CollectHostEvidence", MaxAttempts: 3},
-			{StepID: "destroy-osd", OperationType: "DestroyOSD", MaxAttempts: 1},
-			{StepID: "verify-osd", OperationType: "VerifyOSD", MaxAttempts: 3},
-		},
-		Actor: actor,
-	})
+	lifecycle := NewLifecycle(postgresStore, replaceOSDRegistry(t), nil)
+	instance, err := lifecycle.Attach(ctx, actor, target.ID, "replace-osd", 1)
 	if err != nil {
-		t.Fatalf("CreateWorkflowInstance: %v", err)
+		t.Fatalf("Attach: %v", err)
 	}
-	for _, transition := range []store.WorkflowInstanceTransitionInput{
-		{InstanceID: instance.ID, To: workflows.InstanceRunning},
-		{InstanceID: instance.ID, To: workflows.InstanceWaitingForApproval, AtStep: "approve-destroy"},
-	} {
-		if instance, err = postgresStore.TransitionWorkflowInstance(ctx, transition); err != nil {
-			t.Fatalf("advance to gate: %v", err)
-		}
+	if _, err := lifecycle.ApproveGate(ctx, actor, instance.ID, "approve-destroy", ""); err != nil {
+		t.Fatalf("ApproveGate: %v", err)
 	}
-	if _, err := postgresStore.RecordApproval(ctx, store.RecordApprovalInput{
-		InstanceID: instance.ID, GateID: "approve-destroy", Approver: actor,
-	}); err != nil {
-		t.Fatalf("RecordApproval: %v", err)
+	approved, err := postgresStore.GetWorkflowInstance(ctx, instance.ID)
+	if err != nil {
+		t.Fatalf("GetWorkflowInstance: %v", err)
 	}
-	if instance, err = postgresStore.TransitionWorkflowInstance(ctx, store.WorkflowInstanceTransitionInput{
-		InstanceID: instance.ID, To: workflows.InstanceRunning,
-	}); err != nil {
-		t.Fatalf("resume past gate: %v", err)
-	}
-	return instance
+	return approved
 }
 
 func testDispatcher(t *testing.T, postgresStore *store.PostgresStore) *Dispatcher {
@@ -110,20 +92,17 @@ func testDispatcherWithScenario(t *testing.T, postgresStore *store.PostgresStore
 }
 
 // resumePastTask performs the Operator's task completion and resume
-// against the durable store, exactly as the API resume endpoint does.
+// through the Lifecycle, exactly as the API resume endpoint does,
+// without dispatching.
 func resumePastTask(t *testing.T, postgresStore *store.PostgresStore, ctx context.Context, instance store.WorkflowInstance, actor store.Actor) store.WorkflowInstance {
 	t.Helper()
-	if _, err := postgresStore.RecordTaskCompletion(ctx, store.RecordTaskCompletionInput{
-		InstanceID: instance.ID, TaskID: "replace-device", Operator: actor, Note: "device swapped",
-	}); err != nil {
-		t.Fatalf("RecordTaskCompletion: %v", err)
+	lifecycle := NewLifecycle(postgresStore, replaceOSDRegistry(t), nil)
+	if _, err := lifecycle.CompleteTask(ctx, actor, instance.ID, "replace-device", "device swapped"); err != nil {
+		t.Fatalf("CompleteTask: %v", err)
 	}
-	resumed, err := postgresStore.TransitionWorkflowInstance(ctx, store.WorkflowInstanceTransitionInput{
-		InstanceID: instance.ID, To: workflows.InstanceRunning,
-		Actor: &actor,
-	})
+	resumed, err := postgresStore.GetWorkflowInstance(ctx, instance.ID)
 	if err != nil {
-		t.Fatalf("resume past task: %v", err)
+		t.Fatalf("GetWorkflowInstance: %v", err)
 	}
 	return resumed
 }
