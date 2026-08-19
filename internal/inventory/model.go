@@ -42,12 +42,32 @@ type StorageDevice struct {
 	OSDID  *int   `json:"osdId,omitempty"`
 }
 
+type DaemonStatus string
+
+const (
+	DaemonRunning  DaemonStatus = "running"
+	DaemonStopped  DaemonStatus = "stopped"
+	DaemonStarting DaemonStatus = "starting"
+	DaemonError    DaemonStatus = "error"
+	DaemonUnknown  DaemonStatus = "unknown"
+)
+
+type DaemonType string
+
+const (
+	DaemonMon DaemonType = "mon"
+	DaemonMgr DaemonType = "mgr"
+	DaemonOsd DaemonType = "osd"
+	DaemonMds DaemonType = "mds"
+	DaemonRgw DaemonType = "rgw"
+)
+
 type Daemon struct {
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	Host    string `json:"host"`
-	Status  string `json:"status"`
-	Version string `json:"version,omitempty"`
+	Type    DaemonType   `json:"type"`
+	Name    string       `json:"name"`
+	Host    string       `json:"host"`
+	Status  DaemonStatus `json:"status"`
+	Version string       `json:"version,omitempty"`
 }
 
 type Pool struct {

@@ -202,7 +202,7 @@ func (p *Provider) Daemons(ctx context.Context) ([]inventory.Daemon, error) {
 			name = item.DaemonType + "." + item.DaemonID
 		}
 		daemons = append(daemons, inventory.Daemon{
-			Type:    item.DaemonType,
+			Type:    inventory.DaemonType(item.DaemonType),
 			Name:    name,
 			Host:    item.Hostname,
 			Status:  daemonStatus(item.Status),
@@ -242,17 +242,17 @@ func hostEndpoint(host string) string {
 	return path.Join("/api/host", url.PathEscape(host))
 }
 
-func daemonStatus(status int) string {
+func daemonStatus(status int) inventory.DaemonStatus {
 	switch status {
 	case 1:
-		return "running"
+		return inventory.DaemonRunning
 	case 0:
-		return "stopped"
+		return inventory.DaemonStopped
 	case -1:
-		return "error"
+		return inventory.DaemonError
 	case 2:
-		return "starting"
+		return inventory.DaemonStarting
 	default:
-		return "unknown"
+		return inventory.DaemonUnknown
 	}
 }

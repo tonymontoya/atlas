@@ -176,7 +176,7 @@ func TestDaemonsNormalizesStatusEnum(t *testing.T) {
 	if len(daemons) != 5 {
 		t.Fatalf("len(Daemons) = %d, want 5", len(daemons))
 	}
-	byName := map[string]string{}
+	byName := map[string]inventory.DaemonStatus{}
 	for _, daemon := range daemons {
 		byName[daemon.Name] = daemon.Status
 	}

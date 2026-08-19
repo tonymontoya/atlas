@@ -163,6 +163,16 @@ func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 					if daemon.Type == "" || daemon.Name == "" {
 						t.Fatalf("Daemons returned a Ceph Daemon with an empty type or name: %+v", daemon)
 					}
+					switch daemon.Type {
+					case inventory.DaemonMon, inventory.DaemonMgr, inventory.DaemonOsd, inventory.DaemonMds, inventory.DaemonRgw:
+					default:
+						t.Fatalf("Ceph Daemon type = %q, want a known DaemonType", daemon.Type)
+					}
+					switch daemon.Status {
+					case inventory.DaemonRunning, inventory.DaemonStopped, inventory.DaemonStarting, inventory.DaemonError, inventory.DaemonUnknown:
+					default:
+						t.Fatalf("Ceph Daemon status = %q, want a known DaemonStatus", daemon.Status)
+					}
 				}
 			},
 		},

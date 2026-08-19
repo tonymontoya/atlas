@@ -471,7 +471,7 @@ func insertDaemon(ctx context.Context, tx *sql.Tx, snapshotID int64, daemon inve
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO daemon_observations (snapshot_id, daemon_type, daemon_name, host_name, status, ceph_version)
 		VALUES ($1, $2, $3, $4, $5, $6)
-	`, snapshotID, daemon.Type, daemon.Name, daemon.Host, daemon.Status, version)
+	`, snapshotID, string(daemon.Type), daemon.Name, daemon.Host, string(daemon.Status), version)
 	return err
 }
 
