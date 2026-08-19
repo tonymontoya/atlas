@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -110,15 +109,16 @@ func (s *PostgresStore) CreateWorkflowInstance(ctx context.Context, input Create
 		}
 	}
 
-	payload, err := json.Marshal(struct {
-		WorkflowID         string `json:"workflowId"`
-		WorkflowInstanceID int64  `json:"workflowInstanceId"`
-	}{WorkflowID: input.DefinitionID, WorkflowInstanceID: instance.ID})
-	if err != nil {
-		return WorkflowInstance{}, err
+	event := timelineEvent{
+		Type:    cases.TimelineEventWorkflowAttached,
+		Message: fmt.Sprintf("Workflow %s attached to case.", input.DefinitionID),
+		Actor:   &input.Actor,
+		Payload: struct {
+			WorkflowID         string `json:"workflowId"`
+			WorkflowInstanceID int64  `json:"workflowInstanceId"`
+		}{WorkflowID: input.DefinitionID, WorkflowInstanceID: instance.ID},
 	}
-	message := fmt.Sprintf("Workflow %s attached to case.", input.DefinitionID)
-	if err := insertTimelineEvent(ctx, tx, input.CaseID, cases.TimelineEventWorkflowAttached, message, occurredAt, input.Actor, payload); err != nil {
+	if err := writeTimelineEvent(ctx, tx, input.CaseID, occurredAt, event); err != nil {
 		return WorkflowInstance{}, err
 	}
 
@@ -363,20 +363,17 @@ func (s *PostgresStore) TransitionWorkflowInstance(ctx context.Context, input Wo
 		return WorkflowInstance{}, err
 	}
 
-	payload, err := json.Marshal(struct {
-		PreviousState workflows.InstanceState `json:"previousState"`
-		NewState      workflows.InstanceState `json:"newState"`
-		PausedAtStep  *string                 `json:"pausedAtStep,omitempty"`
-	}{PreviousState: current.State, NewState: target, PausedAtStep: updated.CurrentStep})
-	if err != nil {
-		return WorkflowInstance{}, err
+	event := timelineEvent{
+		Type:    cases.TimelineEventWorkflowStateChanged,
+		Message: fmt.Sprintf("Workflow instance state changed to %s.", target),
+		Actor:   input.Actor,
+		Payload: struct {
+			PreviousState workflows.InstanceState `json:"previousState"`
+			NewState      workflows.InstanceState `json:"newState"`
+			PausedAtStep  *string                 `json:"pausedAtStep,omitempty"`
+		}{PreviousState: current.State, NewState: target, PausedAtStep: updated.CurrentStep},
 	}
-	message := fmt.Sprintf("Workflow instance state changed to %s.", target)
-	if input.Actor != nil {
-		if err := insertTimelineEvent(ctx, tx, current.CaseID, cases.TimelineEventWorkflowStateChanged, message, occurredAt, *input.Actor, payload); err != nil {
-			return WorkflowInstance{}, err
-		}
-	} else if err := insertTimelineEventWithActorType(ctx, tx, current.CaseID, cases.TimelineEventWorkflowStateChanged, message, occurredAt, cases.TimelineActorSystem, "", "Atlas", payload); err != nil {
+	if err := writeTimelineEvent(ctx, tx, current.CaseID, occurredAt, event); err != nil {
 		return WorkflowInstance{}, err
 	}
 

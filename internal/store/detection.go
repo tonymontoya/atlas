@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/tonymontoya/ceph-atlas/internal/cases"
 )
 
 type AlertCandidate struct {
@@ -361,11 +363,12 @@ func createDetectedCase(ctx context.Context, tx *sql.Tx, candidate AlertCandidat
 	if err != nil {
 		return 0, err
 	}
-	message := fmt.Sprintf("%s detected from %s alert context.", candidate.Title, candidate.Source)
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO case_timeline_events (case_id, event_type, message, occurred_at, actor_type, actor_display_name, payload)
-		VALUES ($1, 'case_detected', $2, $3, 'system', 'Atlas', $4::jsonb)
-	`, caseID, message, evaluatedAt, payload); err != nil {
+	event := timelineEvent{
+		Type:    cases.TimelineEventCaseDetected,
+		Message: fmt.Sprintf("%s detected from %s alert context.", candidate.Title, candidate.Source),
+		Payload: json.RawMessage(payload),
+	}
+	if err := writeTimelineEvent(ctx, tx, caseID, evaluatedAt, event); err != nil {
 		return 0, err
 	}
 

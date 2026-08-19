@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -104,14 +103,16 @@ func (s *PostgresStore) CreateManualCase(ctx context.Context, input ManualCaseIn
 		return cases.Case{}, err
 	}
 
-	payload, err := json.Marshal(struct {
-		Source      string  `json:"source"`
-		ClusterFSID *string `json:"clusterFsid,omitempty"`
-	}{Source: string(cases.CaseSourceManual), ClusterFSID: nullableString(clusterFSID)})
-	if err != nil {
-		return cases.Case{}, err
+	event := timelineEvent{
+		Type:    cases.TimelineEventCaseDetected,
+		Message: "Case created manually.",
+		Actor:   &input.Actor,
+		Payload: struct {
+			Source      string  `json:"source"`
+			ClusterFSID *string `json:"clusterFsid,omitempty"`
+		}{Source: string(cases.CaseSourceManual), ClusterFSID: nullableString(clusterFSID)},
 	}
-	if err := insertTimelineEvent(ctx, tx, created.ID, cases.TimelineEventCaseDetected, "Case created manually.", occurredAt, input.Actor, payload); err != nil {
+	if err := writeTimelineEvent(ctx, tx, created.ID, occurredAt, event); err != nil {
 		return cases.Case{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -167,14 +168,16 @@ func (s *PostgresStore) TransitionCase(ctx context.Context, input CaseTransition
 		eventType = cases.TimelineEventCaseTriaged
 		message = "Case triaged."
 	}
-	payload, err := json.Marshal(struct {
-		PreviousStatus cases.CaseStatus `json:"previousStatus"`
-		NewStatus      cases.CaseStatus `json:"newStatus"`
-	}{PreviousStatus: current.Status, NewStatus: target})
-	if err != nil {
-		return cases.Case{}, err
+	event := timelineEvent{
+		Type:    eventType,
+		Message: message,
+		Actor:   &input.Actor,
+		Payload: struct {
+			PreviousStatus cases.CaseStatus `json:"previousStatus"`
+			NewStatus      cases.CaseStatus `json:"newStatus"`
+		}{PreviousStatus: current.Status, NewStatus: target},
 	}
-	if err := insertTimelineEvent(ctx, tx, input.CaseID, eventType, message, occurredAt, input.Actor, payload); err != nil {
+	if err := writeTimelineEvent(ctx, tx, input.CaseID, occurredAt, event); err != nil {
 		return cases.Case{}, err
 	}
 
@@ -243,14 +246,16 @@ func (s *PostgresStore) AssignCase(ctx context.Context, input CaseAssignmentInpu
 		}
 	}
 	previousAssignee := nullableString(sql.NullString{String: current.Assignee, Valid: current.Assignee != ""})
-	payload, err := json.Marshal(struct {
-		PreviousAssignee *string `json:"previousAssignee"`
-		NewAssignee      *string `json:"newAssignee"`
-	}{PreviousAssignee: previousAssignee, NewAssignee: nullableString(assignee)})
-	if err != nil {
-		return cases.Case{}, err
+	event := timelineEvent{
+		Type:    cases.TimelineEventCaseAssigned,
+		Message: message,
+		Actor:   &input.Actor,
+		Payload: struct {
+			PreviousAssignee *string `json:"previousAssignee"`
+			NewAssignee      *string `json:"newAssignee"`
+		}{PreviousAssignee: previousAssignee, NewAssignee: nullableString(assignee)},
 	}
-	if err := insertTimelineEvent(ctx, tx, input.CaseID, cases.TimelineEventCaseAssigned, message, occurredAt, input.Actor, payload); err != nil {
+	if err := writeTimelineEvent(ctx, tx, input.CaseID, occurredAt, event); err != nil {
 		return cases.Case{}, err
 	}
 
@@ -293,13 +298,15 @@ func (s *PostgresStore) AddCaseNote(ctx context.Context, input CaseNoteInput) (c
 		return cases.CaseNote{}, err
 	}
 
-	payload, err := json.Marshal(struct {
-		NoteID int64 `json:"noteId"`
-	}{NoteID: note.ID})
-	if err != nil {
-		return cases.CaseNote{}, err
+	event := timelineEvent{
+		Type:    cases.TimelineEventCaseNoteAdded,
+		Message: "Note added to case.",
+		Actor:   &input.Actor,
+		Payload: struct {
+			NoteID int64 `json:"noteId"`
+		}{NoteID: note.ID},
 	}
-	if err := insertTimelineEvent(ctx, tx, input.CaseID, cases.TimelineEventCaseNoteAdded, "Note added to case.", occurredAt, input.Actor, payload); err != nil {
+	if err := writeTimelineEvent(ctx, tx, input.CaseID, occurredAt, event); err != nil {
 		return cases.CaseNote{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `
@@ -353,18 +360,6 @@ func (s *PostgresStore) ListCaseNotes(ctx context.Context, caseID int64) ([]case
 		return nil, err
 	}
 	return notes, nil
-}
-
-func insertTimelineEvent(ctx context.Context, tx *sql.Tx, caseID int64, eventType cases.TimelineEventType, message string, occurredAt time.Time, actor Actor, payload []byte) error {
-	return insertTimelineEventWithActorType(ctx, tx, caseID, eventType, message, occurredAt, cases.TimelineActorUser, actor.Subject, actor.DisplayName, payload)
-}
-
-func insertTimelineEventWithActorType(ctx context.Context, tx *sql.Tx, caseID int64, eventType cases.TimelineEventType, message string, occurredAt time.Time, actorType cases.TimelineActorType, actorID, actorDisplayName string, payload []byte) error {
-	_, err := tx.ExecContext(ctx, `
-		INSERT INTO case_timeline_events (case_id, event_type, message, occurred_at, actor_type, actor_id, actor_display_name, payload)
-		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8::jsonb)
-	`, caseID, eventType, message, occurredAt, actorType, actorID, actorDisplayName, payload)
-	return err
 }
 
 func lockCaseForUpdate(ctx context.Context, tx *sql.Tx, caseID int64) (cases.Case, error) {
