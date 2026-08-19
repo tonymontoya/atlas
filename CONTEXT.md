@@ -48,6 +48,10 @@ _Avoid_: Bucket, volume
 A human user of Atlas who performs operational work, distinct from system and Atlas Agent actors.
 _Avoid_: User account, admin
 
+**Actor**:
+The attribution identity behind an action: an Operator, the Atlas system, or the Atlas Agent.
+_Avoid_: User account, principal
+
 **Case**:
 A long-lived record of operational work from detection through closure.
 _Avoid_: Ticket, incident
