@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
-
-	"github.com/tonymontoya/ceph-atlas/internal/inventory"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
-	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 )
 
 func newTestProvider(t *testing.T, mode dashtest.Mode) (*Provider, *dashtest.Dashboard) {
@@ -164,7 +163,7 @@ func TestHostDevicesNormalizesIdentityAndOSDs(t *testing.T) {
 func TestHostDevicesUnknownHostIsNotFound(t *testing.T) {
 	provider, _ := newTestProvider(t, dashtest.ModeSuccess)
 	_, err := provider.HostDevices(context.Background(), "host-device-probe.example.invalid")
-	assertProviderErrorClass(t, err, providers.ErrorNotFound)
+	assertErrorClass(t, err, apperr.NotFound)
 }
 
 func TestDaemonsNormalizesStatusEnum(t *testing.T) {
@@ -214,7 +213,7 @@ func TestUnavailableWhenServerIsDown(t *testing.T) {
 		t.Fatalf("New returned error: %v", err)
 	}
 	_, err = provider.OSDs(context.Background())
-	assertProviderErrorClass(t, err, providers.ErrorUnavailable)
+	assertErrorClass(t, err, apperr.Unavailable)
 }
 
 func TestReauthOnExpiredToken(t *testing.T) {
@@ -272,7 +271,7 @@ func TestForbiddenDoesNotReauth(t *testing.T) {
 		t.Fatalf("New returned error: %v", err)
 	}
 	_, err = provider.Daemons(context.Background())
-	assertProviderErrorClass(t, err, providers.ErrorUnauthorized)
+	assertErrorClass(t, err, apperr.Unauthorized)
 	mu.Lock()
 	defer mu.Unlock()
 	if logins != 1 {
@@ -300,14 +299,14 @@ func TestConfigValidation(t *testing.T) {
 	}
 }
 
-func assertProviderErrorClass(t *testing.T, err error, want providers.ErrorClass) {
+func assertErrorClass(t *testing.T, err error, want apperr.Class) {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("expected error with class %q, got nil", want)
 	}
-	var providerErr providers.ProviderError
+	var providerErr apperr.Error
 	if !errors.As(err, &providerErr) {
-		t.Fatalf("error type = %T, want ProviderError", err)
+		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
 	if providerErr.Class != want {
 		t.Fatalf("error class = %q, want %q (message: %s)", providerErr.Class, want, providerErr.Message)

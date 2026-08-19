@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"testing"
-
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
+	"testing"
 )
 
 // memStore is an in-memory Store that applies transitions and records
@@ -55,8 +54,8 @@ func (m *memStore) TransitionWorkflowJob(_ context.Context, input store.Workflow
 		}
 		if m.jobs[i].State == workflows.JobFailed && input.To == workflows.JobPending {
 			if m.jobs[i].Attempt >= m.jobs[i].MaxAttempts {
-				return store.WorkflowJob{}, providers.ProviderError{
-					Class:   providers.ErrorConflict,
+				return store.WorkflowJob{}, apperr.Error{
+					Class:   apperr.Conflict,
 					Message: "job exhausted its retry budget",
 				}
 			}

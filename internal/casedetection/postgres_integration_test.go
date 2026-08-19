@@ -116,7 +116,7 @@ func TestRunFakeOnceDetectsCaseFromAlerts(t *testing.T) {
 	}
 }
 
-func TestRunFakeOnceRecordsProviderErrorClassOnFailure(t *testing.T) {
+func TestRunFakeOnceRecordsErrorClassOnFailure(t *testing.T) {
 	ctx := context.Background()
 	db, _ := testdb.Open(t)
 	cleanupDetectionRuns(t, db)

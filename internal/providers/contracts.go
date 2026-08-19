@@ -8,51 +8,6 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/observability"
 )
 
-type ErrorClass string
-
-const (
-	ErrorUnavailable        ErrorClass = "Unavailable"
-	ErrorUnauthorized       ErrorClass = "Unauthorized"
-	ErrorUnsupported        ErrorClass = "Unsupported"
-	ErrorVersionUnsupported ErrorClass = "VersionUnsupported"
-	ErrorNotFound           ErrorClass = "NotFound"
-	ErrorConflict           ErrorClass = "Conflict"
-	ErrorUnsafe             ErrorClass = "Unsafe"
-	ErrorPartial            ErrorClass = "Partial"
-	ErrorMalformedResponse  ErrorClass = "MalformedResponse"
-	ErrorTimeout            ErrorClass = "Timeout"
-)
-
-type ProviderError struct {
-	Class   ErrorClass
-	Message string
-}
-
-func (e ProviderError) Error() string {
-	if e.Message == "" {
-		return string(e.Class)
-	}
-	return string(e.Class) + ": " + e.Message
-}
-
-func LookupErrorClass(name string) (ErrorClass, bool) {
-	class := ErrorClass(name)
-	switch class {
-	case ErrorUnavailable,
-		ErrorUnauthorized,
-		ErrorUnsupported,
-		ErrorVersionUnsupported,
-		ErrorNotFound,
-		ErrorConflict,
-		ErrorUnsafe,
-		ErrorPartial,
-		ErrorMalformedResponse,
-		ErrorTimeout:
-		return class, true
-	}
-	return "", false
-}
-
 type CephReadProvider interface {
 	ClusterIdentity(ctx context.Context) (fleet.ClusterIdentity, error)
 	Health(ctx context.Context) (inventory.Health, error)

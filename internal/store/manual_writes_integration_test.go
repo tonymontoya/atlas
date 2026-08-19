@@ -4,11 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"testing"
-
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
+	"testing"
 )
 
 func manualWritesTestDB(t *testing.T) (*PostgresStore, context.Context) {
@@ -82,7 +81,7 @@ func TestCreateManualCaseRejectsInvalidInput(t *testing.T) {
 		t.Run(input.name, func(t *testing.T) {
 			_, err := store.CreateManualCase(ctx, input.input)
 			if !isInvalidInput(err) {
-				t.Fatalf("error = %v, want InvalidInputError", err)
+				t.Fatalf("error = %v, want InvalidRequest", err)
 			}
 		})
 	}
@@ -92,13 +91,13 @@ func TestCaseWritesClassifyInvalidInput(t *testing.T) {
 	store, ctx := manualWritesTestDB(t)
 
 	if _, err := store.TransitionCase(ctx, CaseTransitionInput{CaseID: 1, To: cases.CaseStatus("bogus"), Actor: manualTestActor()}); !isInvalidInput(err) {
-		t.Fatalf("transition error = %v, want InvalidInputError", err)
+		t.Fatalf("transition error = %v, want InvalidRequest", err)
 	}
 	if _, err := store.AssignCase(ctx, CaseAssignmentInput{CaseID: 1, Assignee: "subj", AssigneeDisplayName: "", Actor: manualTestActor()}); !isInvalidInput(err) {
-		t.Fatalf("assign error = %v, want InvalidInputError", err)
+		t.Fatalf("assign error = %v, want InvalidRequest", err)
 	}
 	if _, err := store.AddCaseNote(ctx, CaseNoteInput{CaseID: 1, Body: "", Actor: manualTestActor()}); !isInvalidInput(err) {
-		t.Fatalf("note error = %v, want InvalidInputError", err)
+		t.Fatalf("note error = %v, want InvalidRequest", err)
 	}
 }
 
@@ -164,8 +163,8 @@ func TestTransitionCaseRejectsClosedReopen(t *testing.T) {
 	if err == nil {
 		t.Fatal("accepted reopening a closed case")
 	}
-	var conflictErr providers.ProviderError
-	if !asProviderError(err, &conflictErr) || conflictErr.Class != providers.ErrorConflict {
+	var conflictErr apperr.Error
+	if !asAppError(err, &conflictErr) || conflictErr.Class != apperr.Conflict {
 		t.Fatalf("error = %v, want Conflict class", err)
 	}
 }
@@ -324,8 +323,8 @@ func TestListCasesSurfacesAssignee(t *testing.T) {
 	}
 }
 
-func asProviderError(err error, target *providers.ProviderError) bool {
-	providerErr, ok := err.(providers.ProviderError)
+func asAppError(err error, target *apperr.Error) bool {
+	providerErr, ok := err.(apperr.Error)
 	if ok {
 		*target = providerErr
 	}
@@ -333,11 +332,11 @@ func asProviderError(err error, target *providers.ProviderError) bool {
 }
 
 func isNotFound(err error) bool {
-	providerErr, ok := err.(providers.ProviderError)
-	return ok && providerErr.Class == providers.ErrorNotFound
+	providerErr, ok := err.(apperr.Error)
+	return ok && providerErr.Class == apperr.NotFound
 }
 
 func isInvalidInput(err error) bool {
-	var invalid InvalidInputError
-	return errors.As(err, &invalid)
+	var invalid apperr.Error
+	return errors.As(err, &invalid) && invalid.Class == apperr.InvalidRequest
 }

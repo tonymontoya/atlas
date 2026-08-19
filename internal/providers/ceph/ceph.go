@@ -7,14 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
 const (
@@ -87,34 +86,34 @@ func New(cfg Config) (*Provider, error) {
 	}, nil
 }
 
-func providerErr(class providers.ErrorClass, format string, args ...any) error {
-	return providers.ProviderError{Class: class, Message: fmt.Sprintf(format, args...)}
+func providerErr(class apperr.Class, format string, args ...any) error {
+	return apperr.Error{Class: class, Message: fmt.Sprintf(format, args...)}
 }
 
 func ctxErr(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
-		return providerErr(providers.ErrorTimeout, "context done before request: %v", err)
+		return providerErr(apperr.Timeout, "context done before request: %v", err)
 	}
 	return nil
 }
 
 func classifyTransportErr(err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return providerErr(providers.ErrorTimeout, "request context ended: %v", err)
+		return providerErr(apperr.Timeout, "request context ended: %v", err)
 	}
-	return providerErr(providers.ErrorUnavailable, "dashboard request failed: %v", err)
+	return providerErr(apperr.Unavailable, "dashboard request failed: %v", err)
 }
 
 func classifyStatus(status int, what string) error {
 	switch {
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return providerErr(providers.ErrorUnauthorized, "%s returned HTTP %d", what, status)
+		return providerErr(apperr.Unauthorized, "%s returned HTTP %d", what, status)
 	case status == http.StatusNotFound:
-		return providerErr(providers.ErrorNotFound, "%s returned HTTP 404", what)
+		return providerErr(apperr.NotFound, "%s returned HTTP 404", what)
 	case status >= 500:
-		return providerErr(providers.ErrorUnavailable, "%s returned HTTP %d", what, status)
+		return providerErr(apperr.Unavailable, "%s returned HTTP %d", what, status)
 	default:
-		return providerErr(providers.ErrorUnavailable, "%s returned unexpected HTTP %d", what, status)
+		return providerErr(apperr.Unavailable, "%s returned unexpected HTTP %d", what, status)
 	}
 }
 
@@ -122,12 +121,18 @@ type loginResponse struct {
 	Token string `json:"token"`
 }
 
-// tokenRejected marks a ProviderError caused by HTTP 401 specifically, so
+// tokenRejected marks an apperr.Error caused by HTTP 401 specifically, so
 // getJSON can distinguish "re-auth might help" (401) from "permission
-// denied" (403, same Unauthorized class, no retry).
+// denied" (403, same Unauthorized class, no retry). It cannot embed
+// apperr.Error: the embedded field would be named Error and shadow the
+// promoted Error method, so it wraps instead.
 type tokenRejected struct {
-	providers.ProviderError
+	err apperr.Error
 }
+
+func (t tokenRejected) Error() string { return t.err.Error() }
+
+func (t tokenRejected) Unwrap() error { return t.err }
 
 func (p *Provider) authorize(ctx context.Context) error {
 	if err := ctxErr(ctx); err != nil {
@@ -138,11 +143,11 @@ func (p *Provider) authorize(ctx context.Context) error {
 		"password": p.password,
 	})
 	if err != nil {
-		return providerErr(providers.ErrorUnavailable, "encode login request: %v", err)
+		return providerErr(apperr.Unavailable, "encode login request: %v", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL.String()+"/api/auth", bytes.NewReader(body))
 	if err != nil {
-		return providerErr(providers.ErrorUnavailable, "build login request: %v", err)
+		return providerErr(apperr.Unavailable, "build login request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -152,17 +157,17 @@ func (p *Provider) authorize(ctx context.Context) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusBadRequest {
-		return providerErr(providers.ErrorUnauthorized, "dashboard login rejected with HTTP %d", resp.StatusCode)
+		return providerErr(apperr.Unauthorized, "dashboard login rejected with HTTP %d", resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		return classifyStatus(resp.StatusCode, "dashboard login")
 	}
 	var login loginResponse
 	if err := json.NewDecoder(resp.Body).Decode(&login); err != nil {
-		return providerErr(providers.ErrorMalformedResponse, "decode login response: %v", err)
+		return providerErr(apperr.MalformedResponse, "decode login response: %v", err)
 	}
 	if login.Token == "" {
-		return providerErr(providers.ErrorMalformedResponse, "login response carried no token")
+		return providerErr(apperr.MalformedResponse, "login response carried no token")
 	}
 	p.mu.Lock()
 	p.token = login.Token
@@ -218,7 +223,7 @@ func (p *Provider) getOnce(ctx context.Context, path string, query url.Values, o
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
-		return providerErr(providers.ErrorUnavailable, "build request for %s: %v", path, err)
+		return providerErr(apperr.Unavailable, "build request for %s: %v", path, err)
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.currentToken())
@@ -229,12 +234,12 @@ func (p *Provider) getOnce(ctx context.Context, path string, query url.Values, o
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
-			return tokenRejected{ProviderError: providers.ProviderError{Class: providers.ErrorUnauthorized, Message: fmt.Sprintf("%s returned HTTP 401", path)}}
+			return tokenRejected{err: apperr.Error{Class: apperr.Unauthorized, Message: fmt.Sprintf("%s returned HTTP 401", path)}}
 		}
 		return classifyStatus(resp.StatusCode, path)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return providerErr(providers.ErrorMalformedResponse, "decode %s response: %v", path, err)
+		return providerErr(apperr.MalformedResponse, "decode %s response: %v", path, err)
 	}
 	return nil
 }
@@ -256,5 +261,5 @@ func getPaged[T any](ctx context.Context, p *Provider, path string) ([]T, error)
 		}
 		offset += len(items)
 	}
-	return nil, providerErr(providers.ErrorUnavailable, "%s exceeded %d pages of %d items", path, maxPages, p.pageSize)
+	return nil, providerErr(apperr.Unavailable, "%s exceeded %d pages of %d items", path, maxPages, p.pageSize)
 }

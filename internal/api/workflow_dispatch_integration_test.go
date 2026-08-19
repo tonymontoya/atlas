@@ -2,13 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/tonymontoya/ceph-atlas/internal/agent"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"net/http"
 	"strconv"
 	"testing"
-
-	"github.com/tonymontoya/ceph-atlas/internal/agent"
-	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
 // createManualCaseForAPIWithCluster creates a manual Case bound to a
@@ -213,8 +212,8 @@ func TestCompleteWorkflowTaskRejectsInvalidRequests(t *testing.T) {
 	if wrongTask.Code != http.StatusConflict {
 		t.Fatalf("wrong task status = %d; body=%s", wrongTask.Code, wrongTask.Body.String())
 	}
-	if class := decodeErrorClass(t, wrongTask); class != string(providers.ErrorConflict) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorConflict)
+	if class := decodeErrorClass(t, wrongTask); class != string(apperr.Conflict) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Conflict)
 	}
 
 	missingTask := harness.do(t, http.MethodPost,
@@ -245,8 +244,8 @@ func TestCompleteWorkflowTaskRejectsInvalidRequests(t *testing.T) {
 	if unsupported.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("fake source status = %d; body=%s", unsupported.Code, unsupported.Body.String())
 	}
-	if class := decodeErrorClass(t, unsupported); class != string(providers.ErrorUnsupported) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorUnsupported)
+	if class := decodeErrorClass(t, unsupported); class != string(apperr.Unsupported) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Unsupported)
 	}
 }
 
@@ -301,8 +300,8 @@ func TestListWorkflowJobsUnknownInstance(t *testing.T) {
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusNotFound, response.Body.String())
 	}
-	if class := decodeErrorClass(t, response); class != string(providers.ErrorNotFound) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorNotFound)
+	if class := decodeErrorClass(t, response); class != string(apperr.NotFound) {
+		t.Fatalf("error class = %q, want %q", class, apperr.NotFound)
 	}
 }
 
@@ -314,7 +313,7 @@ func TestListWorkflowJobsRequiresPostgresReadSource(t *testing.T) {
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
 	}
-	if class := decodeErrorClass(t, response); class != string(providers.ErrorUnsupported) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorUnsupported)
+	if class := decodeErrorClass(t, response); class != string(apperr.Unsupported) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Unsupported)
 	}
 }

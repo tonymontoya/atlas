@@ -2,15 +2,14 @@ package api
 
 import (
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-
 	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 )
 
 type authTestHarness struct {
@@ -87,8 +86,8 @@ func TestMeRequiresBearerToken(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode error: %v", err)
 	}
-	if body.Error.Class != string(providers.ErrorUnauthorized) {
-		t.Fatalf("error class = %q, want %q", body.Error.Class, providers.ErrorUnauthorized)
+	if body.Error.Class != string(apperr.Unauthorized) {
+		t.Fatalf("error class = %q, want %q", body.Error.Class, apperr.Unauthorized)
 	}
 	if body.Error.Message == "" {
 		t.Fatal("expected non-empty error message")

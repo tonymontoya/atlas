@@ -2,8 +2,7 @@ package workflowdispatch
 
 import (
 	"context"
-
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
 )
@@ -56,8 +55,8 @@ type RecordResult[T any] struct {
 func (l *Lifecycle) Attach(ctx context.Context, actor store.Actor, caseID int64, workflowID string, workflowVersion int) (store.WorkflowInstance, error) {
 	definition, ok := l.defs.Get(workflowID, workflowVersion)
 	if !ok {
-		return store.WorkflowInstance{}, providers.ProviderError{
-			Class:   providers.ErrorNotFound,
+		return store.WorkflowInstance{}, apperr.Error{
+			Class:   apperr.NotFound,
 			Message: "workflow definition not found",
 		}
 	}

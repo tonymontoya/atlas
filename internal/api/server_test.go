@@ -2,16 +2,14 @@ package api
 
 import (
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-
 	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
-	"github.com/tonymontoya/ceph-atlas/internal/store"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 )
 
 func TestHealthz(t *testing.T) {
@@ -228,8 +226,8 @@ func TestCasesEndpointRequiresPostgresReadSource(t *testing.T) {
 			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 				t.Fatalf("decode error: %v", err)
 			}
-			if body.Error.Class != string(providers.ErrorUnsupported) {
-				t.Fatalf("error class = %q, want %q", body.Error.Class, providers.ErrorUnsupported)
+			if body.Error.Class != string(apperr.Unsupported) {
+				t.Fatalf("error class = %q, want %q", body.Error.Class, apperr.Unsupported)
 			}
 		})
 	}
@@ -254,18 +252,18 @@ func TestProviderErrorsUseStructuredEnvelope(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.Error.Class != string(providers.ErrorUnavailable) {
-		t.Fatalf("error class = %q, want %q", body.Error.Class, providers.ErrorUnavailable)
+	if body.Error.Class != string(apperr.Unavailable) {
+		t.Fatalf("error class = %q, want %q", body.Error.Class, apperr.Unavailable)
 	}
 	if body.Error.Message == "" {
 		t.Fatal("expected non-empty error message")
 	}
 }
 
-func TestWriteErrorMapsStoreInvalidInputToInvalidRequest(t *testing.T) {
+func TestWriteErrorMapsInvalidRequestToBadRequest(t *testing.T) {
 	response := httptest.NewRecorder()
 
-	writeError(response, store.InvalidInputError{Message: "title is required"})
+	writeError(response, apperr.Error{Class: apperr.InvalidRequest, Message: "title is required"})
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusBadRequest, response.Body.String())

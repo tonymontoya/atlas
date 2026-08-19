@@ -6,11 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
-
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
+	"time"
 )
 
 const workflowInstanceColumns = "id, case_id, definition_id, definition_version, current_step, state, created_at, updated_at, finished_at"
@@ -87,7 +86,7 @@ func (s *PostgresStore) CreateWorkflowInstance(ctx context.Context, input Create
 		return WorkflowInstance{}, err
 	}
 	if targetCase.Status == cases.CaseStatusClosed {
-		return WorkflowInstance{}, providers.ProviderError{Class: providers.ErrorConflict, Message: "case is closed"}
+		return WorkflowInstance{}, apperr.Error{Class: apperr.Conflict, Message: "case is closed"}
 	}
 
 	var instance WorkflowInstance
@@ -341,7 +340,7 @@ func (s *PostgresStore) TransitionWorkflowInstance(ctx context.Context, input Wo
 		return WorkflowInstance{}, err
 	}
 	if err := workflows.CanTransitionInstance(current.State, target); err != nil {
-		return WorkflowInstance{}, providers.ProviderError{Class: providers.ErrorConflict, Message: err.Error()}
+		return WorkflowInstance{}, apperr.Error{Class: apperr.Conflict, Message: err.Error()}
 	}
 
 	var currentStep sql.NullString
@@ -433,13 +432,13 @@ func (s *PostgresStore) TransitionWorkflowJob(ctx context.Context, input Workflo
 		return WorkflowJob{}, err
 	}
 	if err := workflows.CanTransitionJob(current.State, target); err != nil {
-		return WorkflowJob{}, providers.ProviderError{Class: providers.ErrorConflict, Message: err.Error()}
+		return WorkflowJob{}, apperr.Error{Class: apperr.Conflict, Message: err.Error()}
 	}
 
 	attempt := current.Attempt
 	if current.State == workflows.JobFailed && target == workflows.JobPending {
 		if current.Attempt >= current.MaxAttempts {
-			return WorkflowJob{}, providers.ProviderError{Class: providers.ErrorConflict, Message: fmt.Sprintf("job %s exhausted its retry budget (%d attempts)", current.StepID, current.MaxAttempts)}
+			return WorkflowJob{}, apperr.Error{Class: apperr.Conflict, Message: fmt.Sprintf("job %s exhausted its retry budget (%d attempts)", current.StepID, current.MaxAttempts)}
 		}
 		attempt = current.Attempt + 1
 	}
@@ -546,7 +545,7 @@ func (s *PostgresStore) RecordApproval(ctx context.Context, input RecordApproval
 	}
 
 	if instance.State != workflows.InstanceWaitingForApproval || instance.CurrentStep == nil || *instance.CurrentStep != input.GateID {
-		return ApprovalRecord{}, providers.ProviderError{Class: providers.ErrorConflict, Message: fmt.Sprintf("workflow instance is not waiting for approval at gate %s", input.GateID)}
+		return ApprovalRecord{}, apperr.Error{Class: apperr.Conflict, Message: fmt.Sprintf("workflow instance is not waiting for approval at gate %s", input.GateID)}
 	}
 
 	var reason sql.NullString
@@ -682,7 +681,7 @@ func (s *PostgresStore) RecordTaskCompletion(ctx context.Context, input RecordTa
 	}
 
 	if instance.State != workflows.InstanceWaitingForOperator || instance.CurrentStep == nil || *instance.CurrentStep != input.TaskID {
-		return TaskCompletionRecord{}, providers.ProviderError{Class: providers.ErrorConflict, Message: fmt.Sprintf("workflow instance is not waiting for operator at task %s", input.TaskID)}
+		return TaskCompletionRecord{}, apperr.Error{Class: apperr.Conflict, Message: fmt.Sprintf("workflow instance is not waiting for operator at task %s", input.TaskID)}
 	}
 
 	var note sql.NullString

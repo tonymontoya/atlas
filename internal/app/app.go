@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"

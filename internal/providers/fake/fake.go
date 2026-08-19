@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
-
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/observability"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"os"
+	"path/filepath"
 )
 
 type Provider struct {
@@ -94,7 +93,7 @@ func (p *Provider) HostDevices(ctx context.Context, host string) ([]inventory.St
 		}
 	}
 	if !known {
-		return nil, providers.ProviderError{Class: providers.ErrorNotFound, Message: fmt.Sprintf("host %q not found in scenario %q", host, p.scenario)}
+		return nil, apperr.Error{Class: apperr.NotFound, Message: fmt.Sprintf("host %q not found in scenario %q", host, p.scenario)}
 	}
 	var all []inventory.StorageDevice
 	if err := p.load(ctx, "devices.json", &all); err != nil {
@@ -144,14 +143,14 @@ func (p *Provider) load(ctx context.Context, name string, target any) error {
 func loadFixture(ctx context.Context, fixtureRoot, family, scenario, name string, target any) error {
 	select {
 	case <-ctx.Done():
-		return providers.ProviderError{Class: providers.ErrorTimeout, Message: ctx.Err().Error()}
+		return apperr.Error{Class: apperr.Timeout, Message: ctx.Err().Error()}
 	default:
 	}
 
 	path := filepath.Join(fixtureRoot, family, scenario, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return providers.ProviderError{Class: providers.ErrorUnavailable, Message: fmt.Sprintf("read fixture %s: %v", path, err)}
+		return apperr.Error{Class: apperr.Unavailable, Message: fmt.Sprintf("read fixture %s: %v", path, err)}
 	}
 	var envelope struct {
 		Error *struct {
@@ -160,14 +159,14 @@ func loadFixture(ctx context.Context, fixtureRoot, family, scenario, name string
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(data, &envelope); err == nil && envelope.Error != nil {
-		class, ok := providers.LookupErrorClass(envelope.Error.Class)
+		class, ok := apperr.LookupClass(envelope.Error.Class)
 		if !ok {
-			return providers.ProviderError{Class: providers.ErrorMalformedResponse, Message: fmt.Sprintf("fixture %s declares unknown error class %q", path, envelope.Error.Class)}
+			return apperr.Error{Class: apperr.MalformedResponse, Message: fmt.Sprintf("fixture %s declares unknown error class %q", path, envelope.Error.Class)}
 		}
-		return providers.ProviderError{Class: class, Message: envelope.Error.Message}
+		return apperr.Error{Class: class, Message: envelope.Error.Message}
 	}
 	if err := json.Unmarshal(data, target); err != nil {
-		return providers.ProviderError{Class: providers.ErrorMalformedResponse, Message: fmt.Sprintf("parse fixture %s: %v", path, err)}
+		return apperr.Error{Class: apperr.MalformedResponse, Message: fmt.Sprintf("parse fixture %s: %v", path, err)}
 	}
 	return nil
 }

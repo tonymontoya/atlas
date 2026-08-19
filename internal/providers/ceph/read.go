@@ -2,14 +2,13 @@ package ceph
 
 import (
 	"context"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/fleet"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"net/url"
 	"path"
 	"strconv"
 	"strings"
-
-	"github.com/tonymontoya/ceph-atlas/internal/fleet"
-	"github.com/tonymontoya/ceph-atlas/internal/inventory"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
 // GET /api/health/get_cluster_fsid answers with a bare JSON string (Reef
@@ -60,7 +59,7 @@ func (p *Provider) Health(ctx context.Context) (inventory.Health, error) {
 	switch health.Status {
 	case string(inventory.HealthOK), string(inventory.HealthWarn), string(inventory.HealthErr):
 	default:
-		return inventory.Health{}, providerErr(providers.ErrorMalformedResponse, "unknown health status %q", health.Status)
+		return inventory.Health{}, providerErr(apperr.MalformedResponse, "unknown health status %q", health.Status)
 	}
 	checks := make([]inventory.HealthCheck, 0, len(health.Checks))
 	for _, check := range health.Checks {

@@ -3,17 +3,16 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/cases"
+	"github.com/tonymontoya/ceph-atlas/internal/config"
+	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 	"net/http"
 	"strconv"
 	"testing"
 	"time"
-
-	"github.com/tonymontoya/ceph-atlas/internal/app"
-	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/config"
-	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
-	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 type attachWorkflowResponse struct {
@@ -82,8 +81,8 @@ func TestAttachWorkflowRequiresAuthentication(t *testing.T) {
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusUnauthorized, response.Body.String())
 	}
-	if class := decodeErrorClass(t, response); class != string(providers.ErrorUnauthorized) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorUnauthorized)
+	if class := decodeErrorClass(t, response); class != string(apperr.Unauthorized) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Unauthorized)
 	}
 }
 
@@ -172,8 +171,8 @@ func TestAttachWorkflowRejectsUnknownDefinitions(t *testing.T) {
 			if response.Code != http.StatusNotFound {
 				t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusNotFound, response.Body.String())
 			}
-			if class := decodeErrorClass(t, response); class != string(providers.ErrorNotFound) {
-				t.Fatalf("error class = %q, want %q", class, providers.ErrorNotFound)
+			if class := decodeErrorClass(t, response); class != string(apperr.NotFound) {
+				t.Fatalf("error class = %q, want %q", class, apperr.NotFound)
 			}
 		})
 	}
@@ -205,8 +204,8 @@ func TestAttachWorkflowRejectsInvalidRequests(t *testing.T) {
 	if missing.Code != http.StatusNotFound {
 		t.Fatalf("missing case status = %d, want %d; body=%s", missing.Code, http.StatusNotFound, missing.Body.String())
 	}
-	if class := decodeErrorClass(t, missing); class != string(providers.ErrorNotFound) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorNotFound)
+	if class := decodeErrorClass(t, missing); class != string(apperr.NotFound) {
+		t.Fatalf("error class = %q, want %q", class, apperr.NotFound)
 	}
 }
 
@@ -222,8 +221,8 @@ func TestAttachWorkflowRejectsClosedCase(t *testing.T) {
 	if response.Code != http.StatusConflict {
 		t.Fatalf("attach status = %d, want %d; body=%s", response.Code, http.StatusConflict, response.Body.String())
 	}
-	if class := decodeErrorClass(t, response); class != string(providers.ErrorConflict) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorConflict)
+	if class := decodeErrorClass(t, response); class != string(apperr.Conflict) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Conflict)
 	}
 }
 
@@ -235,8 +234,8 @@ func TestAttachWorkflowRequiresPostgresWriteSource(t *testing.T) {
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
 	}
-	if class := decodeErrorClass(t, response); class != string(providers.ErrorUnsupported) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorUnsupported)
+	if class := decodeErrorClass(t, response); class != string(apperr.Unsupported) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Unsupported)
 	}
 }
 

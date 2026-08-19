@@ -6,11 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"strings"
 	"time"
-
-	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
 const caseColumns = "id, title, summary, status, severity, source, cluster_fsid::text, assignee, assignee_display_name, created_at, updated_at, closed_at"
@@ -59,7 +58,7 @@ func validateActor(actor Actor) error {
 }
 
 func inputError(message string) error {
-	return InvalidInputError{Message: message}
+	return apperr.Error{Class: apperr.InvalidRequest, Message: message}
 }
 
 func (s *PostgresStore) CreateManualCase(ctx context.Context, input ManualCaseInput) (cases.Case, error) {
@@ -143,7 +142,7 @@ func (s *PostgresStore) TransitionCase(ctx context.Context, input CaseTransition
 		return cases.Case{}, err
 	}
 	if err := cases.CanTransition(current.Status, target); err != nil {
-		return cases.Case{}, providers.ProviderError{Class: providers.ErrorConflict, Message: err.Error()}
+		return cases.Case{}, apperr.Error{Class: apperr.Conflict, Message: err.Error()}
 	}
 
 	var closedAt sql.NullTime
@@ -209,7 +208,7 @@ func (s *PostgresStore) AssignCase(ctx context.Context, input CaseAssignmentInpu
 		return cases.Case{}, err
 	}
 	if current.Status == cases.CaseStatusClosed {
-		return cases.Case{}, providers.ProviderError{Class: providers.ErrorConflict, Message: "case is closed"}
+		return cases.Case{}, apperr.Error{Class: apperr.Conflict, Message: "case is closed"}
 	}
 	if current.Assignee == input.Assignee {
 		if err := tx.Commit(); err != nil {

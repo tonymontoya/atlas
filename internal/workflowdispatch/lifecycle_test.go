@@ -2,12 +2,11 @@ package workflowdispatch
 
 import (
 	"context"
-	"testing"
-
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
+	"testing"
 )
 
 // The Lifecycle choreography drives the same in-memory store the
@@ -42,8 +41,8 @@ func (m *memStore) RecordApproval(_ context.Context, input store.RecordApprovalI
 		}
 	}
 	if m.instance.State != workflows.InstanceWaitingForApproval || m.instance.CurrentStep == nil || *m.instance.CurrentStep != input.GateID {
-		return store.ApprovalRecord{}, providers.ProviderError{
-			Class:   providers.ErrorConflict,
+		return store.ApprovalRecord{}, apperr.Error{
+			Class:   apperr.Conflict,
 			Message: "workflow instance is not waiting for approval at the gate",
 		}
 	}
@@ -66,8 +65,8 @@ func (m *memStore) RecordTaskCompletion(_ context.Context, input store.RecordTas
 		}
 	}
 	if m.instance.State != workflows.InstanceWaitingForOperator || m.instance.CurrentStep == nil || *m.instance.CurrentStep != input.TaskID {
-		return store.TaskCompletionRecord{}, providers.ProviderError{
-			Class:   providers.ErrorConflict,
+		return store.TaskCompletionRecord{}, apperr.Error{
+			Class:   apperr.Conflict,
 			Message: "workflow instance is not waiting for the operator at the task",
 		}
 	}
@@ -179,8 +178,8 @@ func TestAttachUnknownDefinitionReturnsNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("Attach of an unknown definition must fail")
 	}
-	class, ok := err.(providers.ProviderError)
-	if !ok || class.Class != providers.ErrorNotFound {
+	class, ok := err.(apperr.Error)
+	if !ok || class.Class != apperr.NotFound {
 		t.Fatalf("error = %v, want a not-found provider error", err)
 	}
 	if len(mem.instanceCalls) != 0 {
@@ -278,7 +277,7 @@ func TestApproveGateRejectsGateInstanceIsNotPausedAt(t *testing.T) {
 	if err == nil {
 		t.Fatal("approving a gate the instance is not paused at must fail")
 	}
-	if class, ok := err.(providers.ProviderError); !ok || class.Class != providers.ErrorConflict {
+	if class, ok := err.(apperr.Error); !ok || class.Class != apperr.Conflict {
 		t.Fatalf("error = %v, want a conflict provider error", err)
 	}
 }

@@ -6,11 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
-
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"time"
 )
 
 type InventoryObservation struct {
@@ -67,8 +66,8 @@ func (s *PostgresStore) Health(ctx context.Context) (inventory.Health, error) {
 		return inventory.Health{}, err
 	}
 	if err := json.Unmarshal(checksJSON, &health.Checks); err != nil {
-		return inventory.Health{}, providers.ProviderError{
-			Class:   providers.ErrorMalformedResponse,
+		return inventory.Health{}, apperr.Error{
+			Class:   apperr.MalformedResponse,
 			Message: "parse current cluster health checks: " + err.Error(),
 		}
 	}

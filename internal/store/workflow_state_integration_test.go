@@ -2,12 +2,11 @@ package store
 
 import (
 	"context"
-	"testing"
-
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
+	"testing"
 )
 
 func workflowStateTestDB(t *testing.T) (*PostgresStore, context.Context) {
@@ -183,7 +182,7 @@ func TestCreateWorkflowInstanceRejectsInvalidInput(t *testing.T) {
 			input := validWorkflowInstanceInput(caseID)
 			m.mutate(&input)
 			if _, err := store.CreateWorkflowInstance(ctx, input); !isInvalidInput(err) {
-				t.Fatalf("error = %v, want InvalidInputError", err)
+				t.Fatalf("error = %v, want InvalidRequest", err)
 			}
 		})
 	}
@@ -201,7 +200,7 @@ func TestCreateWorkflowInstanceRejectsMissingAndClosedCases(t *testing.T) {
 	if err == nil {
 		t.Fatal("attached a workflow to a closed case")
 	}
-	if providerErr, ok := err.(providers.ProviderError); !ok || providerErr.Class != providers.ErrorConflict {
+	if providerErr, ok := err.(apperr.Error); !ok || providerErr.Class != apperr.Conflict {
 		t.Fatalf("closed case error = %v, want conflict", err)
 	}
 }
@@ -309,10 +308,10 @@ func TestWorkflowInstanceTransitionsRejectInvalidAndTerminal(t *testing.T) {
 		t.Fatalf("self-edge error = %v, want conflict", err)
 	}
 	if _, err := store.TransitionWorkflowInstance(ctx, WorkflowInstanceTransitionInput{InstanceID: instance.ID, To: "paused"}); !isInvalidInput(err) {
-		t.Fatalf("unknown state error = %v, want InvalidInputError", err)
+		t.Fatalf("unknown state error = %v, want InvalidRequest", err)
 	}
 	if _, err := store.TransitionWorkflowInstance(ctx, WorkflowInstanceTransitionInput{InstanceID: instance.ID, To: workflows.InstanceWaitingForApproval}); !isInvalidInput(err) {
-		t.Fatalf("pause without step error = %v, want InvalidInputError", err)
+		t.Fatalf("pause without step error = %v, want InvalidRequest", err)
 	}
 	if _, err := store.TransitionWorkflowInstance(ctx, WorkflowInstanceTransitionInput{InstanceID: 999999, To: workflows.InstanceRunning}); !isNotFound(err) {
 		t.Fatalf("missing instance error = %v, want not found", err)
@@ -330,8 +329,8 @@ func TestWorkflowInstanceTransitionsRejectInvalidAndTerminal(t *testing.T) {
 }
 
 func isConflict(err error) bool {
-	providerErr, ok := err.(providers.ProviderError)
-	return ok && providerErr.Class == providers.ErrorConflict
+	providerErr, ok := err.(apperr.Error)
+	return ok && providerErr.Class == apperr.Conflict
 }
 
 func firstPendingJob(t *testing.T, store *PostgresStore, ctx context.Context, instanceID int64) WorkflowJob {
@@ -414,7 +413,7 @@ func TestWorkflowJobTransitionRejectsBadInput(t *testing.T) {
 	job := firstPendingJob(t, store, ctx, instance.ID)
 
 	if _, err := store.TransitionWorkflowJob(ctx, WorkflowJobTransitionInput{JobID: job.ID, To: "running"}); !isInvalidInput(err) {
-		t.Fatalf("unknown state error = %v, want InvalidInputError", err)
+		t.Fatalf("unknown state error = %v, want InvalidRequest", err)
 	}
 	if _, err := store.TransitionWorkflowJob(ctx, WorkflowJobTransitionInput{JobID: job.ID, To: workflows.JobPending}); !isConflict(err) {
 		t.Fatalf("self-edge error = %v, want conflict", err)
@@ -536,10 +535,10 @@ func TestRecordApprovalRejectsWrongGateAndNotWaiting(t *testing.T) {
 		t.Fatalf("missing instance error = %v, want not found", err)
 	}
 	if _, err := store.RecordApproval(ctx, RecordApprovalInput{InstanceID: pending.ID, GateID: "", Approver: manualTestActor()}); !isInvalidInput(err) {
-		t.Fatalf("empty gate error = %v, want InvalidInputError", err)
+		t.Fatalf("empty gate error = %v, want InvalidRequest", err)
 	}
 	if _, err := store.RecordApproval(ctx, RecordApprovalInput{InstanceID: pending.ID, GateID: "approve-destroy", Approver: Actor{Subject: "", DisplayName: "X"}}); !isInvalidInput(err) {
-		t.Fatalf("bad approver error = %v, want InvalidInputError", err)
+		t.Fatalf("bad approver error = %v, want InvalidRequest", err)
 	}
 }
 
@@ -649,9 +648,9 @@ func TestRecordTaskCompletionRejectsWrongTaskAndNotWaiting(t *testing.T) {
 		t.Fatalf("missing instance error = %v, want not found", err)
 	}
 	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: pending.ID, TaskID: "", Operator: manualTestActor()}); !isInvalidInput(err) {
-		t.Fatalf("empty task error = %v, want InvalidInputError", err)
+		t.Fatalf("empty task error = %v, want InvalidRequest", err)
 	}
 	if _, err := store.RecordTaskCompletion(ctx, RecordTaskCompletionInput{InstanceID: pending.ID, TaskID: "replace-device", Operator: Actor{Subject: "", DisplayName: "X"}}); !isInvalidInput(err) {
-		t.Fatalf("bad operator error = %v, want InvalidInputError", err)
+		t.Fatalf("bad operator error = %v, want InvalidRequest", err)
 	}
 }

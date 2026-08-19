@@ -5,17 +5,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/cases"
+	"github.com/tonymontoya/ceph-atlas/internal/config"
+	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
+	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
-
-	"github.com/tonymontoya/ceph-atlas/internal/app"
-	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/config"
-	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
-	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 type writeHarness struct {
@@ -127,8 +126,8 @@ func TestCreateCaseRequiresAuthentication(t *testing.T) {
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusUnauthorized, response.Body.String())
 	}
-	if class := decodeErrorClass(t, response); class != string(providers.ErrorUnauthorized) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorUnauthorized)
+	if class := decodeErrorClass(t, response); class != string(apperr.Unauthorized) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Unauthorized)
 	}
 }
 
@@ -222,8 +221,8 @@ func TestCreateCaseRequiresPostgresWriteSource(t *testing.T) {
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
 	}
-	if class := decodeErrorClass(t, response); class != string(providers.ErrorUnsupported) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorUnsupported)
+	if class := decodeErrorClass(t, response); class != string(apperr.Unsupported) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Unsupported)
 	}
 }
 
@@ -259,8 +258,8 @@ func TestTransitionCaseLifecycle(t *testing.T) {
 	if reopen.Code != http.StatusConflict {
 		t.Fatalf("reopen status = %d, want %d; body=%s", reopen.Code, http.StatusConflict, reopen.Body.String())
 	}
-	if class := decodeErrorClass(t, reopen); class != string(providers.ErrorConflict) {
-		t.Fatalf("error class = %q, want %q", class, providers.ErrorConflict)
+	if class := decodeErrorClass(t, reopen); class != string(apperr.Conflict) {
+		t.Fatalf("error class = %q, want %q", class, apperr.Conflict)
 	}
 }
 

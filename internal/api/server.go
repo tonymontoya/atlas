@@ -3,14 +3,14 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"net/http"
-	"strconv"
-	"strings"
-
 	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
+	"net/http"
+	"strconv"
+	"strings"
 )
 
 type Server struct {
@@ -87,24 +87,24 @@ func actorFromRequest(r *http.Request) store.Actor {
 func (s *Server) requireIdentity(next func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.app.Verifier == nil {
-			writeError(w, providers.ProviderError{
-				Class:   providers.ErrorUnauthorized,
+			writeError(w, apperr.Error{
+				Class:   apperr.Unauthorized,
 				Message: "authentication is not configured",
 			})
 			return
 		}
 		header := r.Header.Get("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
-			writeError(w, providers.ProviderError{
-				Class:   providers.ErrorUnauthorized,
+			writeError(w, apperr.Error{
+				Class:   apperr.Unauthorized,
 				Message: "missing bearer token",
 			})
 			return
 		}
 		id, err := s.app.Verifier.Verify(r.Context(), strings.TrimPrefix(header, "Bearer "))
 		if err != nil {
-			writeError(w, providers.ProviderError{
-				Class:   providers.ErrorUnauthorized,
+			writeError(w, apperr.Error{
+				Class:   apperr.Unauthorized,
 				Message: "invalid or expired token",
 			})
 			return
@@ -183,8 +183,8 @@ func (s *Server) pools(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) inventorySyncRuns(w http.ResponseWriter, r *http.Request) {
 	if s.app.InventorySyncRuns == nil {
-		writeError(w, providers.ProviderError{
-			Class:   providers.ErrorUnsupported,
+		writeError(w, apperr.Error{
+			Class:   apperr.Unsupported,
 			Message: "inventory sync run history requires postgres read source",
 		})
 		return
@@ -199,8 +199,8 @@ func (s *Server) inventorySyncRuns(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) alertEvaluationRuns(w http.ResponseWriter, r *http.Request) {
 	if s.app.AlertEvaluationRuns == nil {
-		writeError(w, providers.ProviderError{
-			Class:   providers.ErrorUnsupported,
+		writeError(w, apperr.Error{
+			Class:   apperr.Unsupported,
 			Message: "alert evaluation run history requires postgres read source",
 		})
 		return
@@ -270,16 +270,16 @@ func parseCaseID(r *http.Request) (int64, bool) {
 	return id, true
 }
 
-func caseReadsUnsupported() providers.ProviderError {
-	return providers.ProviderError{
-		Class:   providers.ErrorUnsupported,
+func caseReadsUnsupported() apperr.Error {
+	return apperr.Error{
+		Class:   apperr.Unsupported,
 		Message: "case reads require postgres read source",
 	}
 }
 
-func caseNotFound() providers.ProviderError {
-	return providers.ProviderError{
-		Class:   providers.ErrorNotFound,
+func caseNotFound() apperr.Error {
+	return apperr.Error{
+		Class:   apperr.NotFound,
 		Message: "case not found",
 	}
 }
@@ -291,39 +291,19 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, err error) {
-	var providerErr providers.ProviderError
-	if errors.As(err, &providerErr) {
-		writeJSON(w, statusForProviderError(providerErr.Class), map[string]apiError{
+	var appErr apperr.Error
+	if errors.As(err, &appErr) {
+		writeJSON(w, statusFor(appErr.Class), map[string]apiError{
 			"error": {
-				Class:   string(providerErr.Class),
-				Message: providerErr.Message,
-			},
-		})
-		return
-	}
-	var invalidInput store.InvalidInputError
-	if errors.As(err, &invalidInput) {
-		writeJSON(w, http.StatusBadRequest, map[string]apiError{
-			"error": {
-				Class:   "InvalidRequest",
-				Message: invalidInput.Message,
-			},
-		})
-		return
-	}
-	var invalidRequest invalidRequestError
-	if errors.As(err, &invalidRequest) {
-		writeJSON(w, http.StatusBadRequest, map[string]apiError{
-			"error": {
-				Class:   "InvalidRequest",
-				Message: invalidRequest.Message,
+				Class:   string(appErr.Class),
+				Message: appErr.Message,
 			},
 		})
 		return
 	}
 	writeJSON(w, http.StatusInternalServerError, map[string]apiError{
 		"error": {
-			Class:   "Internal",
+			Class:   string(apperr.Internal),
 			Message: err.Error(),
 		},
 	})
@@ -334,21 +314,23 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
-func statusForProviderError(class providers.ErrorClass) int {
+func statusFor(class apperr.Class) int {
 	switch class {
-	case providers.ErrorUnauthorized:
+	case apperr.InvalidRequest:
+		return http.StatusBadRequest
+	case apperr.Unauthorized:
 		return http.StatusUnauthorized
-	case providers.ErrorNotFound:
+	case apperr.NotFound:
 		return http.StatusNotFound
-	case providers.ErrorConflict, providers.ErrorUnsafe:
+	case apperr.Conflict, apperr.Unsafe:
 		return http.StatusConflict
-	case providers.ErrorUnsupported, providers.ErrorVersionUnsupported:
+	case apperr.Unsupported, apperr.VersionUnsupported:
 		return http.StatusUnprocessableEntity
-	case providers.ErrorTimeout:
+	case apperr.Timeout:
 		return http.StatusGatewayTimeout
-	case providers.ErrorUnavailable:
+	case apperr.Unavailable:
 		return http.StatusServiceUnavailable
-	case providers.ErrorPartial, providers.ErrorMalformedResponse:
+	case apperr.Partial, apperr.MalformedResponse:
 		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError

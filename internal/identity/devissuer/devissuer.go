@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 )
 
 const (
@@ -100,7 +102,7 @@ func (i *Issuer) serveToken(w http.ResponseWriter, r *http.Request) {
 	token, err := i.IssueToken(subject, displayName, ttl)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": map[string]string{"class": "Internal", "message": err.Error()},
+			"error": map[string]string{"class": string(apperr.Internal), "message": err.Error()},
 		})
 		return
 	}

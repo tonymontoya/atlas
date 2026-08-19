@@ -1,17 +1,16 @@
 package api
 
 import (
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
-	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
-func workflowWritesUnsupported() providers.ProviderError {
-	return providers.ProviderError{
-		Class:   providers.ErrorUnsupported,
+func workflowWritesUnsupported() apperr.Error {
+	return apperr.Error{
+		Class:   apperr.Unsupported,
 		Message: "workflow writes require postgres read source",
 	}
 }
@@ -88,11 +87,11 @@ func (s *Server) attachWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.WorkflowID == "" {
-		writeError(w, invalidRequestError{Message: "workflowId is required"})
+		writeError(w, apperr.Error{Class: apperr.InvalidRequest, Message: "workflowId is required"})
 		return
 	}
 	if request.WorkflowVersion < 1 {
-		writeError(w, invalidRequestError{Message: "workflowVersion must be a positive integer"})
+		writeError(w, apperr.Error{Class: apperr.InvalidRequest, Message: "workflowVersion must be a positive integer"})
 		return
 	}
 
@@ -137,9 +136,9 @@ func parseWorkflowInstanceID(r *http.Request) (int64, bool) {
 	return instanceID, true
 }
 
-func workflowInstanceNotFound() providers.ProviderError {
-	return providers.ProviderError{
-		Class:   providers.ErrorNotFound,
+func workflowInstanceNotFound() apperr.Error {
+	return apperr.Error{
+		Class:   apperr.NotFound,
 		Message: "workflow instance not found",
 	}
 }
@@ -168,7 +167,7 @@ func (s *Server) approveWorkflowGate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.GateID == "" {
-		writeError(w, invalidRequestError{Message: "gateId is required"})
+		writeError(w, apperr.Error{Class: apperr.InvalidRequest, Message: "gateId is required"})
 		return
 	}
 
@@ -208,7 +207,7 @@ func (s *Server) completeWorkflowTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.TaskID == "" {
-		writeError(w, invalidRequestError{Message: "taskId is required"})
+		writeError(w, apperr.Error{Class: apperr.InvalidRequest, Message: "taskId is required"})
 		return
 	}
 

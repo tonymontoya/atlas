@@ -95,7 +95,7 @@ func TestRunOnceCollectsProviderDataAndWritesObservation(t *testing.T) {
 	}
 }
 
-func TestRunOnceRecordsProviderErrorClassOnFailure(t *testing.T) {
+func TestRunOnceRecordsErrorClassOnFailure(t *testing.T) {
 	writer := &recordingWriter{}
 
 	_, err := RunFakeOnce(context.Background(), writer, Options{Scenario: "provider-unauthorized"})
@@ -177,7 +177,7 @@ func TestRunOnceCollectsCephProviderDataAndWritesObservation(t *testing.T) {
 	}
 }
 
-func TestRunOnceRecordsCephProviderErrorClassOnFailure(t *testing.T) {
+func TestRunOnceRecordsCephErrorClassOnFailure(t *testing.T) {
 	dashboard := dashtest.New(t, dashtest.ModeUnauthorized)
 	provider, err := ceph.New(ceph.Config{
 		BaseURL:  dashboard.URL(),

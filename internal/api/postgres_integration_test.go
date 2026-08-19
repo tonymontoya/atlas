@@ -4,23 +4,22 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/casedetection"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/inventorysync"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
@@ -119,8 +118,8 @@ func TestPostgresReadSourceReturnsNotFoundForEmptyReadModel(t *testing.T) {
 			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 				t.Fatalf("decode error: %v", err)
 			}
-			if body.Error.Class != string(providers.ErrorNotFound) {
-				t.Fatalf("error class = %q, want %q", body.Error.Class, providers.ErrorNotFound)
+			if body.Error.Class != string(apperr.NotFound) {
+				t.Fatalf("error class = %q, want %q", body.Error.Class, apperr.NotFound)
 			}
 		})
 	}
@@ -279,8 +278,8 @@ func TestPostgresReadSourceReturnsNotFoundForMissingCase(t *testing.T) {
 			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 				t.Fatalf("decode error: %v", err)
 			}
-			if body.Error.Class != string(providers.ErrorNotFound) {
-				t.Fatalf("error class = %q, want %q", body.Error.Class, providers.ErrorNotFound)
+			if body.Error.Class != string(apperr.NotFound) {
+				t.Fatalf("error class = %q, want %q", body.Error.Class, apperr.NotFound)
 			}
 		})
 	}
@@ -304,8 +303,8 @@ func TestPostgresReadSourceReturnsNotFoundForMissingCaseTimeline(t *testing.T) {
 			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 				t.Fatalf("decode error: %v", err)
 			}
-			if body.Error.Class != string(providers.ErrorNotFound) {
-				t.Fatalf("error class = %q, want %q", body.Error.Class, providers.ErrorNotFound)
+			if body.Error.Class != string(apperr.NotFound) {
+				t.Fatalf("error class = %q, want %q", body.Error.Class, apperr.NotFound)
 			}
 		})
 	}
@@ -417,7 +416,7 @@ func TestAlertEvaluationRunsEndpointRequiresPostgresReadSource(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode error: %v", err)
 	}
-	if body.Error.Class != string(providers.ErrorUnsupported) {
-		t.Fatalf("error class = %q, want %q", body.Error.Class, providers.ErrorUnsupported)
+	if body.Error.Class != string(apperr.Unsupported) {
+		t.Fatalf("error class = %q, want %q", body.Error.Class, apperr.Unsupported)
 	}
 }

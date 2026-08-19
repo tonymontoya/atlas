@@ -3,13 +3,12 @@ package fake
 import (
 	"context"
 	"errors"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/tonymontoya/ceph-atlas/internal/inventory"
-	"github.com/tonymontoya/ceph-atlas/internal/observability"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
 func TestFixturesLoadHealthyBareMetal(t *testing.T) {
@@ -58,19 +57,19 @@ func TestFixturesLoadOSDDownScenario(t *testing.T) {
 	}
 }
 
-func TestFixturesReturnProviderErrorForMissingScenario(t *testing.T) {
+func TestFixturesReturnAppErrorForMissingScenario(t *testing.T) {
 	provider := New(DefaultFixtureRoot(), "missing")
 
 	_, err := provider.Health(context.Background())
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var providerErr providers.ProviderError
+	var providerErr apperr.Error
 	if !errors.As(err, &providerErr) {
-		t.Fatalf("error type = %T, want ProviderError", err)
+		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
-	if providerErr.Class != providers.ErrorUnavailable {
-		t.Fatalf("error class = %q, want %q", providerErr.Class, providers.ErrorUnavailable)
+	if providerErr.Class != apperr.Unavailable {
+		t.Fatalf("error class = %q, want %q", providerErr.Class, apperr.Unavailable)
 	}
 }
 
@@ -151,12 +150,12 @@ func TestFixturesReturnNotFoundForUnknownHost(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var providerErr providers.ProviderError
+	var providerErr apperr.Error
 	if !errors.As(err, &providerErr) {
-		t.Fatalf("error type = %T, want ProviderError", err)
+		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
-	if providerErr.Class != providers.ErrorNotFound {
-		t.Fatalf("error class = %q, want %q", providerErr.Class, providers.ErrorNotFound)
+	if providerErr.Class != apperr.NotFound {
+		t.Fatalf("error class = %q, want %q", providerErr.Class, apperr.NotFound)
 	}
 }
 
@@ -175,11 +174,11 @@ func TestFixturesRejectUnknownErrorClass(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var providerErr providers.ProviderError
+	var providerErr apperr.Error
 	if !errors.As(err, &providerErr) {
-		t.Fatalf("error type = %T, want ProviderError", err)
+		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
-	if providerErr.Class != providers.ErrorMalformedResponse {
-		t.Fatalf("error class = %q, want %q", providerErr.Class, providers.ErrorMalformedResponse)
+	if providerErr.Class != apperr.MalformedResponse {
+		t.Fatalf("error class = %q, want %q", providerErr.Class, apperr.MalformedResponse)
 	}
 }

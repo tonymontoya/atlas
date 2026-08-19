@@ -5,9 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
 func (s *PostgresStore) ListCases(ctx context.Context, limit int) ([]cases.Case, error) {
@@ -249,8 +248,8 @@ func scanTimelineEvent(scanner rowScanner) (cases.TimelineEvent, error) {
 		return item, nil
 	}
 	if err := json.Unmarshal(payloadJSON, &item.Payload); err != nil {
-		return cases.TimelineEvent{}, providers.ProviderError{
-			Class:   providers.ErrorMalformedResponse,
+		return cases.TimelineEvent{}, apperr.Error{
+			Class:   apperr.MalformedResponse,
 			Message: "parse case timeline payload: " + err.Error(),
 		}
 	}

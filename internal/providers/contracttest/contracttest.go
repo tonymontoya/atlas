@@ -3,11 +3,11 @@ package contracttest
 import (
 	"context"
 	"errors"
-	"testing"
-
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
+	"testing"
 )
 
 type Scenario string
@@ -33,12 +33,12 @@ type ReadProviderFactory func(t *testing.T, scenario Scenario) ReadProvider
 func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 	errorScenarios := []struct {
 		scenario Scenario
-		class    providers.ErrorClass
+		class    apperr.Class
 	}{
-		{ScenarioUnavailable, providers.ErrorUnavailable},
-		{ScenarioUnauthorized, providers.ErrorUnauthorized},
-		{ScenarioMalformed, providers.ErrorMalformedResponse},
-		{ScenarioPartial, providers.ErrorPartial},
+		{ScenarioUnavailable, apperr.Unavailable},
+		{ScenarioUnauthorized, apperr.Unauthorized},
+		{ScenarioMalformed, apperr.MalformedResponse},
+		{ScenarioPartial, apperr.Partial},
 	}
 	methods := []struct {
 		name          string
@@ -208,7 +208,7 @@ func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 	t.Run("HostDevicesUnknownHost", func(t *testing.T) {
 		provider := factory(t, ScenarioSuccess)
 		_, err := provider.HostDevices(context.Background(), "host-device-probe.example.invalid")
-		assertErrorClass(t, err, providers.ErrorNotFound)
+		assertErrorClass(t, err, apperr.NotFound)
 	})
 	t.Run("ContextCancellation", func(t *testing.T) {
 		provider := factory(t, ScenarioSuccess)
@@ -216,20 +216,20 @@ func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 		cancel()
 		for _, method := range methods {
 			t.Run(method.name, func(t *testing.T) {
-				assertErrorClass(t, method.call(ctx, provider), providers.ErrorTimeout)
+				assertErrorClass(t, method.call(ctx, provider), apperr.Timeout)
 			})
 		}
 	})
 }
 
-func assertErrorClass(t *testing.T, err error, want providers.ErrorClass) {
+func assertErrorClass(t *testing.T, err error, want apperr.Class) {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("expected error with class %q, got nil", want)
 	}
-	var providerErr providers.ProviderError
+	var providerErr apperr.Error
 	if !errors.As(err, &providerErr) {
-		t.Fatalf("error type = %T, want ProviderError", err)
+		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
 	if providerErr.Class != want {
 		t.Fatalf("error class = %q, want %q (message: %s)", providerErr.Class, want, providerErr.Message)
@@ -246,11 +246,11 @@ type ObservabilityProviderFactory func(t *testing.T, scenario Scenario) Observab
 func RunObservabilityProviderSuite(t *testing.T, factory ObservabilityProviderFactory) {
 	errorScenarios := []struct {
 		scenario Scenario
-		class    providers.ErrorClass
+		class    apperr.Class
 	}{
-		{ScenarioUnavailable, providers.ErrorUnavailable},
-		{ScenarioUnauthorized, providers.ErrorUnauthorized},
-		{ScenarioMalformed, providers.ErrorMalformedResponse},
+		{ScenarioUnavailable, apperr.Unavailable},
+		{ScenarioUnauthorized, apperr.Unauthorized},
+		{ScenarioMalformed, apperr.MalformedResponse},
 	}
 	call := func(ctx context.Context, p ObservabilityProvider) error {
 		_, err := p.CurrentAlerts(ctx)
@@ -297,7 +297,7 @@ func RunObservabilityProviderSuite(t *testing.T, factory ObservabilityProviderFa
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		t.Run("CurrentAlerts", func(t *testing.T) {
-			assertErrorClass(t, call(ctx, provider), providers.ErrorTimeout)
+			assertErrorClass(t, call(ctx, provider), apperr.Timeout)
 		})
 	})
 }
