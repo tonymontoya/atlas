@@ -5,16 +5,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"testing"
+
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
-	"testing"
 )
 
 type writeHarness struct {

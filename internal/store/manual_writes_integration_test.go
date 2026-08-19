@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"testing"
+
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
-	"testing"
 )
 
 func manualWritesTestDB(t *testing.T) (*PostgresStore, context.Context) {
@@ -324,16 +325,16 @@ func TestListCasesSurfacesAssignee(t *testing.T) {
 }
 
 func asAppError(err error, target *apperr.Error) bool {
-	providerErr, ok := err.(apperr.Error)
+	appErr, ok := err.(apperr.Error)
 	if ok {
-		*target = providerErr
+		*target = appErr
 	}
 	return ok
 }
 
 func isNotFound(err error) bool {
-	providerErr, ok := err.(apperr.Error)
-	return ok && providerErr.Class == apperr.NotFound
+	appErr, ok := err.(apperr.Error)
+	return ok && appErr.Class == apperr.NotFound
 }
 
 func isInvalidInput(err error) bool {

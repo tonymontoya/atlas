@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/tonymontoya/ceph-atlas/internal/apperr"
-	"github.com/tonymontoya/ceph-atlas/internal/inventory"
-	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 )
 
 func newTestProvider(t *testing.T, mode dashtest.Mode) (*Provider, *dashtest.Dashboard) {
@@ -304,11 +305,11 @@ func assertErrorClass(t *testing.T, err error, want apperr.Class) {
 	if err == nil {
 		t.Fatalf("expected error with class %q, got nil", want)
 	}
-	var providerErr apperr.Error
-	if !errors.As(err, &providerErr) {
+	var appErr apperr.Error
+	if !errors.As(err, &appErr) {
 		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
-	if providerErr.Class != want {
-		t.Fatalf("error class = %q, want %q (message: %s)", providerErr.Class, want, providerErr.Message)
+	if appErr.Class != want {
+		t.Fatalf("error class = %q, want %q (message: %s)", appErr.Class, want, appErr.Message)
 	}
 }

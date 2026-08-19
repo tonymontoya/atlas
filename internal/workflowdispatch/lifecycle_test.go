@@ -2,11 +2,12 @@ package workflowdispatch
 
 import (
 	"context"
+	"testing"
+
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
-	"testing"
 )
 
 // The Lifecycle choreography drives the same in-memory store the
@@ -180,7 +181,7 @@ func TestAttachUnknownDefinitionReturnsNotFound(t *testing.T) {
 	}
 	class, ok := err.(apperr.Error)
 	if !ok || class.Class != apperr.NotFound {
-		t.Fatalf("error = %v, want a not-found provider error", err)
+		t.Fatalf("error = %v, want a not-found error", err)
 	}
 	if len(mem.instanceCalls) != 0 {
 		t.Fatalf("instance calls = %+v, want none before the registry resolves", mem.instanceCalls)

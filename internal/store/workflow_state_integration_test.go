@@ -2,11 +2,12 @@ package store
 
 import (
 	"context"
+	"testing"
+
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
-	"testing"
 )
 
 func workflowStateTestDB(t *testing.T) (*PostgresStore, context.Context) {

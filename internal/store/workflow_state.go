@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
-	"time"
 )
 
 const workflowInstanceColumns = "id, case_id, definition_id, definition_version, current_step, state, created_at, updated_at, finished_at"

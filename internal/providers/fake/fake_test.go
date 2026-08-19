@@ -3,12 +3,13 @@ package fake
 import (
 	"context"
 	"errors"
-	"github.com/tonymontoya/ceph-atlas/internal/apperr"
-	"github.com/tonymontoya/ceph-atlas/internal/inventory"
-	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/observability"
 )
 
 func TestFixturesLoadHealthyBareMetal(t *testing.T) {
@@ -64,12 +65,12 @@ func TestFixturesReturnAppErrorForMissingScenario(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var providerErr apperr.Error
-	if !errors.As(err, &providerErr) {
+	var appErr apperr.Error
+	if !errors.As(err, &appErr) {
 		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
-	if providerErr.Class != apperr.Unavailable {
-		t.Fatalf("error class = %q, want %q", providerErr.Class, apperr.Unavailable)
+	if appErr.Class != apperr.Unavailable {
+		t.Fatalf("error class = %q, want %q", appErr.Class, apperr.Unavailable)
 	}
 }
 
@@ -150,12 +151,12 @@ func TestFixturesReturnNotFoundForUnknownHost(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var providerErr apperr.Error
-	if !errors.As(err, &providerErr) {
+	var appErr apperr.Error
+	if !errors.As(err, &appErr) {
 		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
-	if providerErr.Class != apperr.NotFound {
-		t.Fatalf("error class = %q, want %q", providerErr.Class, apperr.NotFound)
+	if appErr.Class != apperr.NotFound {
+		t.Fatalf("error class = %q, want %q", appErr.Class, apperr.NotFound)
 	}
 }
 
@@ -174,11 +175,11 @@ func TestFixturesRejectUnknownErrorClass(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var providerErr apperr.Error
-	if !errors.As(err, &providerErr) {
+	var appErr apperr.Error
+	if !errors.As(err, &appErr) {
 		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
-	if providerErr.Class != apperr.MalformedResponse {
-		t.Fatalf("error class = %q, want %q", providerErr.Class, apperr.MalformedResponse)
+	if appErr.Class != apperr.MalformedResponse {
+		t.Fatalf("error class = %q, want %q", appErr.Class, apperr.MalformedResponse)
 	}
 }

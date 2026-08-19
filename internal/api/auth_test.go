@@ -2,14 +2,15 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
-	"net/http"
-	"net/http/httptest"
-	"testing"
 )
 
 type authTestHarness struct {

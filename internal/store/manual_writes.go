@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/tonymontoya/ceph-atlas/internal/apperr"
-	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"strings"
 	"time"
+
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/cases"
 )
 
 const caseColumns = "id, title, summary, status, severity, source, cluster_fsid::text, assignee, assignee_display_name, created_at, updated_at, closed_at"

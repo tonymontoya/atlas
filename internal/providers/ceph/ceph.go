@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 )
 
 const (

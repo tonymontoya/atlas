@@ -1,11 +1,12 @@
 package api
 
 import (
-	"github.com/tonymontoya/ceph-atlas/internal/apperr"
-	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
 func workflowWritesUnsupported() apperr.Error {
@@ -87,11 +88,11 @@ func (s *Server) attachWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.WorkflowID == "" {
-		writeError(w, apperr.Error{Class: apperr.InvalidRequest, Message: "workflowId is required"})
+		writeError(w, invalidRequest("workflowId is required"))
 		return
 	}
 	if request.WorkflowVersion < 1 {
-		writeError(w, apperr.Error{Class: apperr.InvalidRequest, Message: "workflowVersion must be a positive integer"})
+		writeError(w, invalidRequest("workflowVersion must be a positive integer"))
 		return
 	}
 
@@ -167,7 +168,7 @@ func (s *Server) approveWorkflowGate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.GateID == "" {
-		writeError(w, apperr.Error{Class: apperr.InvalidRequest, Message: "gateId is required"})
+		writeError(w, invalidRequest("gateId is required"))
 		return
 	}
 
@@ -207,7 +208,7 @@ func (s *Server) completeWorkflowTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.TaskID == "" {
-		writeError(w, apperr.Error{Class: apperr.InvalidRequest, Message: "taskId is required"})
+		writeError(w, invalidRequest("taskId is required"))
 		return
 	}
 

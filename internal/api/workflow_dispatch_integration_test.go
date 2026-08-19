@@ -2,12 +2,13 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/tonymontoya/ceph-atlas/internal/agent"
-	"github.com/tonymontoya/ceph-atlas/internal/apperr"
-	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"net/http"
 	"strconv"
 	"testing"
+
+	"github.com/tonymontoya/ceph-atlas/internal/agent"
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/cases"
 )
 
 // createManualCaseForAPIWithCluster creates a manual Case bound to a

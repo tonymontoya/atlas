@@ -3,11 +3,12 @@ package inventorysync
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/fake"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
-	"time"
 )
 
 type Writer interface {
@@ -110,11 +111,11 @@ func failureFromError(runID int64, err error) store.SyncRunFailure {
 		RunID:        runID,
 		ErrorMessage: err.Error(),
 	}
-	var providerErr apperr.Error
-	if errors.As(err, &providerErr) {
-		failure.ErrorClass = string(providerErr.Class)
+	var appErr apperr.Error
+	if errors.As(err, &appErr) {
+		failure.ErrorClass = string(appErr.Class)
 	} else {
-		failure.ErrorClass = "Internal"
+		failure.ErrorClass = string(apperr.Internal)
 	}
 	return failure
 }

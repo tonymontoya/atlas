@@ -3,16 +3,17 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
-	"net/http"
-	"strconv"
-	"testing"
-	"time"
 )
 
 type attachWorkflowResponse struct {

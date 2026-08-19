@@ -3,14 +3,15 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
-	"net/http"
-	"strconv"
-	"strings"
 )
 
 type Server struct {

@@ -3,11 +3,12 @@ package contracttest
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
-	"testing"
 )
 
 type Scenario string
@@ -227,12 +228,12 @@ func assertErrorClass(t *testing.T, err error, want apperr.Class) {
 	if err == nil {
 		t.Fatalf("expected error with class %q, got nil", want)
 	}
-	var providerErr apperr.Error
-	if !errors.As(err, &providerErr) {
+	var appErr apperr.Error
+	if !errors.As(err, &appErr) {
 		t.Fatalf("error type = %T, want apperr.Error", err)
 	}
-	if providerErr.Class != want {
-		t.Fatalf("error class = %q, want %q (message: %s)", providerErr.Class, want, providerErr.Message)
+	if appErr.Class != want {
+		t.Fatalf("error class = %q, want %q (message: %s)", appErr.Class, want, appErr.Message)
 	}
 }
 

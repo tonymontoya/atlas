@@ -2,13 +2,14 @@ package ceph
 
 import (
 	"context"
-	"github.com/tonymontoya/ceph-atlas/internal/apperr"
-	"github.com/tonymontoya/ceph-atlas/internal/fleet"
-	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"net/url"
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/fleet"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 )
 
 // GET /api/health/get_cluster_fsid answers with a bare JSON string (Reef
