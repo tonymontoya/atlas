@@ -25,14 +25,6 @@ func scenarioFactory(t *testing.T, scenario contracttest.Scenario) contracttest.
 	case contracttest.ScenarioPartial:
 		return nil
 	}
-	dashboard := dashtest.New(t, mode)
-	provider, err := New(Config{
-		BaseURL:  dashboard.URL(),
-		Username: dashtest.Username,
-		Password: dashtest.Password,
-	})
-	if err != nil {
-		t.Fatalf("New returned error: %v", err)
-	}
+	provider, _ := newTestProvider(t, mode)
 	return provider
 }

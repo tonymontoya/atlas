@@ -206,14 +206,9 @@ func TestPools(t *testing.T) {
 }
 
 func TestUnavailableWhenServerIsDown(t *testing.T) {
-	dashboard := dashtest.New(t, dashtest.ModeSuccess)
-	url := dashboard.URL()
+	provider, dashboard := newTestProvider(t, dashtest.ModeSuccess)
 	dashboard.Close()
-	provider, err := New(Config{BaseURL: url, Username: dashtest.Username, Password: dashtest.Password})
-	if err != nil {
-		t.Fatalf("New returned error: %v", err)
-	}
-	_, err = provider.OSDs(context.Background())
+	_, err := provider.OSDs(context.Background())
 	assertErrorClass(t, err, apperr.Unavailable)
 }
 

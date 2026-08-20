@@ -113,8 +113,9 @@ func TestRunOnceRecordsErrorClassOnFailure(t *testing.T) {
 	}
 }
 
-func TestRunOnceCollectsCephProviderDataAndWritesObservation(t *testing.T) {
-	dashboard := dashtest.New(t, dashtest.ModeSuccess)
+func newCephProvider(t *testing.T, mode dashtest.Mode) *ceph.Provider {
+	t.Helper()
+	dashboard := dashtest.New(t, mode)
 	provider, err := ceph.New(ceph.Config{
 		BaseURL:  dashboard.URL(),
 		Username: dashtest.Username,
@@ -123,6 +124,11 @@ func TestRunOnceCollectsCephProviderDataAndWritesObservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ceph.New returned error: %v", err)
 	}
+	return provider
+}
+
+func TestRunOnceCollectsCephProviderDataAndWritesObservation(t *testing.T) {
+	provider := newCephProvider(t, dashtest.ModeSuccess)
 	writer := &recordingWriter{}
 	observedAt := time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
 
@@ -178,18 +184,10 @@ func TestRunOnceCollectsCephProviderDataAndWritesObservation(t *testing.T) {
 }
 
 func TestRunOnceRecordsCephErrorClassOnFailure(t *testing.T) {
-	dashboard := dashtest.New(t, dashtest.ModeUnauthorized)
-	provider, err := ceph.New(ceph.Config{
-		BaseURL:  dashboard.URL(),
-		Username: dashtest.Username,
-		Password: dashtest.Password,
-	})
-	if err != nil {
-		t.Fatalf("ceph.New returned error: %v", err)
-	}
+	provider := newCephProvider(t, dashtest.ModeUnauthorized)
 	writer := &recordingWriter{}
 
-	_, err = RunOnce(context.Background(), writer, provider, Options{ProviderName: "ceph"})
+	_, err := RunOnce(context.Background(), writer, provider, Options{ProviderName: "ceph"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -208,15 +206,7 @@ func TestRunOnceRecordsCephErrorClassOnFailure(t *testing.T) {
 }
 
 func TestRunOnceRequiresProviderName(t *testing.T) {
-	dashboard := dashtest.New(t, dashtest.ModeSuccess)
-	provider, err := ceph.New(ceph.Config{
-		BaseURL:  dashboard.URL(),
-		Username: dashtest.Username,
-		Password: dashtest.Password,
-	})
-	if err != nil {
-		t.Fatalf("ceph.New returned error: %v", err)
-	}
+	provider := newCephProvider(t, dashtest.ModeSuccess)
 	if _, err := RunOnce(context.Background(), &recordingWriter{}, provider, Options{}); err == nil {
 		t.Fatal("expected error for missing ProviderName")
 	}

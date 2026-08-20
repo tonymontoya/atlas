@@ -7,7 +7,6 @@ import (
 
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
-	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/ceph/dashtest"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
@@ -145,15 +144,7 @@ func TestRunOncePersistsFakeProviderObservationToPostgres(t *testing.T) {
 }
 
 func TestRunOncePersistsCephProviderObservationToPostgres(t *testing.T) {
-	dashboard := dashtest.New(t, dashtest.ModeSuccess)
-	provider, err := ceph.New(ceph.Config{
-		BaseURL:  dashboard.URL(),
-		Username: dashtest.Username,
-		Password: dashtest.Password,
-	})
-	if err != nil {
-		t.Fatalf("ceph.New returned error: %v", err)
-	}
+	provider := newCephProvider(t, dashtest.ModeSuccess)
 
 	ctx := context.Background()
 	db, _ := testdb.Open(t)
