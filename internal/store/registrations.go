@@ -139,14 +139,14 @@ func (s *PostgresStore) DeregisterCluster(ctx context.Context, input DeregisterC
 		input.ClusterID, occurredAt)
 	registration, err := scanClusterRegistration(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		existing, getErr := s.GetClusterRegistration(ctx, input.ClusterID)
+		// The UPDATE only misses when the row is gone (notFound) or
+		// already deregistered (conflict); the WHERE pinned
+		// deregistered_at IS NULL, so an existing row here has it set.
+		_, getErr := s.GetClusterRegistration(ctx, input.ClusterID)
 		if getErr != nil {
 			return fleet.ClusterRegistration{}, getErr
 		}
-		if existing.DeregisteredAt == nil {
-			return fleet.ClusterRegistration{}, conflictError("cluster is already deregistered")
-		}
-		return fleet.ClusterRegistration{}, conflictError("cluster is already deregistered (deregisteredAt " + existing.DeregisteredAt.Format(time.RFC3339) + ")")
+		return fleet.ClusterRegistration{}, conflictError("cluster is already deregistered")
 	}
 	if err != nil {
 		return fleet.ClusterRegistration{}, err

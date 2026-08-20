@@ -28,7 +28,7 @@ type registrationResponse struct {
 	} `json:"enrollmentCredential"`
 }
 
-func cleanupRegistrationRows(t *testing.T, harness *writeHarness) {
+func cleanupRegistrationRows(t *testing.T) {
 	t.Helper()
 	db, _ := testdb.Open(t)
 	testdb.DeleteClusters(t, db, "name LIKE 'api-registration-test%'")
@@ -51,8 +51,8 @@ func TestCreateClusterRegistrationRequiresAuthentication(t *testing.T) {
 
 func TestClusterRegistrationLifecycleOverAPI(t *testing.T) {
 	harness := newWriteHarness(t)
-	cleanupRegistrationRows(t, harness)
-	defer cleanupRegistrationRows(t, harness)
+	cleanupRegistrationRows(t)
+	defer cleanupRegistrationRows(t)
 
 	response := harness.do(t, http.MethodPost, "/api/v1/clusters", map[string]string{
 		"name":        "api-registration-test-lifecycle",
@@ -128,8 +128,8 @@ func TestClusterRegistrationLifecycleOverAPI(t *testing.T) {
 
 func TestClusterRegistrationValidationOverAPI(t *testing.T) {
 	harness := newWriteHarness(t)
-	cleanupRegistrationRows(t, harness)
-	defer cleanupRegistrationRows(t, harness)
+	cleanupRegistrationRows(t)
+	defer cleanupRegistrationRows(t)
 
 	response := harness.do(t, http.MethodPost, "/api/v1/clusters", map[string]string{
 		"name":        "",

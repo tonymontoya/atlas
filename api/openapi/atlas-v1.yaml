@@ -129,6 +129,10 @@ paths:
         - Clusters
       operationId: getClusterRegistration
       summary: Get a cluster registration
+      description: >
+        Addresses the cluster by registration id rather than FSID: the FSID
+        is nil from registration until Enrollment binds it (ADR-0026), so
+        FSID-addressed management of fresh registrations is impossible.
       parameters:
         - name: id
           in: path
@@ -1287,7 +1291,7 @@ components:
           description: When the Operator registered the cluster.
         registeredBy:
           type: string
-          description: Subject of the Operator who registered the cluster.
+          description: Subject of the Operator who registered the cluster; empty for rows created by inventory sync before registration existed.
         deregisteredAt:
           type:
             - string

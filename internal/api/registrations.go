@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"net/http"
 	"strconv"
 
@@ -54,10 +55,15 @@ func (s *Server) createClusterRegistration(w http.ResponseWriter, r *http.Reques
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, struct {
-		Cluster              any `json:"cluster"`
-		EnrollmentCredential any `json:"enrollmentCredential"`
-	}{Cluster: registration, EnrollmentCredential: credential})
+	writeJSON(w, http.StatusCreated, createClusterRegistrationResponse{
+		Cluster:              registration,
+		EnrollmentCredential: credential,
+	})
+}
+
+type createClusterRegistrationResponse struct {
+	Cluster              fleet.ClusterRegistration  `json:"cluster"`
+	EnrollmentCredential fleet.EnrollmentCredential `json:"enrollmentCredential"`
 }
 
 func (s *Server) clusterRegistration(w http.ResponseWriter, r *http.Request) {
