@@ -32,6 +32,9 @@ func (s *Server) routes() []route {
 	return []route{
 		{"GET", "/healthz", s.healthz},
 		{"GET", "/api/v1/me", s.requireIdentity(s.me)},
+		{"POST", "/api/v1/clusters", s.requireIdentity(s.createClusterRegistration)},
+		{"GET", "/api/v1/clusters/{id}", s.clusterRegistration},
+		{"DELETE", "/api/v1/clusters/{id}", s.requireIdentity(s.deregisterCluster)},
 		{"GET", "/api/v1/clusters/current", s.cluster},
 		{"GET", "/api/v1/clusters/current/health", s.clusterHealth},
 		{"GET", "/api/v1/clusters/current/osds", s.osds},

@@ -80,7 +80,9 @@ What does not exist yet:
   Agent adapter only simulates Job execution)
 - RBAC, policy, and Audit Events (any authenticated operator can approve
   gates and complete tasks; see ADR-0016)
-- Notifications and cluster registration
+- Notifications, and Enrollment for registered clusters (Cluster
+  Registration exists — registered via the API with one-time Enrollment
+  Credentials — but the Atlas Agent that enrolls and reports in does not)
 
 ## Roadmap
 

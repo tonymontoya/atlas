@@ -140,3 +140,21 @@ Dashboard read provider (ADR-0023):
   `starting`, `error`, and `unknown` alongside `running` and `stopped`.
   The fake fixtures only produced the original two; the Dashboard
   daemon list reports the full set.
+
+## Cluster Registrations
+
+`000011_cluster_registrations.up.sql` adds Operator-registered Clusters
+(ADR-0025/0026):
+
+- `atlas_clusters.fsid` and `ceph_version` become nullable: a
+  registration exists before Enrollment binds the FSID and before the
+  first observation reports a version. The existing `UNIQUE` constraint
+  on `fsid` keeps duplicate bindings impossible (NULLs never conflict).
+- `atlas_clusters` gains `registered_at`, `registered_by`, and
+  `deregistered_at`. NULL `registered_at` marks rows created by
+  inventory sync rather than registration. Deregistration is soft: the
+  row and all history stay so snapshots and Cases survive untouched.
+- `cluster_enrollment_credentials`: one-time Enrollment Credentials
+  stored only as SHA-256 hashes with an expiry and a `consumed_at`
+  single-use stamp. Deregistration consumes every live credential for
+  the cluster.

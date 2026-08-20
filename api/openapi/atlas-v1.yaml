@@ -69,6 +69,142 @@ paths:
                     error:
                       class: Unauthorized
                       message: missing bearer token
+  /api/v1/clusters:
+    post:
+      tags:
+        - Clusters
+      operationId: createClusterRegistration
+      summary: Register a cluster
+      description: >
+        Registers a Cluster (ADR-0025) and returns the one-time Enrollment
+        Credential exactly once. The credential is stored only as a hash,
+        expires if unused, and is never returned by any other endpoint.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClusterRegistrationRequest"
+            examples:
+              prodCluster:
+                value:
+                  name: prod-ceph-a
+                  clusterType: bare-metal
+      responses:
+        "201":
+          description: Registered cluster with its one-time enrollment credential.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateClusterRegistrationResponse"
+        "400":
+          description: Request body failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unauthorized:
+                  value:
+                    error:
+                      class: Unauthorized
+                      message: missing bearer token
+        "422":
+          description: Cluster registration requires the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/clusters/{id}:
+    get:
+      tags:
+        - Clusters
+      operationId: getClusterRegistration
+      summary: Get a cluster registration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Cluster registration id.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Cluster registration detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterRegistration"
+        "404":
+          description: No cluster registration exists with that id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Cluster registration requires the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+        - Clusters
+      operationId: deregisterCluster
+      summary: Deregister a cluster
+      description: >
+        Retires the registration and consumes any live Enrollment
+        Credential. Snapshots and Cases are preserved untouched.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Cluster registration id.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Deregistered cluster registration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterRegistration"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No cluster registration exists with that id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The cluster is already deregistered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Cluster registration requires the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/clusters/current:
     get:
       tags:
@@ -1116,6 +1252,85 @@ components:
         displayName:
           type: string
           description: Display name resolved from token claims, falling back to the subject.
+    ClusterRegistration:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - clusterType
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Cluster registration id.
+        fsid:
+          type:
+            - string
+            - "null"
+          description: Ceph cluster FSID, bound at Enrollment; null until then.
+        name:
+          type: string
+          description: Operator-chosen display name.
+        cephVersion:
+          type:
+            - string
+            - "null"
+          description: Reported Ceph version; null until the first observation.
+        clusterType:
+          $ref: "#/components/schemas/ClusterType"
+        registeredAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: When the Operator registered the cluster.
+        registeredBy:
+          type: string
+          description: Subject of the Operator who registered the cluster.
+        deregisteredAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: When the cluster was deregistered; null while active.
+    EnrollmentCredential:
+      type: object
+      additionalProperties: false
+      required:
+        - token
+        - expiresAt
+      properties:
+        token:
+          type: string
+          description: One-time enrollment credential; shown exactly once.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the credential expires if unused.
+    CreateClusterRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - clusterType
+      properties:
+        name:
+          type: string
+          description: Operator-chosen display name.
+        clusterType:
+          $ref: "#/components/schemas/ClusterType"
+    CreateClusterRegistrationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - cluster
+        - enrollmentCredential
+      properties:
+        cluster:
+          $ref: "#/components/schemas/ClusterRegistration"
+        enrollmentCredential:
+          $ref: "#/components/schemas/EnrollmentCredential"
     ClusterIdentity:
       type: object
       additionalProperties: false

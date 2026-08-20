@@ -41,7 +41,9 @@ func TestOpenAPISpecMatchesRegisteredRoutes(t *testing.T) {
 	specRoutes := make(map[string]bool)
 	for path, operations := range spec.Paths {
 		for method, operation := range operations {
-			if method != "get" && method != "post" {
+			switch method {
+			case "get", "post", "put", "patch", "delete":
+			default:
 				continue
 			}
 			if operation.OperationID == "" {

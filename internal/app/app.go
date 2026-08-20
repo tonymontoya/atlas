@@ -7,6 +7,7 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
+	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
@@ -17,16 +18,23 @@ import (
 )
 
 type App struct {
-	Config              config.Config
-	CephProvider        providers.CephReadProvider
-	InventorySyncRuns   InventorySyncRunReader
-	AlertEvaluationRuns AlertEvaluationRunReader
-	Cases               CaseReader
-	CaseWrites          CaseWriter
-	WorkflowReads       WorkflowReader
-	WorkflowLifecycle   *workflowdispatch.Lifecycle
-	Verifier            *identity.Verifier
-	close               func() error
+	Config               config.Config
+	CephProvider         providers.CephReadProvider
+	InventorySyncRuns    InventorySyncRunReader
+	AlertEvaluationRuns  AlertEvaluationRunReader
+	Cases                CaseReader
+	CaseWrites           CaseWriter
+	ClusterRegistrations ClusterRegistrationStore
+	WorkflowReads        WorkflowReader
+	WorkflowLifecycle    *workflowdispatch.Lifecycle
+	Verifier             *identity.Verifier
+	close                func() error
+}
+
+type ClusterRegistrationStore interface {
+	CreateClusterRegistration(ctx context.Context, input store.ClusterRegistrationInput) (fleet.ClusterRegistration, fleet.EnrollmentCredential, error)
+	GetClusterRegistration(ctx context.Context, clusterID int64) (fleet.ClusterRegistration, error)
+	DeregisterCluster(ctx context.Context, input store.DeregisterClusterInput) (fleet.ClusterRegistration, error)
 }
 
 type InventorySyncRunReader interface {
@@ -110,16 +118,17 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			dispatch = workflowdispatch.New(postgresStore, workflowRegistry, fakeAgent)
 		}
 		application := &App{
-			Config:              cfg,
-			CephProvider:        postgresStore,
-			InventorySyncRuns:   postgresStore,
-			AlertEvaluationRuns: postgresStore,
-			Cases:               postgresStore,
-			CaseWrites:          postgresStore,
-			WorkflowReads:       postgresStore,
-			WorkflowLifecycle:   workflowdispatch.NewLifecycle(postgresStore, workflowRegistry, dispatch),
-			Verifier:            verifier,
-			close:               db.Close,
+			Config:               cfg,
+			CephProvider:         postgresStore,
+			InventorySyncRuns:    postgresStore,
+			AlertEvaluationRuns:  postgresStore,
+			Cases:                postgresStore,
+			CaseWrites:           postgresStore,
+			ClusterRegistrations: postgresStore,
+			WorkflowReads:        postgresStore,
+			WorkflowLifecycle:    workflowdispatch.NewLifecycle(postgresStore, workflowRegistry, dispatch),
+			Verifier:             verifier,
+			close:                db.Close,
 		}
 		return application, nil
 	default:
