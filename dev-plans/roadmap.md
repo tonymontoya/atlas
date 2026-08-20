@@ -36,14 +36,15 @@ Ground rules for the ladder:
 
 # 3. Version Ladder
 
-## v0.6.x — Current line
+## v0.6 — The Real Ceph Read Provider line (complete)
 
-Finish the internal architecture candidates (app-level error taxonomy,
+v0.6.0 shipped the read-only Ceph Dashboard provider; v0.6.1 shipped the
+internal-architecture hardening pass (app-level error taxonomy,
 guarded-transition store helpers, one Actor type, typed inventory status,
-dashtest provider-welding helpers) and ship the v0.6.1 release notes,
-including the alert-eval fail-fast behavior change.
+dashtest provider-welding helpers) with the alert-eval fail-fast behavior
+change documented in its release notes.
 
-## v0.7 — Real Reads
+## v0.7 — Real Reads — Current line
 
 Point the working read loop at real clusters:
 
@@ -108,7 +109,7 @@ In priority order:
 
 # 5. Tracker
 
-GitHub milestones mirror this ladder (`v0.6.1`, `v0.7`, `v0.8`, `v0.9`,
+GitHub milestones mirror this ladder (`v0.7`, `v0.8`, `v0.9`,
 `v1.0`). Each past release has a closed epic issue linking its release
 notes. Forward work is ticketed against these milestones; deferred items
 stay in this file, not the tracker.
