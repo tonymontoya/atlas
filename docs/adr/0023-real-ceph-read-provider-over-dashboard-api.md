@@ -1,5 +1,10 @@
 # Real Ceph Read Provider over the Dashboard REST API
 
+> Note (2026-08-20): the credential-custody and control-plane-sync aspects of
+> this ADR are superseded by ADR-0025 — the Dashboard REST reading approach
+> survives, relocated into the enrolled Atlas Agent. Endpoint, auth, error,
+> and testing decisions below remain authoritative for the provider code.
+
 Atlas's first real (non-fake) provider implements `CephReadProvider` for bare-metal Ceph 18 (Reef) by reading the Ceph Dashboard REST API under `/api`, selected per ADR-0006 (supported interfaces first) and the research in `dev-plans/provider_api_research.md`, which recommends the Dashboard API as the first-class read source. Every response is normalized to Atlas domain types inside the provider package (`internal/providers/ceph`), so the Dashboard's between-release endpoint drift is contained behind the existing provider contract; the MON command API and CLI are not used for reads and remain candidates for typed operations later. Rook-managed clusters keep their own future provider per ADR-0012 parity; the Dashboard transport may turn out to serve that provider too, but Rook discovery and design stay out of this decision.
 
 Authentication is username and password for a dedicated, read-only Dashboard user. The provider logs in once, caches the resulting JWT in-process, and re-authenticates once on a 401 before failing. A static token was rejected because Dashboard JWTs expire, which would strand unattended sync runs until a human re-mints (and minting requires a login anyway); least privilege comes from the Dashboard user's role, not the credential type. Credentials exist only in the explicit `ATLAS_PROVIDER_MODE=ceph` opt-in path — never in ordinary local development paths (ADR-0011; `dev-plans/local_development_topology.md`) and never in this repository.

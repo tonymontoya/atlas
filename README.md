@@ -74,10 +74,10 @@ What exists today:
 What does not exist yet:
 
 - Rook providers, a real alert source (alert detection reads fake Prometheus
-  fixtures, not a live Prometheus), and pointing the API read source at a live
-  cluster
-- A real Atlas Agent or any mutating operation against Ceph (the fake Agent
-  adapter only simulates Job execution)
+  fixtures, not live alerts), and real-cluster reads (reads arrive through an
+  enrolled Atlas Agent per ADR-0025, not through the control plane)
+- A dispatching Atlas Agent or any mutating operation against Ceph (the fake
+  Agent adapter only simulates Job execution)
 - RBAC, policy, and Audit Events (any authenticated operator can approve
   gates and complete tasks; see ADR-0016)
 - Notifications and cluster registration
@@ -88,12 +88,13 @@ Atlas is working toward a production-usable single-zone 1.0. Each 0.x minor
 is a coherent development milestone; stability commitments begin at 1.0.0.
 The full ladder lives in [`dev-plans/roadmap.md`](dev-plans/roadmap.md).
 
-- **v0.7 — Real Reads:** cluster registration, API reads against a live
-  cluster, and a real Prometheus alert source creating Cases automatically
+- **v0.7 — Registered Reads:** cluster registration and Enrollment, a
+  read-only Atlas Agent pushing observations from real clusters, and real
+  alert ingestion creating Cases automatically
 - **v0.8 — Safety Chain:** hierarchical RBAC, policy evaluation, and
   immutable Audit Events
-- **v0.9 — Real Agent:** mutual TLS, typed approved operations, and the
-  Replace OSD workflow executing real mutations end to end
+- **v0.9 — Real Mutations:** mutual TLS hardening, typed approved operations,
+  and the Replace OSD workflow executing real mutations end to end
 - **v1.0 — Ship:** deployment artifacts, bootstrap runbook, user docs, and
   a security review — usable by a stranger, single-zone
 

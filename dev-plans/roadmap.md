@@ -44,13 +44,15 @@ guarded-transition store helpers, one Actor type, typed inventory status,
 dashtest provider-welding helpers) with the alert-eval fail-fast behavior
 change documented in its release notes.
 
-## v0.7 — Real Reads — Current line
+## v0.7 — Registered Reads — Current line
 
-Point the working read loop at real clusters:
+Real clusters report in through enrolled Atlas Agents (ADR-0025):
 
-- Cluster registration for bare-metal Ceph over the Dashboard REST API
-- API read source against a live cluster (`ATLAS_READ_SOURCE=ceph`)
-- Real Prometheus alert source: live alerts create Cases automatically
+- Cluster Registration and Enrollment for bare-metal Ceph
+- Read-only Atlas Agent: collects over the Dashboard REST API inside the
+  cluster's trust domain and pushes observations to Atlas
+- Real alert ingestion: live alerts create Cases automatically
+- Removal of the control-plane pull path (`ATLAS_PROVIDER_MODE=ceph`)
 - No mutation
 
 ## v0.8 — Safety Chain
@@ -62,11 +64,12 @@ The guardrails before the first real mutation:
   checks
 - Immutable Audit Events for privileged operations
 
-## v0.9 — Real Agent
+## v0.9 — Real Mutations
 
-Real mutation through the typed-operation model:
+Real mutation through the typed-operation model, dispatched to the Agents
+enrolled since v0.7:
 
-- Atlas Agent service with mutual TLS
+- Mutual TLS hardening, credential rotation, and revocation for the Agent channel
 - Typed, approved, idempotent Job execution against real Ceph
 - Replace OSD executing real operations end to end, with recovery
   monitoring and verification
@@ -93,17 +96,20 @@ v1.0 acceptance criteria live in `dev-plans/mvp.md`.
 
 In priority order:
 
-1. Rook-managed Ceph as an equal first-class cluster type (v1.0 ships
+1. Federation: global control plane, multi-zone synchronization, cross-zone
+   workflows — moved first: Atlas's first target customer operates 50+
+   clusters across 15 datacenters in 3 global zones and will not adopt
+   until multi-zone, multi-control-plane features exist. Each regional
+   Atlas deployment stays single-zone per ADR-0001; federation links them.
+2. Rook-managed Ceph as an equal first-class cluster type (v1.0 ships
    bare-metal first)
-2. Chat notifications (for example, Slack)
-3. Enterprise line: NetBox as a required inventory source,
+3. Chat notifications (for example, Slack)
+4. Enterprise line: NetBox as a required inventory source,
    OpenSearch/Splunk contextual log links, external ticket tracker work
    request creation, scheduler and maintenance windows, richer policy
    language, additional workflows (Drain Host, Restart Daemon, Create Pool,
    Expand Cluster, Cluster Upgrade, Host Maintenance, Cluster Health
    Investigation), fleet-wide reporting, unified search
-4. Federation: global control plane, multi-zone synchronization, cross-zone
-   workflows — last
 
 ---
 

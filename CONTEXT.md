@@ -112,6 +112,14 @@ _Avoid_: Incident, alarm
 A stable identity for an alert condition (alert name plus non-context labels), used to deduplicate automatic Case creation.
 _Avoid_: Alert ID, hash key
 
+**Cluster Registration**:
+The Operator act of defining a Cluster in Atlas and obtaining Enrollment instructions for its Atlas Agent.
+_Avoid_: Cluster onboarding, connection setup
+
+**Enrollment**:
+The process by which an Atlas Agent establishes a durable, trusted identity with Atlas for a registered Cluster.
+_Avoid_: Pairing, join, agent registration
+
 **Atlas Agent**:
-A privileged component that executes strongly typed, approved operations close to Ceph clusters.
+A privileged component in a Cluster's trust domain that collects cluster state and executes strongly typed, approved operations.
 _Avoid_: SSH proxy, remote shell, worker node
