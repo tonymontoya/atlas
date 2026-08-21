@@ -12,6 +12,8 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/observability"
+	"github.com/tonymontoya/ceph-atlas/internal/providers/prometheus"
+	"github.com/tonymontoya/ceph-atlas/internal/providers/prometheus/promtest"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
@@ -116,6 +118,116 @@ func TestRunFakeOnceDetectsCaseFromAlerts(t *testing.T) {
 	}
 }
 
+func TestRunOnceDetectsCaseFromPrometheusAlerts(t *testing.T) {
+	ctx := context.Background()
+	db, _ := testdb.Open(t)
+
+	const fsid = "00000000-0000-4000-8000-000000000402"
+	cleanupPrometheusDetection(t, db, fsid)
+	t.Cleanup(func() { cleanupPrometheusDetection(t, db, fsid) })
+
+	writer := store.NewPostgres(db)
+	if _, err := writer.SaveInventoryObservation(ctx, store.InventoryObservation{
+		Provider:   "fake",
+		Scenario:   "promtest-reef",
+		ObservedAt: time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC),
+		Cluster: fleet.ClusterIdentity{
+			FSID:        fsid,
+			Name:        promtest.ClusterLabel,
+			CephVersion: "18.2.4",
+			Type:        fleet.ClusterTypeBareMetal,
+		},
+		Health: fixtureHealth(t),
+		OSDs:   fixtureOSDs(t),
+	}); err != nil {
+		t.Fatalf("save inventory observation: %v", err)
+	}
+
+	server := promtest.New(t, promtest.ModeSuccess)
+	provider, err := prometheus.New(prometheus.Config{
+		BaseURL:     server.URL(),
+		BearerToken: promtest.Token,
+	})
+	if err != nil {
+		t.Fatalf("prometheus.New returned error: %v", err)
+	}
+
+	result, err := RunOnce(ctx, writer, provider, RunOptions{
+		Provider:    "prometheus",
+		EvaluatedAt: time.Date(2026, 8, 20, 9, 20, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.AlertsEvaluated != 1 || result.CasesCreated != 1 {
+		t.Fatalf("result = %+v, want 1 evaluated and 1 case created", result)
+	}
+
+	var title, status, severity, clusterFSID string
+	if err := db.QueryRowContext(ctx, `
+		SELECT cases.title, cases.status, cases.severity, cases.cluster_fsid::text
+		FROM cases
+		WHERE cases.cluster_fsid = $1::uuid
+	`, fsid).Scan(&title, &status, &severity, &clusterFSID); err != nil {
+		t.Fatalf("query detected case: %v", err)
+	}
+	if title != "CephOSDDown on osd=1" || status != "detected" || severity != "high" {
+		t.Fatalf("detected case title/status/severity = %q/%q/%q", title, status, severity)
+	}
+	if clusterFSID != fsid {
+		t.Fatalf("detected case cluster fsid = %q, want %q (resolved from the cluster label)", clusterFSID, fsid)
+	}
+
+	var eventType string
+	var payloadBytes []byte
+	if err := db.QueryRowContext(ctx, `
+		SELECT event_type, payload
+		FROM case_timeline_events
+		WHERE case_id = (SELECT id FROM cases WHERE cluster_fsid = $1::uuid)
+	`, fsid).Scan(&eventType, &payloadBytes); err != nil {
+		t.Fatalf("query timeline event: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		t.Fatalf("parse timeline payload: %v", err)
+	}
+	if eventType != "case_detected" || payload["signal"] != "CEPH_OSD_DOWN" {
+		t.Fatalf("timeline event = %s %+v, want case_detected with signal", eventType, payload)
+	}
+	if payload["osd"] != float64(1) || payload["host"] != "host-b.example.invalid" {
+		t.Fatalf("timeline payload = %+v, want osd and host context from the synced read model", payload)
+	}
+
+	var runStatus, runScenario sql.NullString
+	var alertsEvaluated, casesCreated int
+	if err := db.QueryRowContext(ctx, `
+		SELECT status, scenario, alerts_evaluated, cases_created
+		FROM alert_evaluation_runs
+		WHERE provider = 'prometheus' AND status = 'succeeded'
+		ORDER BY id DESC
+		LIMIT 1
+	`).Scan(&runStatus, &runScenario, &alertsEvaluated, &casesCreated); err != nil {
+		t.Fatalf("query evaluation run: %v", err)
+	}
+	if runStatus.String != "succeeded" || alertsEvaluated != 1 || casesCreated != 1 {
+		t.Fatalf("evaluation run = %s %d/%d, want succeeded 1/1", runStatus.String, alertsEvaluated, casesCreated)
+	}
+	if runScenario.Valid {
+		t.Fatalf("evaluation run scenario = %q, want NULL for a live source", runScenario.String)
+	}
+
+	second, err := RunOnce(ctx, writer, provider, RunOptions{
+		Provider:    "prometheus",
+		EvaluatedAt: time.Date(2026, 8, 20, 9, 25, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("second RunOnce returned error: %v", err)
+	}
+	if second.CasesCreated != 0 {
+		t.Fatalf("second run created %d cases, want 0 (idempotent)", second.CasesCreated)
+	}
+}
+
 func TestRunFakeOnceRecordsErrorClassOnFailure(t *testing.T) {
 	ctx := context.Background()
 	db, _ := testdb.Open(t)
@@ -196,4 +308,12 @@ func cleanupDetection(t *testing.T, db *sql.DB, fsid string) {
 func cleanupDetectionRuns(t *testing.T, db *sql.DB) {
 	t.Helper()
 	testdb.DeleteAlertRuns(t, db, "provider = 'fake'")
+}
+
+func cleanupPrometheusDetection(t *testing.T, db *sql.DB, fsid string) {
+	t.Helper()
+	testdb.DeleteCases(t, db, "cluster_fsid = $1::uuid", fsid)
+	testdb.DeleteAlertRuns(t, db, "provider = 'prometheus'")
+	testdb.DeleteSyncRuns(t, db, "scenario = 'promtest-reef'")
+	testdb.DeleteClusters(t, db, "fsid = $1", fsid)
 }

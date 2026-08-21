@@ -8,6 +8,7 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/observability"
+	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/fake"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
@@ -24,16 +25,36 @@ type Options struct {
 	EvaluatedAt time.Time
 }
 
+// RunOptions names one evaluation pass for any alert source: Provider is
+// the run-table name ("fake", "prometheus"), Scenario is recorded only
+// for fixture-backed sources.
+type RunOptions struct {
+	Provider    string
+	Scenario    string
+	EvaluatedAt time.Time
+}
+
 func RunFakeOnce(ctx context.Context, writer Writer, opts Options) (store.DetectionResult, error) {
+	return RunOnce(ctx, writer, fake.NewObservability(fake.DefaultFixtureRoot(), opts.Scenario), RunOptions{
+		Provider:    "fake",
+		Scenario:    opts.Scenario,
+		EvaluatedAt: opts.EvaluatedAt,
+	})
+}
+
+// RunOnce evaluates one pass of alerts from any ObservabilityProvider
+// (ADR-0027): the fake fixtures and a real Prometheus flow through the
+// same normalization, fingerprint dedup, and Case creation.
+func RunOnce(ctx context.Context, writer Writer, provider providers.ObservabilityProvider, opts RunOptions) (store.DetectionResult, error) {
 	runID, err := writer.BeginAlertEvaluationRun(ctx, store.BeginEvaluationRun{
-		Provider: "fake",
+		Provider: opts.Provider,
 		Scenario: opts.Scenario,
 	})
 	if err != nil {
 		return store.DetectionResult{}, err
 	}
 
-	result, err := runFakeOnce(ctx, writer, opts)
+	result, err := runOnce(ctx, writer, provider, opts)
 	if err != nil {
 		failErr := writer.FailAlertEvaluationRun(ctx, failureFromError(runID, err))
 		if failErr != nil {
@@ -51,9 +72,7 @@ func RunFakeOnce(ctx context.Context, writer Writer, opts Options) (store.Detect
 	return result, nil
 }
 
-func runFakeOnce(ctx context.Context, writer Writer, opts Options) (store.DetectionResult, error) {
-	provider := fake.NewObservability(fake.DefaultFixtureRoot(), opts.Scenario)
-
+func runOnce(ctx context.Context, writer Writer, provider providers.ObservabilityProvider, opts RunOptions) (store.DetectionResult, error) {
 	alerts, err := provider.CurrentAlerts(ctx)
 	if err != nil {
 		return store.DetectionResult{}, err
@@ -65,7 +84,7 @@ func runFakeOnce(ctx context.Context, writer Writer, opts Options) (store.Detect
 	}
 
 	return writer.DetectFromAlerts(ctx, store.AlertDetection{
-		Provider:    "fake",
+		Provider:    opts.Provider,
 		Scenario:    opts.Scenario,
 		EvaluatedAt: evaluatedAt,
 		Candidates:  candidatesFromAlerts(alerts),

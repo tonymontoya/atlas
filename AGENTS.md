@@ -60,9 +60,16 @@ The current implementation supports:
   `ATLAS_PROVIDER_MODE=ceph` points inventory sync at a live Dashboard with a
   dedicated read-only user. Explicit opt-in only — no default local path uses
   credentials or real clusters. Tests run against an in-process fake Dashboard
-  (`internal/providers/ceph/dashtest`), never real Ceph. Alert evaluation and
-  the API read source (`ATLAS_READ_SOURCE`) still use fake/postgres sources.
+  (`internal/providers/ceph/dashtest`), never real Ceph. The API read source
+  (`ATLAS_READ_SOURCE`) still uses fake/postgres sources.
 - Fake alert evaluation that creates and deduplicates Cases from alerts.
+- A real Prometheus alert source (ADR-0027): `ATLAS_ALERT_SOURCE=prometheus`
+  plus `ATLAS_PROMETHEUS_URL` (optional bearer token and insecure-TLS flag)
+  points `atlas-alert-eval` at a live `/api/v1/alerts` endpoint through the
+  same detection pipeline. `ATLAS_ALERT_EVAL_INTERVAL` enables loop mode;
+  the one-shot default is preserved. Explicit opt-in only — tests run against
+  an in-process fake Prometheus (`internal/providers/prometheus/promtest`),
+  never a live one.
 - Seeded read-only case records in PostgreSQL.
 - Seeded read-only Case Timeline records in PostgreSQL.
 - Manual Case writes (creation, transitions with closed-terminal semantics,

@@ -61,7 +61,11 @@ What exists today:
   never require a real cluster (the provider is tested against an in-process
   fake Dashboard)
 - Fake-provider alert evaluation that automatically creates a Case (with
-  Timeline Events and deduplication) from a firing alert
+  Timeline Events and deduplication) from a firing alert, plus a real
+  Prometheus alert source: `ATLAS_ALERT_SOURCE=prometheus` points
+  `atlas-alert-eval` at a live `/api/v1/alerts` endpoint (ADR-0027).
+  Explicit opt-in; local development and tests stay on fixtures (the
+  provider is tested against an in-process fake Prometheus)
 - Seeded read-only Case and Case Timeline records
 - A Workflow execution skeleton (ADR-0017 through ADR-0022): the Replace OSD
   Workflow attaches to a Case, pauses at its Approval Gate and human Task,
@@ -238,13 +242,39 @@ self-signed certificates, set `ATLAS_CEPH_DASHBOARD_INSECURE_TLS=true`.
 Atlas validates its environment at startup and fails fast: every problem
 is reported in one error naming the offending `ATLAS_*` variables.
 `ATLAS_PROVIDER_MODE=ceph` requires the Dashboard URL to be an absolute
-URL with a scheme plus the read-only credentials, in every command —
-including `atlas-alert-eval`, whose alert source is still fake.
+URL with a scheme plus the read-only credentials, in every command.
 
 Scope notes: this path is read-only and writes one observation batch per
-run through the same persistence as the fake provider; alert evaluation
-still reads the fake Prometheus fixtures, and the API read source
-(`ATLAS_READ_SOURCE`) still serves from the fake provider or PostgreSQL.
+run through the same persistence as the fake provider, and the API read
+source (`ATLAS_READ_SOURCE`) still serves from the fake provider or
+PostgreSQL.
+
+### Point alert evaluation at a real Prometheus
+
+The real Prometheus observability provider (ADR-0027) evaluates live
+alerts from the deployment's existing Prometheus environment. It is
+explicit opt-in: the default local paths and CI stay on the fake
+fixtures, and no Prometheus is ever required for development.
+
+```sh
+ATLAS_ALERT_SOURCE=prometheus \
+ATLAS_PROMETHEUS_URL=http://prometheus.example.invalid:9090 \
+ATLAS_PROMETHEUS_BEARER_TOKEN='…' \
+go run ./cmd/atlas-alert-eval
+```
+
+The bearer token is optional (lab deployments often run unauthenticated),
+and `ATLAS_PROMETHEUS_INSECURE_TLS=true` accepts self-signed lab
+certificates. `ATLAS_ALERT_SOURCE=prometheus` requires
+`ATLAS_PROMETHEUS_URL` to be an absolute URL with a scheme, in every
+command.
+
+Alerts flow through the same pipeline as the fake fixtures —
+normalization, fingerprint dedup, Case creation — and join Clusters by
+the alert's `cluster` label resolved to a registered cluster name or
+FSID. Add `ATLAS_ALERT_EVAL_INTERVAL=30s` (any Go duration) to keep
+evaluating on an interval until shutdown; the default remains one
+evaluation per run for dev/CI determinism.
 
 ## Contributing
 

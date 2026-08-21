@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ProviderMode selects which Ceph read provider adapters construct. It is
@@ -39,6 +40,17 @@ const (
 	AgentModeFake     AgentMode = "fake"
 )
 
+// AlertSource selects where alert evaluation reads alerts from. It is
+// the typed form of ATLAS_ALERT_SOURCE; the empty env value
+// canonicalizes to AlertSourceFake in Load so local development and CI
+// stay fake-first (ADR-0027).
+type AlertSource string
+
+const (
+	AlertSourceFake       AlertSource = "fake"
+	AlertSourcePrometheus AlertSource = "prometheus"
+)
+
 type Config struct {
 	HTTPAddr          string
 	DatabaseURL       string
@@ -48,6 +60,8 @@ type Config struct {
 	FakeAgentScenario string
 	ReadSource        ReadSource
 	AgentMode         AgentMode
+	AlertSource       AlertSource
+	AlertEvalInterval time.Duration
 	OIDCIssuer        string
 	OIDCAudience      string
 	OIDCJWKSURL       string
@@ -57,6 +71,10 @@ type Config struct {
 	CephDashboardPassword    string
 	CephClusterName          string
 	CephDashboardInsecureTLS bool
+
+	PrometheusURL         string
+	PrometheusBearerToken string
+	PrometheusInsecureTLS bool
 }
 
 // Load reads the ATLAS_* environment and returns a validated Config.
@@ -74,6 +92,7 @@ func Load() (Config, error) {
 		FakeAgentScenario: env("ATLAS_FAKE_AGENT_SCENARIO", ""),
 		ReadSource:        ReadSource(env("ATLAS_READ_SOURCE", string(ReadSourceProvider))),
 		AgentMode:         AgentMode(env("ATLAS_AGENT_MODE", string(AgentModeDisabled))),
+		AlertSource:       AlertSource(env("ATLAS_ALERT_SOURCE", string(AlertSourceFake))),
 		OIDCIssuer:        env("ATLAS_OIDC_ISSUER", ""),
 		OIDCAudience:      env("ATLAS_OIDC_AUDIENCE", ""),
 		OIDCJWKSURL:       env("ATLAS_OIDC_JWKS_URL", ""),
@@ -82,12 +101,27 @@ func Load() (Config, error) {
 		CephDashboardUser:     env("ATLAS_CEPH_DASHBOARD_USER", ""),
 		CephDashboardPassword: env("ATLAS_CEPH_DASHBOARD_PASSWORD", ""),
 		CephClusterName:       env("ATLAS_CEPH_CLUSTER_NAME", ""),
+
+		PrometheusURL:         env("ATLAS_PROMETHEUS_URL", ""),
+		PrometheusBearerToken: env("ATLAS_PROMETHEUS_BEARER_TOKEN", ""),
 	}
 
 	var errs []error
 
 	insecureTLS, err := envBool("ATLAS_CEPH_DASHBOARD_INSECURE_TLS", false)
 	cfg.CephDashboardInsecureTLS = insecureTLS
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	prometheusInsecureTLS, err := envBool("ATLAS_PROMETHEUS_INSECURE_TLS", false)
+	cfg.PrometheusInsecureTLS = prometheusInsecureTLS
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	alertEvalInterval, err := envDuration("ATLAS_ALERT_EVAL_INTERVAL", 0)
+	cfg.AlertEvalInterval = alertEvalInterval
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -110,6 +144,12 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("unsupported ATLAS_AGENT_MODE %q (supported: disabled, fake)", cfg.AgentMode))
 	}
 
+	switch cfg.AlertSource {
+	case AlertSourceFake, AlertSourcePrometheus:
+	default:
+		errs = append(errs, fmt.Errorf("unsupported ATLAS_ALERT_SOURCE %q (supported: fake, prometheus)", cfg.AlertSource))
+	}
+
 	set := 0
 	for _, value := range []string{cfg.OIDCIssuer, cfg.OIDCAudience, cfg.OIDCJWKSURL} {
 		if value != "" {
@@ -122,6 +162,10 @@ func Load() (Config, error) {
 
 	if cfg.ProviderMode == ProviderModeCeph {
 		errs = appendCephDashboardChecks(errs, cfg)
+	}
+
+	if cfg.AlertSource == AlertSourcePrometheus {
+		errs = appendPrometheusAlertChecks(errs, cfg)
 	}
 
 	return cfg, errors.Join(errs...)
@@ -141,6 +185,20 @@ func appendCephDashboardChecks(errs []error, cfg Config) []error {
 	}
 	if cfg.CephDashboardPassword == "" {
 		errs = append(errs, errors.New("ATLAS_PROVIDER_MODE=ceph requires ATLAS_CEPH_DASHBOARD_PASSWORD"))
+	}
+	return errs
+}
+
+// appendPrometheusAlertChecks enforces the ATLAS_ALERT_SOURCE=prometheus
+// cross-field contract: claiming a real Prometheus alert source requires
+// an absolute URL, in every binary. The bearer token and insecure-TLS
+// flag are optional because lab Prometheus deployments run without
+// authentication and with self-signed certificates.
+func appendPrometheusAlertChecks(errs []error, cfg Config) []error {
+	if cfg.PrometheusURL == "" {
+		errs = append(errs, errors.New("ATLAS_ALERT_SOURCE=prometheus requires ATLAS_PROMETHEUS_URL"))
+	} else if !absoluteURL(cfg.PrometheusURL) {
+		errs = append(errs, fmt.Errorf("ATLAS_PROMETHEUS_URL %q must be an absolute URL with a scheme (for example http://prometheus.example.invalid:9090)", cfg.PrometheusURL))
 	}
 	return errs
 }
@@ -169,6 +227,20 @@ func envBool(key string, fallback bool) (bool, error) {
 	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback, fmt.Errorf("invalid boolean for %s: %q (want true or false)", key, value)
+	}
+	return parsed, nil
+}
+
+// envDuration reads a Go duration. The fallback keeps one-shot commands
+// one-shot: a zero interval means "evaluate once".
+func envDuration(key string, fallback time.Duration) (time.Duration, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed < 0 {
+		return fallback, fmt.Errorf("invalid duration for %s: %q (want for example 30s or 5m)", key, value)
 	}
 	return parsed, nil
 }

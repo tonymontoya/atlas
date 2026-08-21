@@ -1535,6 +1535,7 @@ components:
           type: string
           enum:
             - fake
+            - ceph
         scenario:
           type: string
         status:
@@ -1574,6 +1575,7 @@ components:
           type: string
           enum:
             - fake
+            - prometheus
         scenario:
           type: string
         status:
