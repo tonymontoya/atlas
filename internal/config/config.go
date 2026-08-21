@@ -75,6 +75,9 @@ type Config struct {
 	PrometheusURL         string
 	PrometheusBearerToken string
 	PrometheusInsecureTLS bool
+
+	EnrollmentCACertPath string
+	EnrollmentCAKeyPath  string
 }
 
 // Load reads the ATLAS_* environment and returns a validated Config.
@@ -104,6 +107,9 @@ func Load() (Config, error) {
 
 		PrometheusURL:         env("ATLAS_PROMETHEUS_URL", ""),
 		PrometheusBearerToken: env("ATLAS_PROMETHEUS_BEARER_TOKEN", ""),
+
+		EnrollmentCACertPath: env("ATLAS_ENROLLMENT_CA_CERT_PATH", ""),
+		EnrollmentCAKeyPath:  env("ATLAS_ENROLLMENT_CA_KEY_PATH", ""),
 	}
 
 	var errs []error
@@ -158,6 +164,18 @@ func Load() (Config, error) {
 	}
 	if set != 0 && set != 3 {
 		errs = append(errs, errors.New("identity verification requires all of ATLAS_OIDC_ISSUER, ATLAS_OIDC_AUDIENCE, and ATLAS_OIDC_JWKS_URL"))
+	}
+
+	// The enrollment CA key is control-plane configuration (ADR-0026):
+	// optional everywhere, but never half-configured.
+	set = 0
+	for _, value := range []string{cfg.EnrollmentCACertPath, cfg.EnrollmentCAKeyPath} {
+		if value != "" {
+			set++
+		}
+	}
+	if set != 0 && set != 2 {
+		errs = append(errs, errors.New("agent enrollment requires both ATLAS_ENROLLMENT_CA_CERT_PATH and ATLAS_ENROLLMENT_CA_KEY_PATH"))
 	}
 
 	if cfg.ProviderMode == ProviderModeCeph {

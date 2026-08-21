@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/tonymontoya/ceph-atlas/internal/agent"
+	"github.com/tonymontoya/ceph-atlas/internal/ca"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
@@ -25,6 +26,7 @@ type App struct {
 	Cases                CaseReader
 	CaseWrites           CaseWriter
 	ClusterRegistrations ClusterRegistrationStore
+	EnrollmentCA         *ca.Authority
 	WorkflowReads        WorkflowReader
 	WorkflowLifecycle    *workflowdispatch.Lifecycle
 	Verifier             *identity.Verifier
@@ -35,6 +37,7 @@ type ClusterRegistrationStore interface {
 	CreateClusterRegistration(ctx context.Context, input store.ClusterRegistrationInput) (fleet.ClusterRegistration, fleet.EnrollmentCredential, error)
 	GetClusterRegistration(ctx context.Context, clusterID int64) (fleet.ClusterRegistration, error)
 	DeregisterCluster(ctx context.Context, input store.DeregisterClusterInput) (fleet.ClusterRegistration, error)
+	EnrollAgent(ctx context.Context, input store.EnrollAgentInput, issue store.IssueCertificate) (store.EnrollmentResult, error)
 }
 
 type InventorySyncRunReader interface {
@@ -85,9 +88,13 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	enrollmentCA, err := enrollmentCAFromConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	switch cfg.ReadSource {
 	case config.ReadSourceProvider:
-		return &App{Config: cfg, CephProvider: fake.New(fake.DefaultFixtureRoot(), cfg.FakeScenario), Verifier: verifier}, nil
+		return &App{Config: cfg, CephProvider: fake.New(fake.DefaultFixtureRoot(), cfg.FakeScenario), Verifier: verifier, EnrollmentCA: enrollmentCA}, nil
 	case config.ReadSourcePostgres:
 		db, err := store.OpenPostgres(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -125,6 +132,7 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			Cases:                postgresStore,
 			CaseWrites:           postgresStore,
 			ClusterRegistrations: postgresStore,
+			EnrollmentCA:         enrollmentCA,
 			WorkflowReads:        postgresStore,
 			WorkflowLifecycle:    workflowdispatch.NewLifecycle(postgresStore, workflowRegistry, dispatch),
 			Verifier:             verifier,
@@ -158,6 +166,28 @@ func verifierFromConfig(cfg config.Config) (*identity.Verifier, error) {
 		}), nil
 	default:
 		return nil, fmt.Errorf("identity verification requires all of ATLAS_OIDC_ISSUER, ATLAS_OIDC_AUDIENCE, and ATLAS_OIDC_JWKS_URL")
+	}
+}
+
+// enrollmentCAFromConfig loads the internal enrollment CA (ADR-0026).
+// config.Load enforces the all-or-none pair rule against the
+// environment; the counting here is the backstop for direct struct
+// construction. Nil means the enrollment endpoint is not configured,
+// which is every ordinary local development path.
+func enrollmentCAFromConfig(cfg config.Config) (*ca.Authority, error) {
+	set := 0
+	for _, value := range []string{cfg.EnrollmentCACertPath, cfg.EnrollmentCAKeyPath} {
+		if value != "" {
+			set++
+		}
+	}
+	switch set {
+	case 0:
+		return nil, nil
+	case 2:
+		return ca.Load(cfg.EnrollmentCACertPath, cfg.EnrollmentCAKeyPath)
+	default:
+		return nil, fmt.Errorf("agent enrollment requires both ATLAS_ENROLLMENT_CA_CERT_PATH and ATLAS_ENROLLMENT_CA_KEY_PATH")
 	}
 }
 

@@ -209,6 +209,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/agent/enroll:
+    post:
+      tags:
+        - Agents
+      operationId: enrollAgent
+      summary: Enroll an Atlas Agent
+      description: >
+        Runs the enrollment handshake (ADR-0026): an Atlas Agent presents a
+        certificate signing request, the one-time Enrollment Credential, and
+        the FSID it self-reported from its first Dashboard read. Atlas burns
+        the credential, binds the FSID to the registered Cluster, and issues
+        a client certificate chained to the Atlas internal CA. The
+        credential in the body is the authentication — this is the one write
+        endpoint that does not take a bearer token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentEnrollmentRequest"
+      responses:
+        "201":
+          description: Enrolled cluster with the issued certificate chain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentEnrollmentResponse"
+        "400":
+          description: Request body failed validation or the CSR is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: The enrollment credential is invalid, expired, or already used.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The FSID is already bound to another registered cluster.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Agent enrollment requires the enrollment CA and the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/clusters/current:
     get:
       tags:
@@ -1218,7 +1270,10 @@ components:
       bearerFormat: JWT
       description: >
         RS256 JWT issued by the configured OIDC issuer, verified against its
-        JWKS. Required on write endpoints; read endpoints stay public.
+        JWKS. Required on Operator write endpoints; read endpoints stay
+        public. The agent enrollment endpoint is the exception — it
+        authenticates with its one-time enrollment credential in the body
+        (ADR-0026).
   responses:
     Error:
       description: Request failed before a valid resource response could be produced.
@@ -1335,6 +1390,63 @@ components:
           $ref: "#/components/schemas/ClusterRegistration"
         enrollmentCredential:
           $ref: "#/components/schemas/EnrollmentCredential"
+    AgentEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - credentialToken
+        - fsid
+        - csr
+      properties:
+        credentialToken:
+          type: string
+          description: The one-time Enrollment Credential from cluster registration.
+        fsid:
+          type: string
+          description: The Agent's self-reported FSID from its first Dashboard read; bound to the Cluster at enrollment.
+        csr:
+          type: string
+          description: PEM-encoded CERTIFICATE REQUEST for the Agent's locally generated key.
+    AgentEnrollmentResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - cluster
+        - certificate
+      properties:
+        cluster:
+          $ref: "#/components/schemas/ClusterRegistration"
+        certificate:
+          $ref: "#/components/schemas/IssuedCertificate"
+    IssuedCertificate:
+      type: object
+      additionalProperties: false
+      required:
+        - pem
+        - serialNumber
+        - fingerprint
+        - commonName
+        - notBefore
+        - notAfter
+      properties:
+        pem:
+          type: string
+          description: "PEM chain for the Agent: its client certificate followed by the Atlas internal CA certificate."
+        serialNumber:
+          type: string
+          description: Hex serial number; maps the certificate to exactly one registered Cluster.
+        fingerprint:
+          type: string
+          description: Hex SHA-256 digest of the certificate DER.
+        commonName:
+          type: string
+          description: Subject common name (atlas-agent).
+        notBefore:
+          type: string
+          format: date-time
+        notAfter:
+          type: string
+          format: date-time
     ClusterIdentity:
       type: object
       additionalProperties: false

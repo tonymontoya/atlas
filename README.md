@@ -66,6 +66,13 @@ What exists today:
   `atlas-alert-eval` at a live `/api/v1/alerts` endpoint (ADR-0027).
   Explicit opt-in; local development and tests stay on fixtures (the
   provider is tested against an in-process fake Prometheus)
+- Cluster Registration with one-time Enrollment Credentials, and Agent
+  Enrollment (ADR-0025/0026): `POST /api/v1/agent/enroll` burns the
+  credential, binds the Cluster's FSID, and issues a client certificate
+  from an internal CA configured through control-plane paths
+  (`ATLAS_ENROLLMENT_CA_CERT_PATH`/`ATLAS_ENROLLMENT_CA_KEY_PATH`).
+  Tests use an in-process test CA; ordinary local development paths
+  configure no CA key material
 - Seeded read-only Case and Case Timeline records
 - A Workflow execution skeleton (ADR-0017 through ADR-0022): the Replace OSD
   Workflow attaches to a Case, pauses at its Approval Gate and human Task,
@@ -77,16 +84,15 @@ What exists today:
 
 What does not exist yet:
 
-- Rook providers, a real alert source (alert detection reads fake Prometheus
-  fixtures, not live alerts), and real-cluster reads (reads arrive through an
+- Rook providers, and real-cluster reads (reads arrive through an
   enrolled Atlas Agent per ADR-0025, not through the control plane)
 - A dispatching Atlas Agent or any mutating operation against Ceph (the fake
   Agent adapter only simulates Job execution)
 - RBAC, policy, and Audit Events (any authenticated operator can approve
   gates and complete tasks; see ADR-0016)
-- Notifications, and Enrollment for registered clusters (Cluster
-  Registration exists — registered via the API with one-time Enrollment
-  Credentials — but the Atlas Agent that enrolls and reports in does not)
+- Notifications, and the Atlas Agent component itself: Enrollment and
+  certificate issuance exist, but the Agent that enrolls and reports in
+  does not yet
 
 ## Roadmap
 
@@ -275,6 +281,33 @@ the alert's `cluster` label resolved to a registered cluster name or
 FSID. Add `ATLAS_ALERT_EVAL_INTERVAL=30s` (any Go duration) to keep
 evaluating on an interval until shutdown; the default remains one
 evaluation per run for dev/CI determinism.
+
+### Enroll an Atlas Agent against a registration
+
+Agent Enrollment (ADR-0026) exchanges a one-time Enrollment Credential
+for an Atlas-issued client certificate. `POST /api/v1/agent/enroll`
+takes the credential, the Agent's self-reported FSID, and a PEM
+certificate signing request; it burns the credential, binds the FSID to
+the registered Cluster (immutable, unique), and returns the certificate
+chain. The credential in the body is the authentication — this is the
+one write endpoint without a bearer token.
+
+Certificates chain to an Atlas-held internal CA. Its key material is
+control-plane configuration and never appears in ordinary local
+development paths; without it the endpoint answers `422`:
+
+```sh
+ATLAS_ENROLLMENT_CA_CERT_PATH=/etc/atlas/ca.crt \
+ATLAS_ENROLLMENT_CA_KEY_PATH=/etc/atlas/ca.key \
+go run ./cmd/atlas-api
+```
+
+Setting one path without the other refuses to start. Issued
+certificates carry `commonName=atlas-agent` and client-auth extended
+key usage, live for one year (v0.7 keeps lifetimes long and renewal
+manual — rotation means re-enrollment), and map to exactly one
+registered Cluster through their recorded serial number. Revocation in
+v0.7 is Atlas rejecting the certificate.
 
 ## Contributing
 

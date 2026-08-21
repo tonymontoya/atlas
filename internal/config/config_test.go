@@ -30,6 +30,8 @@ func clearModeEnv(t *testing.T) {
 		"ATLAS_PROMETHEUS_URL",
 		"ATLAS_PROMETHEUS_BEARER_TOKEN",
 		"ATLAS_PROMETHEUS_INSECURE_TLS",
+		"ATLAS_ENROLLMENT_CA_CERT_PATH",
+		"ATLAS_ENROLLMENT_CA_KEY_PATH",
 	} {
 		t.Setenv(key, "")
 	}
@@ -167,6 +169,35 @@ func TestLoadRejectsPartialOIDCTrio(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q does not name %s", err, want)
 		}
+	}
+}
+
+func TestLoadRejectsPartialEnrollmentCAPair(t *testing.T) {
+	clearModeEnv(t)
+	t.Setenv("ATLAS_ENROLLMENT_CA_CERT_PATH", "/etc/atlas/ca.crt")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	for _, want := range []string{"ATLAS_ENROLLMENT_CA_CERT_PATH", "ATLAS_ENROLLMENT_CA_KEY_PATH"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not name %s", err, want)
+		}
+	}
+}
+
+func TestLoadAcceptsFullEnrollmentCAPair(t *testing.T) {
+	clearModeEnv(t)
+	t.Setenv("ATLAS_ENROLLMENT_CA_CERT_PATH", "/etc/atlas/ca.crt")
+	t.Setenv("ATLAS_ENROLLMENT_CA_KEY_PATH", "/etc/atlas/ca.key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.EnrollmentCACertPath != "/etc/atlas/ca.crt" || cfg.EnrollmentCAKeyPath != "/etc/atlas/ca.key" {
+		t.Fatalf("enrollment CA paths = %q/%q", cfg.EnrollmentCACertPath, cfg.EnrollmentCAKeyPath)
 	}
 }
 

@@ -55,6 +55,14 @@ The current implementation supports:
 - A REST API v1 scaffold: read-only inventory and Case endpoints, plus
   authenticated manual Case write endpoints (create, transition, assign,
   note) verified through OIDC bearer tokens (ADR-0016).
+- Agent Enrollment (ADR-0026): `POST /api/v1/agent/enroll` exchanges a
+  CSR plus the one-time Enrollment Credential for a client certificate
+  from an internal CA, burning the credential and binding the Cluster's
+  FSID in one transaction. The CA is control-plane configuration
+  (`ATLAS_ENROLLMENT_CA_CERT_PATH`/`ATLAS_ENROLLMENT_CA_KEY_PATH`,
+  all-or-none); no default local path configures key material, and tests
+  use an in-process test CA (`internal/ca/catest`). Certificates map to
+  clusters by recorded serial (migration 000013).
 - A fake inventory sync command that writes one observation batch to PostgreSQL.
 - A read-only real Ceph provider over the Ceph Dashboard REST API (ADR-0023):
   `ATLAS_PROVIDER_MODE=ceph` points inventory sync at a live Dashboard with a

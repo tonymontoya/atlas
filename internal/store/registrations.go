@@ -8,10 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"strings"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/tonymontoya/ceph-atlas/internal/actor"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
@@ -176,28 +173,19 @@ func (s *PostgresStore) BindClusterFSID(ctx context.Context, clusterID int64, fs
 		return fleet.ClusterRegistration{}, inputError("fsid must be a UUID")
 	}
 
-	row := s.db.QueryRowContext(ctx, `
-		UPDATE atlas_clusters
-		SET fsid = $2, updated_at = now()
-		WHERE id = $1 AND fsid IS NULL AND deregistered_at IS NULL
-		RETURNING `+clusterRegistrationColumns,
-		clusterID, strings.ToLower(fsid))
-	registration, err := scanClusterRegistration(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		existing, getErr := s.GetClusterRegistration(ctx, clusterID)
-		if getErr != nil {
-			return fleet.ClusterRegistration{}, getErr
-		}
-		if existing.DeregisteredAt != nil {
-			return fleet.ClusterRegistration{}, conflictError("cluster is deregistered and cannot be enrolled")
-		}
-		return fleet.ClusterRegistration{}, conflictError("cluster fsid is already bound")
-	}
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return fleet.ClusterRegistration{}, conflictError("fsid is already registered to another cluster")
-		}
+		return fleet.ClusterRegistration{}, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	registration, err := bindClusterFSIDInTx(ctx, tx, clusterID, fsid)
+	if err != nil {
+		return fleet.ClusterRegistration{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return fleet.ClusterRegistration{}, err
 	}
 	return registration, nil

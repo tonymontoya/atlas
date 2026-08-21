@@ -36,6 +36,9 @@ func (s *Server) routes() []route {
 		{"GET", "/api/v1/clusters/{id}", s.clusterRegistration},
 		{"DELETE", "/api/v1/clusters/{id}", s.requireIdentity(s.deregisterCluster)},
 		{"GET", "/api/v1/clusters/current", s.cluster},
+		// Credential-authenticated, not bearer-authenticated (ADR-0026):
+		// the one-time Enrollment Credential in the body is the auth.
+		{"POST", "/api/v1/agent/enroll", s.enrollAgent},
 		{"GET", "/api/v1/clusters/current/health", s.clusterHealth},
 		{"GET", "/api/v1/clusters/current/osds", s.osds},
 		{"GET", "/api/v1/clusters/current/hosts", s.hosts},
