@@ -81,7 +81,7 @@ func (c *TestCA) WriteFiles(t *testing.T) (certPath, keyPath string) {
 		t.Fatalf("encode test CA key: %v", err)
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
-	if err := os.WriteFile(certPath, c.Authority.CertificatePEM(), 0o600); err != nil {
+	if err := os.WriteFile(certPath, c.CertificatePEM(), 0o600); err != nil {
 		t.Fatalf("write test CA certificate: %v", err)
 	}
 	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
