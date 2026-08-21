@@ -5,6 +5,7 @@
 package catest
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -21,9 +22,18 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/ca"
 )
 
+// TestCA is a fresh authority plus the key material that produced it.
+// The key stays test-side: the production ca.Authority never exports
+// its signer.
+type TestCA struct {
+	*ca.Authority
+	Key crypto.Signer
+}
+
 // New generates a fresh ECDSA P-256 certificate authority. Every test
-// gets its own; material never leaves the process.
-func New(t *testing.T) *ca.Authority {
+// gets its own; material never leaves the process except through
+// WriteFiles into t.TempDir.
+func New(t *testing.T) *TestCA {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -54,12 +64,36 @@ func New(t *testing.T) *ca.Authority {
 	if err != nil {
 		t.Fatalf("build test authority: %v", err)
 	}
-	return authority
+	return &TestCA{Authority: authority, Key: key}
 }
 
-// NewCSR generates an Ed25519 key pair and returns its PEM certificate
-// signing request, standing in for the Agent's locally generated key.
-func NewCSR(t *testing.T) []byte {
+// WriteFiles persists the authority's certificate and key as PEM files
+// under t.TempDir, returning their paths — the exact shape of the
+// ATLAS_ENROLLMENT_CA_CERT_PATH / ATLAS_ENROLLMENT_CA_KEY_PATH
+// control-plane configuration.
+func (c *TestCA) WriteFiles(t *testing.T) (certPath, keyPath string) {
+	t.Helper()
+	certPath = filepath.Join(t.TempDir(), "ca.crt")
+	keyPath = filepath.Join(t.TempDir(), "ca.key")
+
+	keyDER, err := x509.MarshalPKCS8PrivateKey(c.Key)
+	if err != nil {
+		t.Fatalf("encode test CA key: %v", err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	if err := os.WriteFile(certPath, c.Authority.CertificatePEM(), 0o600); err != nil {
+		t.Fatalf("write test CA certificate: %v", err)
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatalf("write test CA key: %v", err)
+	}
+	return certPath, keyPath
+}
+
+// NewCSRKeyPair generates an Ed25519 key pair and returns its PEM
+// certificate signing request plus the private key, standing in for the
+// Agent's locally generated key.
+func NewCSRKeyPair(t *testing.T) (csrPEM []byte, key crypto.Signer) {
 	t.Helper()
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -72,30 +106,14 @@ func NewCSR(t *testing.T) []byte {
 	if err != nil {
 		t.Fatalf("create test csr: %v", err)
 	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER}), privateKey
 }
 
-// WriteFiles persists the authority's certificate and key as PEM files
-// under t.TempDir, returning their paths — the exact shape of the
-// ATLAS_ENROLLMENT_CA_CERT_PATH / ATLAS_ENROLLMENT_CA_KEY_PATH
-// control-plane configuration.
-func WriteFiles(t *testing.T, authority *ca.Authority) (certPath, keyPath string) {
+// NewCSR generates a fresh CSR when the caller does not need the key.
+func NewCSR(t *testing.T) []byte {
 	t.Helper()
-	certPath = filepath.Join(t.TempDir(), "ca.crt")
-	keyPath = filepath.Join(t.TempDir(), "ca.key")
-
-	caCertificate := authority.CertificatePEM()
-	keyPEM, err := authority.KeyPEM()
-	if err != nil {
-		t.Fatalf("encode test CA key: %v", err)
-	}
-	if err := os.WriteFile(certPath, caCertificate, 0o600); err != nil {
-		t.Fatalf("write test CA certificate: %v", err)
-	}
-	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
-		t.Fatalf("write test CA key: %v", err)
-	}
-	return certPath, keyPath
+	csrPEM, _ := NewCSRKeyPair(t)
+	return csrPEM
 }
 
 // ParseChain splits a PEM chain into its certificates (leaf first).

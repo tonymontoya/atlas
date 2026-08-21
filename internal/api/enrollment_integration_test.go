@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/app"
-	"github.com/tonymontoya/ceph-atlas/internal/ca"
 	"github.com/tonymontoya/ceph-atlas/internal/ca/catest"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/identity/devissuer/devissuertest"
@@ -20,7 +19,7 @@ import (
 
 type enrollmentHarness struct {
 	writeHarness
-	authority *ca.Authority
+	authority *catest.TestCA
 }
 
 // newEnrollmentHarness builds the PostgreSQL write harness plus an
@@ -40,7 +39,7 @@ func newEnrollmentHarness(t *testing.T) *enrollmentHarness {
 	t.Cleanup(func() { cleanupEnrollmentRows(t, db) })
 
 	authority := catest.New(t)
-	certPath, keyPath := catest.WriteFiles(t, authority)
+	certPath, keyPath := authority.WriteFiles(t)
 
 	application, err := app.NewFromConfig(ctx, config.Config{
 		DatabaseURL:          databaseURL,

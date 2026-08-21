@@ -8,6 +8,7 @@ package ca
 
 import (
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -34,8 +35,9 @@ const certificateTTL = 365 * 24 * time.Hour
 // its recorded serial number, not through subject claims.
 const certificateCommonName = "atlas-agent"
 
-// minimumRSABits rejects legacy RSA CSRs below today's baseline.
-const minimumRSABits = 2048
+// minimumPublicKeyBits rejects legacy key material below today's
+// baseline, whatever family the CSR uses.
+const minimumPublicKeyBits = 2048
 
 // IssuedCertificate is the outcome of signing one Agent CSR: the PEM
 // chain handed to the Agent (leaf first, CA last) plus the identity
@@ -132,16 +134,6 @@ func (a *Authority) CertificatePEM() []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.certificate.Raw})
 }
 
-// KeyPEM returns the signing key as a PKCS8 PEM, for control-plane
-// tooling that provisions the CA files.
-func (a *Authority) KeyPEM() ([]byte, error) {
-	der, err := x509.MarshalPKCS8PrivateKey(a.key)
-	if err != nil {
-		return nil, err
-	}
-	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), nil
-}
-
 // Issue signs one Certificate Signing Request into an Atlas Agent
 // client certificate and returns it with the CA appended as a chain.
 func (a *Authority) Issue(csrPEM []byte) (IssuedCertificate, error) {
@@ -156,8 +148,11 @@ func (a *Authority) Issue(csrPEM []byte) (IssuedCertificate, error) {
 	if err := csr.CheckSignature(); err != nil {
 		return IssuedCertificate{}, apperr.Error{Class: apperr.InvalidRequest, Message: fmt.Sprintf("csr signature check failed: %v", err)}
 	}
-	if key, ok := csr.PublicKey.(*rsa.PublicKey); ok && key.N.BitLen() < minimumRSABits {
-		return IssuedCertificate{}, apperr.Error{Class: apperr.InvalidRequest, Message: fmt.Sprintf("csr RSA key is %d bits, want at least %d", key.N.BitLen(), minimumRSABits)}
+	if key, ok := csr.PublicKey.(*rsa.PublicKey); ok && key.N.BitLen() < minimumPublicKeyBits {
+		return IssuedCertificate{}, apperr.Error{Class: apperr.InvalidRequest, Message: fmt.Sprintf("csr RSA key is %d bits, want at least %d", key.N.BitLen(), minimumPublicKeyBits)}
+	}
+	if key, ok := csr.PublicKey.(*ecdsa.PublicKey); ok && key.Curve.Params().BitSize < 224 {
+		return IssuedCertificate{}, apperr.Error{Class: apperr.InvalidRequest, Message: fmt.Sprintf("csr ECDSA curve is %d bits, want at least 224", key.Curve.Params().BitSize)}
 	}
 
 	now := time.Now().UTC()

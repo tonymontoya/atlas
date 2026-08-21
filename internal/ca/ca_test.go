@@ -1,6 +1,7 @@
 package ca_test
 
 import (
+	"crypto/ed25519"
 	"crypto/x509"
 	"errors"
 	"path/filepath"
@@ -67,6 +68,27 @@ func TestIssueProducesClientCertificateChainedToCA(t *testing.T) {
 	}
 }
 
+// TestIssueBindsTheCSRsPublicKey proves the proof-of-possession
+// property ADR-0026 exists for: the issued certificate carries exactly
+// the public key from the CSR.
+func TestIssueBindsTheCSRsPublicKey(t *testing.T) {
+	authority := catest.New(t)
+	csr, key := catest.NewCSRKeyPair(t)
+
+	issued, err := authority.Issue(csr)
+	if err != nil {
+		t.Fatalf("Issue returned error: %v", err)
+	}
+	leaf := catest.ParseChain(t, issued.PEMChain)[0]
+	leafKey, ok := leaf.PublicKey.(ed25519.PublicKey)
+	if !ok {
+		t.Fatalf("leaf public key type = %T, want ed25519", leaf.PublicKey)
+	}
+	if !leafKey.Equal(key.Public()) {
+		t.Fatal("issued certificate does not carry the CSR public key")
+	}
+}
+
 func TestIssueMintsFreshIdentityPerCertificate(t *testing.T) {
 	authority := catest.New(t)
 	csr := catest.NewCSR(t)
@@ -111,7 +133,7 @@ func TestIssueRejectsTamperedCSR(t *testing.T) {
 
 func TestLoadReadsPEMFilesAndIssues(t *testing.T) {
 	authority := catest.New(t)
-	certPath, keyPath := catest.WriteFiles(t, authority)
+	certPath, keyPath := authority.WriteFiles(t)
 
 	loaded, err := ca.Load(certPath, keyPath)
 	if err != nil {
@@ -130,13 +152,13 @@ func TestLoadReadsPEMFilesAndIssues(t *testing.T) {
 
 func TestLoadRejectsMissingOrMismatchedFiles(t *testing.T) {
 	authority := catest.New(t)
-	certPath, keyPath := catest.WriteFiles(t, authority)
+	certPath, keyPath := authority.WriteFiles(t)
 
 	if _, err := ca.Load(filepath.Join(filepath.Dir(certPath), "absent.crt"), keyPath); err == nil {
 		t.Fatal("expected error for missing certificate file")
 	}
 	other := catest.New(t)
-	otherCertPath, _ := catest.WriteFiles(t, other)
+	otherCertPath, _ := other.WriteFiles(t)
 	if _, err := ca.Load(otherCertPath, keyPath); err == nil {
 		t.Fatal("expected error for key that does not match the certificate")
 	}

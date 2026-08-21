@@ -17,7 +17,7 @@ const enrollTestFSID = "00000000-0000-4000-8000-000000000501"
 // testIssuer records whether the CA was consulted and signs real
 // certificates from an in-process test CA (ADR-0026: tests never touch
 // real key material).
-func testIssuer(t *testing.T, authority *ca.Authority) IssueCertificate {
+func testIssuer(t *testing.T, authority *catest.TestCA) IssueCertificate {
 	t.Helper()
 	return func() (ca.IssuedCertificate, error) {
 		return authority.Issue(catest.NewCSR(t))
