@@ -162,37 +162,20 @@ func Load() (Config, error) {
 		errs = append(errs, fmt.Errorf("unsupported ATLAS_ALERT_SOURCE %q (supported: fake, prometheus)", cfg.AlertSource))
 	}
 
-	set := 0
-	for _, value := range []string{cfg.OIDCIssuer, cfg.OIDCAudience, cfg.OIDCJWKSURL} {
-		if value != "" {
-			set++
-		}
-	}
+	set := countSet(cfg.OIDCIssuer, cfg.OIDCAudience, cfg.OIDCJWKSURL)
 	if set != 0 && set != 3 {
 		errs = append(errs, errors.New("identity verification requires all of ATLAS_OIDC_ISSUER, ATLAS_OIDC_AUDIENCE, and ATLAS_OIDC_JWKS_URL"))
 	}
 
 	// The enrollment CA key is control-plane configuration (ADR-0026):
 	// optional everywhere, but never half-configured.
-	set = 0
-	for _, value := range []string{cfg.EnrollmentCACertPath, cfg.EnrollmentCAKeyPath} {
-		if value != "" {
-			set++
-		}
-	}
-	if set != 0 && set != 2 {
+	if countSet(cfg.EnrollmentCACertPath, cfg.EnrollmentCAKeyPath) == 1 {
 		errs = append(errs, errors.New("agent enrollment requires both ATLAS_ENROLLMENT_CA_CERT_PATH and ATLAS_ENROLLMENT_CA_KEY_PATH"))
 	}
 
 	// The API serving certificate is control-plane configuration too:
 	// TLS serving is optional, but never half-configured.
-	set = 0
-	for _, value := range []string{cfg.APITLSCertPath, cfg.APITLSKeyPath} {
-		if value != "" {
-			set++
-		}
-	}
-	if set != 0 && set != 2 {
+	if countSet(cfg.APITLSCertPath, cfg.APITLSKeyPath) == 1 {
 		errs = append(errs, errors.New("TLS serving requires both ATLAS_API_TLS_CERT_PATH and ATLAS_API_TLS_KEY_PATH"))
 	}
 
@@ -245,6 +228,18 @@ func appendPrometheusAlertChecks(errs []error, cfg Config) []error {
 func absoluteURL(raw string) bool {
 	parsed, err := url.Parse(strings.TrimRight(raw, "/"))
 	return err == nil && parsed.Scheme != "" && parsed.Host != ""
+}
+
+// countSet counts how many of the values are set; all-or-none
+// configuration groups fail on any partial count.
+func countSet(values ...string) int {
+	set := 0
+	for _, value := range values {
+		if value != "" {
+			set++
+		}
+	}
+	return set
 }
 
 func env(key, fallback string) string {

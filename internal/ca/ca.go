@@ -134,6 +134,13 @@ func (a *Authority) CertificatePEM() []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.certificate.Raw})
 }
 
+// SerialNumberHex renders a certificate serial number the way Issue
+// records it, so lookups against recorded serials stay consistent with
+// issuance.
+func SerialNumberHex(certificate *x509.Certificate) string {
+	return certificate.SerialNumber.Text(16)
+}
+
 // Issue signs one Certificate Signing Request into an Atlas Agent
 // client certificate and returns it with the CA appended as a chain.
 func (a *Authority) Issue(csrPEM []byte) (IssuedCertificate, error) {

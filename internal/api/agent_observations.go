@@ -1,11 +1,11 @@
 package api
 
 import (
-	"crypto/x509"
 	"net/http"
 	"time"
 
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
+	"github.com/tonymontoya/ceph-atlas/internal/ca"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/inventorysync"
@@ -58,7 +58,7 @@ func (s *Server) pushAgentObservations(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	resolved, err := s.app.AgentObservations.ResolveAgentCluster(r.Context(), serialNumberHex(r.TLS.PeerCertificates[0]))
+	resolved, err := s.app.AgentObservations.ResolveAgentCluster(r.Context(), ca.SerialNumberHex(r.TLS.PeerCertificates[0]))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -82,6 +82,12 @@ func (s *Server) pushAgentObservations(w http.ResponseWriter, r *http.Request) {
 	}
 	if batch.Cluster.CephVersion == "" {
 		writeError(w, invalidRequest("cluster ceph version is required"))
+		return
+	}
+	switch batch.Cluster.Type {
+	case fleet.ClusterTypeBareMetal, fleet.ClusterTypeRook:
+	default:
+		writeError(w, invalidRequest("cluster type must be bare-metal or rook"))
 		return
 	}
 	if batch.Cluster.FSID != resolved.FSID {
@@ -110,10 +116,4 @@ func (s *Server) pushAgentObservations(w http.ResponseWriter, r *http.Request) {
 		ClusterID:  result.ClusterID,
 		SnapshotID: result.SnapshotID,
 	})
-}
-
-// serialNumberHex renders a certificate serial the way enrollment
-// records it (ca.Authority.Issue): lowercase hex.
-func serialNumberHex(certificate *x509.Certificate) string {
-	return certificate.SerialNumber.Text(16)
 }

@@ -338,6 +338,14 @@ func TestAgentObservationsValidateBatchFields(t *testing.T) {
 			cluster := batch["cluster"].(map[string]any)
 			delete(cluster, "cephVersion")
 		}},
+		{name: "missing cluster type", mutate: func(batch map[string]any) {
+			cluster := batch["cluster"].(map[string]any)
+			delete(cluster, "type")
+		}},
+		{name: "unknown cluster type", mutate: func(batch map[string]any) {
+			cluster := batch["cluster"].(map[string]any)
+			cluster["type"] = "vmware"
+		}},
 		{name: "invalid json", mutate: func(batch map[string]any) { batch["osds"] = "not-an-array" }},
 	}
 	for _, tc := range cases {
