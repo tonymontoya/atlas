@@ -13,7 +13,7 @@ func TestPostgresStoreListsAndGetsSeedCases(t *testing.T) {
 	ctx := context.Background()
 
 	store := NewPostgres(db)
-	listed, err := store.ListCases(ctx, 50)
+	listed, err := store.ListCases(ctx, 50, "")
 	if err != nil {
 		t.Fatalf("list cases: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestPostgresStoreListsSeedCaseTimeline(t *testing.T) {
 	ctx := context.Background()
 
 	store := NewPostgres(db)
-	listed, err := store.ListCases(ctx, 50)
+	listed, err := store.ListCases(ctx, 50, "")
 	if err != nil {
 		t.Fatalf("list cases: %v", err)
 	}

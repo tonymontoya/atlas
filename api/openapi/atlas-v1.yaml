@@ -1,15 +1,18 @@
 openapi: 3.1.0
 info:
   title: Atlas API
-  version: 0.5.0
+  version: 0.7.0
   description: >
-    Atlas REST API contract for the fake-provider scaffold. Covers local
-    health, current-cluster inventory reads (identity, health, OSDs, Hosts,
-    Storage Devices, Ceph Daemons, Pools), explicit inventory sync run
-    history, read-only case records, and the authenticated operator identity
-    probe. Write endpoints carry a bearer-token security scheme; existing
-    read endpoints remain public. 0.5.0 adds attaching Workflow Instances to
-    Cases.
+    Atlas REST API contract. Covers local health, the cluster index and
+    cluster-scoped inventory reads (health, OSDs, Hosts, Storage
+    Devices, Ceph Daemons, Pools), cluster registration and Agent
+    enrollment, Agent observation pushes, explicit inventory sync run
+    history, case records with cluster filtering, and the authenticated
+    operator identity probe. Write endpoints carry a bearer-token
+    security scheme; existing read endpoints remain public. 0.7.0 is a
+    documented 0.x breaking change: it adds the cluster index and
+    per-cluster reads, and removes the single-cluster
+    /api/v1/clusters/current/* family.
 servers:
   - url: http://127.0.0.1:8080
     description: Local development
@@ -71,6 +74,48 @@ paths:
                       class: Unauthorized
                       message: missing bearer token
   /api/v1/clusters:
+    get:
+      tags:
+        - Clusters
+      operationId: listClusters
+      summary: List clusters
+      description: >
+        The cluster index: every active registered cluster with its
+        latest observed health and Agent last-seen time. Searchable by
+        name or FSID, paginated.
+      parameters:
+        - name: q
+          in: query
+          description: Case-insensitive substring match against cluster name or FSID.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Page size, clamped to 1-100; defaults to 50.
+          schema:
+            type: integer
+            minimum: 1
+        - name: offset
+          in: query
+          description: Page offset; defaults to 0.
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: One page of the cluster index plus the total the query matches.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterIndex"
+        "400":
+          description: limit or offset is not a non-negative integer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/Error"
     post:
       tags:
         - Clusters
@@ -318,206 +363,152 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/clusters/current:
+  /api/v1/clusters/{fsid}/health:
     get:
       tags:
         - Clusters
-      operationId: getCurrentCluster
-      summary: Get the current cluster identity
+      operationId: getClusterHealth
+      summary: Get a cluster's latest observed health
+      parameters:
+        - $ref: "#/components/parameters/ClusterFSID"
       responses:
         "200":
-          description: Current cluster identity.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ClusterIdentity"
-              examples:
-                reefBareMetal:
-                  value:
-                    fsid: 00000000-0000-4000-8000-000000000101
-                    name: reef-baremetal-healthy
-                    cephVersion: 18.2.x
-                    type: bare-metal
-        default:
-          $ref: "#/components/responses/Error"
-  /api/v1/clusters/current/health:
-    get:
-      tags:
-        - Clusters
-      operationId: getCurrentClusterHealth
-      summary: Get the current cluster health
-      responses:
-        "200":
-          description: Current cluster health summary.
+          description: Health from the cluster's latest snapshot.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClusterHealth"
-              examples:
-                healthWarn:
-                  value:
-                    status: HEALTH_WARN
-                    summary: 1 osd down
-                    checks:
-                      - name: OSD_DOWN
-                        severity: HEALTH_WARN
-                        summary: 1 osd down
+        "404":
+          description: Unknown cluster FSID, or the cluster has no health observation yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
-  /api/v1/clusters/current/osds:
+  /api/v1/clusters/{fsid}/osds:
     get:
       tags:
         - Clusters
-      operationId: listCurrentClusterOSDs
-      summary: List OSD inventory for the current cluster
+      operationId: getClusterOSDs
+      summary: List a cluster's current OSDs
+      parameters:
+        - $ref: "#/components/parameters/ClusterFSID"
       responses:
         "200":
-          description: Current cluster OSD inventory.
+          description: OSDs from the cluster's latest snapshot.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/OSD"
-              examples:
-                osds:
-                  value:
-                    - id: 0
-                      host: host-a.example.invalid
-                      up: true
-                      in: true
-                      device: nvme-serial-a
-                    - id: 1
-                      host: host-b.example.invalid
-                      up: false
-                      in: true
-                      device: nvme-serial-b
+        "404":
+          description: Unknown cluster FSID, or the cluster has no OSD inventory yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
-  /api/v1/clusters/current/hosts:
+  /api/v1/clusters/{fsid}/hosts:
     get:
       tags:
         - Clusters
-      operationId: listCurrentClusterHosts
-      summary: List Host inventory for the current cluster
+      operationId: getClusterHosts
+      summary: List a cluster's current hosts
+      parameters:
+        - $ref: "#/components/parameters/ClusterFSID"
       responses:
         "200":
-          description: Current cluster Host inventory.
+          description: Hosts from the cluster's latest snapshot.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/Host"
-              examples:
-                hosts:
-                  value:
-                    - name: host-a.example.invalid
-                      address: 192.0.2.11
-                    - name: host-b.example.invalid
-                      address: 192.0.2.12
+        "404":
+          description: Unknown cluster FSID, or the cluster has no Host inventory yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
-  /api/v1/clusters/current/storage-devices:
+  /api/v1/clusters/{fsid}/storage-devices:
     get:
       tags:
         - Clusters
-      operationId: listCurrentClusterStorageDevices
-      summary: List Storage Device inventory for the current cluster
-      description: >
-        Flat listing across all Hosts. Each Storage Device names its Host and,
-        where one exists, the OSD identity it currently backs. The OSD link is
-        point-in-time; a Storage Device may back different OSD identities over
-        time.
+      operationId: getClusterStorageDevices
+      summary: List a cluster's current Storage Devices
+      parameters:
+        - $ref: "#/components/parameters/ClusterFSID"
       responses:
         "200":
-          description: Current cluster Storage Device inventory.
+          description: Storage Devices from the cluster's latest snapshot, every Host's devices in one list.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/StorageDevice"
-              examples:
-                devices:
-                  value:
-                    - host: host-a.example.invalid
-                      serial: nvme-serial-a
-                      type: nvme
-                      path: /dev/nvme0n1
-                      health: ok
-                      osdId: 0
-                    - host: host-b.example.invalid
-                      serial: nvme-serial-b
-                      type: nvme
-                      path: /dev/nvme0n1
-                      health: error
-                      osdId: 1
-                    - host: host-c.example.invalid
-                      serial: spare-serial-c
-                      type: ssd
-                      path: /dev/sdb
-                      health: ok
+        "404":
+          description: Unknown cluster FSID, or the cluster has no Storage Device inventory yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
-  /api/v1/clusters/current/daemons:
+  /api/v1/clusters/{fsid}/daemons:
     get:
       tags:
         - Clusters
-      operationId: listCurrentClusterDaemons
-      summary: List Ceph Daemon inventory for the current cluster
+      operationId: getClusterDaemons
+      summary: List a cluster's current Ceph Daemons
+      parameters:
+        - $ref: "#/components/parameters/ClusterFSID"
       responses:
         "200":
-          description: Current cluster Ceph Daemon inventory.
+          description: Ceph Daemons from the cluster's latest snapshot.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/Daemon"
-              examples:
-                daemons:
-                  value:
-                    - type: mon
-                      name: mon.a
-                      host: host-a.example.invalid
-                      status: running
-                      version: 18.2.x
-                    - type: osd
-                      name: osd.1
-                      host: host-b.example.invalid
-                      status: stopped
-                      version: 18.2.x
+        "404":
+          description: Unknown cluster FSID, or the cluster has no Ceph Daemon inventory yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
-  /api/v1/clusters/current/pools:
+  /api/v1/clusters/{fsid}/pools:
     get:
       tags:
         - Clusters
-      operationId: listCurrentClusterPools
-      summary: List Pool inventory for the current cluster
+      operationId: getClusterPools
+      summary: List a cluster's current Pools
+      parameters:
+        - $ref: "#/components/parameters/ClusterFSID"
       responses:
         "200":
-          description: Current cluster Pool inventory.
+          description: Pools from the cluster's latest snapshot.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/Pool"
-              examples:
-                pools:
-                  value:
-                    - id: 1
-                      name: device_health_metrics
-                      type: replicated
-                      size: 3
-                      minSize: 2
-                    - id: 2
-                      name: .mgr
-                      type: replicated
-                      size: 3
-                      minSize: 2
+        "404":
+          description: Unknown cluster FSID, or the cluster has no Pool inventory yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
   /api/v1/inventory-sync-runs:
@@ -597,6 +588,12 @@ paths:
         - Cases
       operationId: listCases
       summary: List cases
+      parameters:
+        - name: cluster
+          in: query
+          description: Optional cluster FSID; only that cluster's cases list.
+          schema:
+            type: string
       responses:
         "200":
           description: Recent cases ordered by most recent update.
@@ -1320,6 +1317,15 @@ paths:
         default:
           $ref: "#/components/responses/Error"
 components:
+  parameters:
+    ClusterFSID:
+      name: fsid
+      in: path
+      required: true
+      description: Ceph cluster FSID the read is scoped to.
+      schema:
+        type: string
+        format: uuid
   securitySchemes:
     bearerAuth:
       type: http
@@ -1597,6 +1603,71 @@ components:
       enum:
         - bare-metal
         - rook
+    ClusterSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - clusterType
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Cluster registration id.
+        fsid:
+          type:
+            - string
+            - "null"
+          description: Ceph cluster FSID; null until Enrollment binds it.
+        name:
+          type: string
+          description: Cluster display name, updated from observations.
+        clusterType:
+          $ref: "#/components/schemas/ClusterType"
+        cephVersion:
+          type:
+            - string
+            - "null"
+          description: Reported Ceph version; null until the first observation.
+        healthStatus:
+          type:
+            - string
+            - "null"
+          description: Health status from the cluster's latest snapshot; null before any observation.
+        healthSummary:
+          type:
+            - string
+            - "null"
+          description: Health summary from the cluster's latest snapshot.
+        agentLastSeen:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: When an enrolled Agent last pushed an observation batch; null when no agent batch has arrived.
+    ClusterIndex:
+      type: object
+      additionalProperties: false
+      required:
+        - clusters
+        - total
+        - limit
+        - offset
+      properties:
+        clusters:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClusterSummary"
+        total:
+          type: integer
+          description: Clusters the query matches, across all pages.
+        limit:
+          type: integer
+          description: Page size in effect (clamped 1-100).
+        offset:
+          type: integer
+          description: Page offset in effect.
     ClusterHealth:
       type: object
       additionalProperties: false

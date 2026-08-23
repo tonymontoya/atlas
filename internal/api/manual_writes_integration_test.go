@@ -372,3 +372,51 @@ func createManualCaseForAPI(t *testing.T, harness *writeHarness) int64 {
 	}
 	return created.ID
 }
+
+func TestCasesListFiltersByCluster(t *testing.T) {
+	harness := newWriteHarness(t)
+
+	for _, tc := range []struct {
+		title string
+		fsid  string
+	}{
+		{"api-manual-test filter-a", "00000000-0000-4000-8000-000000000911"},
+		{"api-manual-test filter-b", "00000000-0000-4000-8000-000000000912"},
+	} {
+		response := harness.do(t, http.MethodPost, "/api/v1/cases", map[string]any{
+			"title": tc.title, "summary": "cluster filter test", "severity": "low", "clusterFsid": tc.fsid,
+		}, true)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("create %s status = %d; body=%s", tc.title, response.Code, response.Body.String())
+		}
+	}
+
+	filtered := harness.do(t, http.MethodGet, "/api/v1/cases?cluster=00000000-0000-4000-8000-000000000911", nil, false)
+	if filtered.Code != http.StatusOK {
+		t.Fatalf("filtered list status = %d; body=%s", filtered.Code, filtered.Body.String())
+	}
+	var listed []cases.Case
+	if err := json.NewDecoder(filtered.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode filtered list: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Title != "api-manual-test filter-a" {
+		t.Fatalf("filtered cases = %+v, want only cluster A's case", listed)
+	}
+
+	empty := harness.do(t, http.MethodGet, "/api/v1/cases?cluster=00000000-0000-4000-8000-0000000009ff", nil, false)
+	if empty.Code != http.StatusOK {
+		t.Fatalf("empty filter status = %d", empty.Code)
+	}
+	var none []cases.Case
+	if err := json.NewDecoder(empty.Body).Decode(&none); err != nil {
+		t.Fatalf("decode empty filter: %v", err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("cases for unknown cluster = %+v, want none", none)
+	}
+
+	invalid := harness.do(t, http.MethodGet, "/api/v1/cases?cluster=not-a-uuid", nil, false)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid filter status = %d, want 400; body=%s", invalid.Code, invalid.Body.String())
+	}
+}

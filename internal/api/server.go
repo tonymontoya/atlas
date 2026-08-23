@@ -11,7 +11,6 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
 
 type Server struct {
@@ -32,22 +31,22 @@ func (s *Server) routes() []route {
 	return []route{
 		{"GET", "/healthz", s.healthz},
 		{"GET", "/api/v1/me", s.requireIdentity(s.me)},
+		{"GET", "/api/v1/clusters", s.listClusters},
 		{"POST", "/api/v1/clusters", s.requireIdentity(s.createClusterRegistration)},
 		{"GET", "/api/v1/clusters/{id}", s.clusterRegistration},
 		{"DELETE", "/api/v1/clusters/{id}", s.requireIdentity(s.deregisterCluster)},
-		{"GET", "/api/v1/clusters/current", s.cluster},
+		{"GET", "/api/v1/clusters/{fsid}/health", s.clusterHealth},
+		{"GET", "/api/v1/clusters/{fsid}/osds", s.osds},
+		{"GET", "/api/v1/clusters/{fsid}/hosts", s.hosts},
+		{"GET", "/api/v1/clusters/{fsid}/storage-devices", s.storageDevices},
+		{"GET", "/api/v1/clusters/{fsid}/daemons", s.daemons},
+		{"GET", "/api/v1/clusters/{fsid}/pools", s.pools},
 		// Credential-authenticated, not bearer-authenticated (ADR-0026):
 		// the one-time Enrollment Credential in the body is the auth.
 		{"POST", "/api/v1/agent/enroll", s.enrollAgent},
 		// Certificate-authenticated, not bearer-authenticated (ADR-0026):
 		// the enrolled client certificate over mutual TLS is the auth.
 		{"POST", "/api/v1/agent/observations", s.pushAgentObservations},
-		{"GET", "/api/v1/clusters/current/health", s.clusterHealth},
-		{"GET", "/api/v1/clusters/current/osds", s.osds},
-		{"GET", "/api/v1/clusters/current/hosts", s.hosts},
-		{"GET", "/api/v1/clusters/current/storage-devices", s.storageDevices},
-		{"GET", "/api/v1/clusters/current/daemons", s.daemons},
-		{"GET", "/api/v1/clusters/current/pools", s.pools},
 		{"GET", "/api/v1/inventory-sync-runs", s.inventorySyncRuns},
 		{"GET", "/api/v1/alert-evaluation-runs", s.alertEvaluationRuns},
 		{"GET", "/api/v1/cases", s.cases},
@@ -123,74 +122,6 @@ func (s *Server) requireIdentity(next func(http.ResponseWriter, *http.Request)) 
 	}
 }
 
-func (s *Server) cluster(w http.ResponseWriter, r *http.Request) {
-	identity, err := s.app.CephProvider.ClusterIdentity(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, identity)
-}
-
-func (s *Server) clusterHealth(w http.ResponseWriter, r *http.Request) {
-	health, err := s.app.CephProvider.Health(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, health)
-}
-
-func (s *Server) osds(w http.ResponseWriter, r *http.Request) {
-	osds, err := s.app.CephProvider.OSDs(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, osds)
-}
-
-func (s *Server) hosts(w http.ResponseWriter, r *http.Request) {
-	hosts, err := s.app.CephProvider.Hosts(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, hosts)
-}
-
-func (s *Server) storageDevices(w http.ResponseWriter, r *http.Request) {
-	hosts, err := s.app.CephProvider.Hosts(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	devices, err := providers.AllHostDevices(r.Context(), s.app.CephProvider, hosts)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, devices)
-}
-
-func (s *Server) daemons(w http.ResponseWriter, r *http.Request) {
-	daemons, err := s.app.CephProvider.Daemons(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, daemons)
-}
-
-func (s *Server) pools(w http.ResponseWriter, r *http.Request) {
-	pools, err := s.app.CephProvider.Pools(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, pools)
-}
-
 func (s *Server) inventorySyncRuns(w http.ResponseWriter, r *http.Request) {
 	if s.app.InventorySyncRuns == nil {
 		writeError(w, apperr.Error{
@@ -228,7 +159,9 @@ func (s *Server) cases(w http.ResponseWriter, r *http.Request) {
 		writeError(w, caseReadsUnsupported())
 		return
 	}
-	cases, err := s.app.Cases.ListCases(r.Context(), 50)
+	// The optional cluster filter narrows the list to one cluster's
+	// cases; an empty value lists across clusters.
+	cases, err := s.app.Cases.ListCases(r.Context(), 50, r.URL.Query().Get("cluster"))
 	if err != nil {
 		writeError(w, err)
 		return

@@ -5,25 +5,33 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 )
 
-func (s *PostgresStore) ListCases(ctx context.Context, limit int) ([]cases.Case, error) {
+// ListCases returns the most recently updated cases. An empty
+// clusterFSID lists across clusters; a set one narrows to that
+// cluster's cases.
+func (s *PostgresStore) ListCases(ctx context.Context, limit int, clusterFSID string) ([]cases.Case, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 100 {
 		limit = 100
 	}
+	if clusterFSID != "" && !IsUUIDShape(clusterFSID) {
+		return nil, inputError("cluster filter must be a UUID")
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, title, summary, status, severity, source, cluster_fsid::text, assignee, assignee_display_name, created_at, updated_at, closed_at
 		FROM cases
+		WHERE ($2::text = '' OR cluster_fsid = $2::uuid)
 		ORDER BY updated_at DESC, id DESC
 		LIMIT $1
-	`, limit)
+	`, limit, strings.ToLower(clusterFSID))
 	if err != nil {
 		return nil, err
 	}

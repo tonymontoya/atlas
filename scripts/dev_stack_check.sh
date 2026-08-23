@@ -148,26 +148,32 @@ echo "starting Atlas dev stack"
 compose up --build -d
 
 wait_for_json "api health" "$api_base/healthz" '.status == "ok"'
-wait_for_json "current cluster" "$api_base/api/v1/clusters/current" \
-    '.name == "reef-baremetal-healthy" and .type == "bare-metal"'
-wait_for_json "cluster health" "$api_base/api/v1/clusters/current/health" \
+cluster_fsid="00000000-0000-4000-8000-000000000101"
+wait_for_json "cluster index" "$api_base/api/v1/clusters" \
+    '.total >= 1 and any(.clusters[]; .fsid == "00000000-0000-4000-8000-000000000101" and .name == "reef-baremetal-healthy" and .clusterType == "bare-metal" and .healthStatus == "HEALTH_OK")'
+wait_for_json "cluster index search" "$api_base/api/v1/clusters?q=reef-baremetal-healthy" \
+    '.total == 1 and .clusters[0].fsid == "00000000-0000-4000-8000-000000000101"'
+wait_for_json "cluster health" "$api_base/api/v1/clusters/$cluster_fsid/health" \
     '.status == "HEALTH_OK" and .summary == "cluster is healthy"'
-wait_for_json "current OSDs" "$api_base/api/v1/clusters/current/osds" \
+wait_for_json "current OSDs" "$api_base/api/v1/clusters/$cluster_fsid/osds" \
     'length >= 1 and all(.[]; has("id") and has("host") and has("up") and has("in"))'
-wait_for_json "current hosts" "$api_base/api/v1/clusters/current/hosts" \
+wait_for_json "current hosts" "$api_base/api/v1/clusters/$cluster_fsid/hosts" \
     'length >= 1 and all(.[]; has("name") and (.name != ""))'
-wait_for_json "current storage devices" "$api_base/api/v1/clusters/current/storage-devices" \
+wait_for_json "current storage devices" "$api_base/api/v1/clusters/$cluster_fsid/storage-devices" \
     'length >= 2 and all(.[]; has("host") and has("serial")) and (map(select(has("osdId"))) | length >= 1)'
-wait_for_json "current daemons" "$api_base/api/v1/clusters/current/daemons" \
+wait_for_json "current daemons" "$api_base/api/v1/clusters/$cluster_fsid/daemons" \
     'length >= 3 and any(.[]; .type == "mon" and .status == "running")'
-wait_for_json "current pools" "$api_base/api/v1/clusters/current/pools" \
+wait_for_json "current pools" "$api_base/api/v1/clusters/$cluster_fsid/pools" \
     'length >= 1 and all(.[]; .name != "" and (.type == "replicated" or .type == "erasure"))'
+expect_status "unknown cluster health is 404" "$api_base/api/v1/clusters/00000000-0000-4000-8000-0000000009ff/health" 404
 wait_for_json "inventory sync runs" "$api_base/api/v1/inventory-sync-runs" \
     'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded"'
 wait_for_json "alert evaluation runs" "$api_base/api/v1/alert-evaluation-runs" \
     'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded" and .[0].alertsEvaluated == 1'
 wait_for_json "cases" "$api_base/api/v1/cases" \
     'any(.[]; .title == "CephOSDDown on osd=1" and .status == "detected" and .severity == "high") and any(.[]; .title == "Review weekly capacity trend" and .status == "triaged")'
+wait_for_json "cluster-filtered cases" "$api_base/api/v1/cases?cluster=00000000-0000-4000-8000-000000000102" \
+    'any(.[]; .title == "CephOSDDown on osd=1") and (all(.[]; .clusterFsid == "00000000-0000-4000-8000-000000000102"))'
 detected_case_id="$(curl -fsS "$api_base/api/v1/cases" | jq -r '.[] | select(.title == "CephOSDDown on osd=1") | .id')"
 wait_for_json "detected case timeline" "$api_base/api/v1/cases/${detected_case_id}/timeline" \
     'length == 1 and .[0].type == "case_detected" and .[0].payload.signal == "CEPH_OSD_DOWN" and .[0].payload.clusterFsid == "00000000-0000-4000-8000-000000000102"'

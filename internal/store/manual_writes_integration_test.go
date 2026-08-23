@@ -307,7 +307,7 @@ func TestListCasesSurfacesAssignee(t *testing.T) {
 		t.Fatalf("AssignCase: %v", err)
 	}
 
-	listed, err := store.ListCases(ctx, 100)
+	listed, err := store.ListCases(ctx, 100, "")
 	if err != nil {
 		t.Fatalf("ListCases: %v", err)
 	}

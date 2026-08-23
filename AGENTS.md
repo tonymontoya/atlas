@@ -52,9 +52,18 @@ The current implementation supports:
   sync, API, web UI, and a dev OIDC issuer.
 - Plain SQL migrations.
 - Fake-provider inventory fixtures.
-- A REST API v1 scaffold: read-only inventory and Case endpoints, plus
-  authenticated manual Case write endpoints (create, transition, assign,
-  note) verified through OIDC bearer tokens (ADR-0016).
+- A REST API v1 scaffold: the cluster index (`GET /api/v1/clusters`,
+  searchable and paginated, with health summary and Agent last-seen),
+  cluster-scoped inventory reads (`GET /api/v1/clusters/{fsid}/health`,
+  `/osds`, `/hosts`, `/storage-devices`, `/daemons`, `/pools`),
+  cluster-filtered Case lists (`GET /api/v1/cases?cluster=…`), and
+  read-only Case endpoints; manual Case writes authenticate with OIDC
+  bearer tokens (ADR-0016). The single-cluster
+  `/api/v1/clusters/current/*` family was removed as a documented 0.x
+  breaking change; the web UI rebuild on the new API lands with #40.
+  Provider read source serves the same cluster-scoped shape through
+  `internal/providers/singlecluster` (its one provider is the only
+  addressable cluster; anything else 404s).
 - Agent Enrollment (ADR-0026): `POST /api/v1/agent/enroll` exchanges a
   CSR plus the one-time Enrollment Credential for a client certificate
   from an internal CA, burning the credential and binding the Cluster's

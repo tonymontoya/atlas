@@ -16,7 +16,6 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/casedetection"
 	"github.com/tonymontoya/ceph-atlas/internal/cases"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
-	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/inventorysync"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
@@ -47,19 +46,32 @@ func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
 
 	server := NewServer(application)
 
-	clusterResponse := serve(server, http.MethodGet, "/api/v1/clusters/current")
-	if clusterResponse.Code != http.StatusOK {
-		t.Fatalf("cluster status = %d, want %d; body=%s", clusterResponse.Code, http.StatusOK, clusterResponse.Body.String())
+	indexResponse := serve(server, http.MethodGet, "/api/v1/clusters")
+	if indexResponse.Code != http.StatusOK {
+		t.Fatalf("cluster index status = %d, want %d; body=%s", indexResponse.Code, http.StatusOK, indexResponse.Body.String())
 	}
-	var identity fleet.ClusterIdentity
-	if err := json.NewDecoder(clusterResponse.Body).Decode(&identity); err != nil {
-		t.Fatalf("decode cluster: %v", err)
+	var index struct {
+		Total    int `json:"total"`
+		Clusters []struct {
+			FSID         *string `json:"fsid"`
+			Name         string  `json:"name"`
+			HealthStatus *string `json:"healthStatus"`
+		} `json:"clusters"`
 	}
-	if identity.FSID != "00000000-0000-4000-8000-000000000102" {
-		t.Fatalf("cluster fsid = %q", identity.FSID)
+	if err := json.NewDecoder(indexResponse.Body).Decode(&index); err != nil {
+		t.Fatalf("decode cluster index: %v", err)
+	}
+	if index.Total != 1 || len(index.Clusters) != 1 {
+		t.Fatalf("cluster index = %+v, want exactly the synced cluster", index)
+	}
+	if index.Clusters[0].FSID == nil || *index.Clusters[0].FSID != "00000000-0000-4000-8000-000000000102" {
+		t.Fatalf("index fsid = %v, want the synced cluster", index.Clusters[0].FSID)
+	}
+	if index.Clusters[0].HealthStatus == nil || *index.Clusters[0].HealthStatus != "HEALTH_WARN" {
+		t.Fatalf("index health = %v, want HEALTH_WARN", index.Clusters[0].HealthStatus)
 	}
 
-	healthResponse := serve(server, http.MethodGet, "/api/v1/clusters/current/health")
+	healthResponse := serve(server, http.MethodGet, "/api/v1/clusters/00000000-0000-4000-8000-000000000102/health")
 	if healthResponse.Code != http.StatusOK {
 		t.Fatalf("health status = %d, want %d; body=%s", healthResponse.Code, http.StatusOK, healthResponse.Body.String())
 	}
@@ -71,7 +83,7 @@ func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
 		t.Fatalf("health = %+v, want warning with one check", health)
 	}
 
-	osdsResponse := serve(server, http.MethodGet, "/api/v1/clusters/current/osds")
+	osdsResponse := serve(server, http.MethodGet, "/api/v1/clusters/00000000-0000-4000-8000-000000000102/osds")
 	if osdsResponse.Code != http.StatusOK {
 		t.Fatalf("osds status = %d, want %d; body=%s", osdsResponse.Code, http.StatusOK, osdsResponse.Body.String())
 	}
@@ -81,6 +93,91 @@ func TestPostgresReadSourceUsesPersistedInventory(t *testing.T) {
 	}
 	if len(osds) != 2 || osds[1].Up {
 		t.Fatalf("osds = %+v, want two OSDs with second down", osds)
+	}
+}
+
+func TestPostgresReadSourceServesMultipleClustersWithoutBleeding(t *testing.T) {
+	ctx := context.Background()
+	db, databaseURL := testdb.Open(t)
+	resetInventoryTables(t, db)
+
+	writer := store.NewPostgres(db)
+	scenarios := []struct {
+		scenario string
+		fsid     string
+	}{
+		{"reef-healthy-baremetal", "00000000-0000-4000-8000-000000000101"},
+		{"reef-osd-down-baremetal", "00000000-0000-4000-8000-000000000102"},
+	}
+	for _, sync := range scenarios {
+		if _, err := inventorysync.RunFakeOnce(ctx, writer, inventorysync.Options{
+			Scenario:   sync.scenario,
+			ObservedAt: time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC),
+		}); err != nil {
+			t.Fatalf("sync %s: %v", sync.scenario, err)
+		}
+	}
+
+	application, err := app.NewFromConfig(ctx, config.Config{
+		DatabaseURL: databaseURL,
+		ReadSource:  "postgres",
+		AgentMode:   config.AgentModeDisabled,
+	})
+	if err != nil {
+		t.Fatalf("new app: %v", err)
+	}
+	t.Cleanup(func() { _ = application.Close() })
+
+	server := NewServer(application)
+
+	indexResponse := serve(server, http.MethodGet, "/api/v1/clusters")
+	if indexResponse.Code != http.StatusOK {
+		t.Fatalf("cluster index status = %d; body=%s", indexResponse.Code, indexResponse.Body.String())
+	}
+	var index struct {
+		Total    int `json:"total"`
+		Clusters []struct {
+			FSID         *string `json:"fsid"`
+			HealthStatus *string `json:"healthStatus"`
+		} `json:"clusters"`
+	}
+	if err := json.NewDecoder(indexResponse.Body).Decode(&index); err != nil {
+		t.Fatalf("decode cluster index: %v", err)
+	}
+	if index.Total != 2 {
+		t.Fatalf("cluster index total = %d, want both synced clusters", index.Total)
+	}
+
+	// Each cluster's OSDs come from its own latest snapshot.
+	healthyOSDs := serve(server, http.MethodGet, "/api/v1/clusters/00000000-0000-4000-8000-000000000101/osds")
+	if healthyOSDs.Code != http.StatusOK {
+		t.Fatalf("healthy osds status = %d", healthyOSDs.Code)
+	}
+	var healthy []inventory.OSD
+	if err := json.NewDecoder(healthyOSDs.Body).Decode(&healthy); err != nil {
+		t.Fatalf("decode healthy osds: %v", err)
+	}
+	for _, osd := range healthy {
+		if !osd.Up {
+			t.Fatalf("healthy cluster lists down OSD %d — cross-cluster bleeding", osd.ID)
+		}
+	}
+
+	downOSDs := serve(server, http.MethodGet, "/api/v1/clusters/00000000-0000-4000-8000-000000000102/osds")
+	if downOSDs.Code != http.StatusOK {
+		t.Fatalf("osd-down osds status = %d", downOSDs.Code)
+	}
+	var down []inventory.OSD
+	if err := json.NewDecoder(downOSDs.Body).Decode(&down); err != nil {
+		t.Fatalf("decode osd-down osds: %v", err)
+	}
+	if len(down) != 2 || down[1].Up {
+		t.Fatalf("osd-down cluster osds = %+v, want two with the second down", down)
+	}
+
+	unknown := serve(server, http.MethodGet, "/api/v1/clusters/00000000-0000-4000-8000-0000000009ff/osds")
+	if unknown.Code != http.StatusNotFound {
+		t.Fatalf("unknown cluster osds status = %d, want 404", unknown.Code)
 	}
 }
 
@@ -101,9 +198,8 @@ func TestPostgresReadSourceReturnsNotFoundForEmptyReadModel(t *testing.T) {
 
 	server := NewServer(application)
 	paths := []string{
-		"/api/v1/clusters/current",
-		"/api/v1/clusters/current/health",
-		"/api/v1/clusters/current/osds",
+		"/api/v1/clusters/00000000-0000-4000-8000-000000000101/health",
+		"/api/v1/clusters/00000000-0000-4000-8000-000000000101/osds",
 	}
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {

@@ -9,8 +9,12 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/app"
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/config"
-	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+)
+
+const (
+	fakeHealthyFSID = "00000000-0000-4000-8000-000000000101"
+	fakeOSDDownFSID = "00000000-0000-4000-8000-000000000102"
 )
 
 func TestHealthz(t *testing.T) {
@@ -25,9 +29,9 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-func TestClusterEndpointUsesFakeProvider(t *testing.T) {
+func TestClusterIndexUsesFakeProvider(t *testing.T) {
 	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters", nil)
 	response := httptest.NewRecorder()
 
 	server.Routes().ServeHTTP(response, request)
@@ -35,115 +39,92 @@ func TestClusterEndpointUsesFakeProvider(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	var identity fleet.ClusterIdentity
-	if err := json.NewDecoder(response.Body).Decode(&identity); err != nil {
+	var index struct {
+		Total    int `json:"total"`
+		Clusters []struct {
+			FSID         *string `json:"fsid"`
+			Name         string  `json:"name"`
+			ClusterType  string  `json:"clusterType"`
+			HealthStatus *string `json:"healthStatus"`
+		} `json:"clusters"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&index); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if identity.Type != fleet.ClusterTypeBareMetal {
-		t.Fatalf("cluster type = %q, want %q", identity.Type, fleet.ClusterTypeBareMetal)
+	if index.Total != 1 || len(index.Clusters) != 1 {
+		t.Fatalf("index = %+v, want exactly the provider's cluster", index)
+	}
+	summary := index.Clusters[0]
+	if summary.FSID == nil || *summary.FSID != fakeHealthyFSID {
+		t.Fatalf("summary fsid = %v, want %s", summary.FSID, fakeHealthyFSID)
+	}
+	if summary.Name != "reef-baremetal-healthy" || summary.ClusterType != "bare-metal" {
+		t.Fatalf("summary = %+v, want the fixture identity", summary)
+	}
+	if summary.HealthStatus == nil || *summary.HealthStatus != "HEALTH_OK" {
+		t.Fatalf("health status = %v, want HEALTH_OK", summary.HealthStatus)
 	}
 }
 
-func TestClusterEndpointDefaultsToFakeProviderThroughConfig(t *testing.T) {
-	application, err := app.NewFromConfig(t.Context(), config.Config{
-		FakeScenario: "reef-healthy-baremetal",
-		ReadSource:   config.ReadSourceProvider,
-		AgentMode:    config.AgentModeDisabled,
-	})
-	if err != nil {
-		t.Fatalf("NewFromConfig returned error: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = application.Close()
-	})
-	server := NewServer(application)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current", nil)
-	response := httptest.NewRecorder()
+func TestClusterScopedReadsUseFakeProvider(t *testing.T) {
+	healthy := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
+	osdDown := NewServer(app.New(config.Config{FakeScenario: "reef-osd-down-baremetal"}))
 
-	server.Routes().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-	}
-	var identity fleet.ClusterIdentity
-	if err := json.NewDecoder(response.Body).Decode(&identity); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if identity.FSID == "" {
-		t.Fatal("expected fake provider cluster identity")
-	}
-}
-
-func TestClusterHealthEndpointUsesFakeProvider(t *testing.T) {
-	server := NewServer(app.New(config.Config{FakeScenario: "reef-osd-down-baremetal"}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/health", nil)
-	response := httptest.NewRecorder()
-
-	server.Routes().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	healthResponse := serve(healthy, http.MethodGet, "/api/v1/clusters/"+fakeHealthyFSID+"/health")
+	if healthResponse.Code != http.StatusOK {
+		t.Fatalf("health status = %d, want %d; body=%s", healthResponse.Code, http.StatusOK, healthResponse.Body.String())
 	}
 	var health inventory.Health
-	if err := json.NewDecoder(response.Body).Decode(&health); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if err := json.NewDecoder(healthResponse.Body).Decode(&health); err != nil {
+		t.Fatalf("decode health: %v", err)
 	}
-	if health.Status != inventory.HealthWarn {
-		t.Fatalf("health status = %q, want %q", health.Status, inventory.HealthWarn)
+	if health.Status != inventory.HealthOK {
+		t.Fatalf("health status = %q, want %q", health.Status, inventory.HealthOK)
 	}
-}
 
-func TestOSDsEndpointUsesFakeProvider(t *testing.T) {
-	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/osds", nil)
-	response := httptest.NewRecorder()
+	warnResponse := serve(osdDown, http.MethodGet, "/api/v1/clusters/"+fakeOSDDownFSID+"/health")
+	if warnResponse.Code != http.StatusOK {
+		t.Fatalf("osd-down health status = %d, want %d", warnResponse.Code, http.StatusOK)
+	}
+	var warn inventory.Health
+	if err := json.NewDecoder(warnResponse.Body).Decode(&warn); err != nil {
+		t.Fatalf("decode osd-down health: %v", err)
+	}
+	if warn.Status != inventory.HealthWarn {
+		t.Fatalf("osd-down health status = %q, want %q", warn.Status, inventory.HealthWarn)
+	}
 
-	server.Routes().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	osdsResponse := serve(healthy, http.MethodGet, "/api/v1/clusters/"+fakeHealthyFSID+"/osds")
+	if osdsResponse.Code != http.StatusOK {
+		t.Fatalf("osds status = %d, want %d", osdsResponse.Code, http.StatusOK)
 	}
 	var osds []inventory.OSD
-	if err := json.NewDecoder(response.Body).Decode(&osds); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if err := json.NewDecoder(osdsResponse.Body).Decode(&osds); err != nil {
+		t.Fatalf("decode osds: %v", err)
 	}
 	if len(osds) == 0 {
 		t.Fatal("expected OSD inventory")
 	}
-}
 
-func TestHostsEndpointUsesFakeProvider(t *testing.T) {
-	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/hosts", nil)
-	response := httptest.NewRecorder()
-
-	server.Routes().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	hostsResponse := serve(healthy, http.MethodGet, "/api/v1/clusters/"+fakeHealthyFSID+"/hosts")
+	if hostsResponse.Code != http.StatusOK {
+		t.Fatalf("hosts status = %d, want %d", hostsResponse.Code, http.StatusOK)
 	}
 	var hosts []inventory.Host
-	if err := json.NewDecoder(response.Body).Decode(&hosts); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if err := json.NewDecoder(hostsResponse.Body).Decode(&hosts); err != nil {
+		t.Fatalf("decode hosts: %v", err)
 	}
 	if len(hosts) == 0 {
 		t.Fatal("expected Host inventory")
 	}
-}
 
-func TestStorageDevicesEndpointListsAllHostsDevices(t *testing.T) {
-	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/storage-devices", nil)
-	response := httptest.NewRecorder()
-
-	server.Routes().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	devicesResponse := serve(healthy, http.MethodGet, "/api/v1/clusters/"+fakeHealthyFSID+"/storage-devices")
+	if devicesResponse.Code != http.StatusOK {
+		t.Fatalf("storage devices status = %d, want %d", devicesResponse.Code, http.StatusOK)
 	}
 	var devices []inventory.StorageDevice
-	if err := json.NewDecoder(response.Body).Decode(&devices); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if err := json.NewDecoder(devicesResponse.Body).Decode(&devices); err != nil {
+		t.Fatalf("decode devices: %v", err)
 	}
 	if len(devices) != 3 {
 		t.Fatalf("Storage Device count = %d, want 3 across all Hosts", len(devices))
@@ -157,24 +138,14 @@ func TestStorageDevicesEndpointListsAllHostsDevices(t *testing.T) {
 	if withoutOSD != 1 {
 		t.Fatalf("Storage Devices without an OSD link = %d, want 1", withoutOSD)
 	}
-}
 
-func TestDaemonsEndpointUsesFakeProvider(t *testing.T) {
-	server := NewServer(app.New(config.Config{FakeScenario: "reef-osd-down-baremetal"}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/daemons", nil)
-	response := httptest.NewRecorder()
-
-	server.Routes().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	daemonsResponse := serve(osdDown, http.MethodGet, "/api/v1/clusters/"+fakeOSDDownFSID+"/daemons")
+	if daemonsResponse.Code != http.StatusOK {
+		t.Fatalf("daemons status = %d, want %d", daemonsResponse.Code, http.StatusOK)
 	}
 	var daemons []inventory.Daemon
-	if err := json.NewDecoder(response.Body).Decode(&daemons); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(daemons) == 0 {
-		t.Fatal("expected Ceph Daemon inventory")
+	if err := json.NewDecoder(daemonsResponse.Body).Decode(&daemons); err != nil {
+		t.Fatalf("decode daemons: %v", err)
 	}
 	stopped := 0
 	for _, daemon := range daemons {
@@ -185,24 +156,42 @@ func TestDaemonsEndpointUsesFakeProvider(t *testing.T) {
 	if stopped != 1 {
 		t.Fatalf("stopped Ceph Daemon count = %d, want 1", stopped)
 	}
-}
 
-func TestPoolsEndpointUsesFakeProvider(t *testing.T) {
-	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/pools", nil)
-	response := httptest.NewRecorder()
-
-	server.Routes().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	poolsResponse := serve(healthy, http.MethodGet, "/api/v1/clusters/"+fakeHealthyFSID+"/pools")
+	if poolsResponse.Code != http.StatusOK {
+		t.Fatalf("pools status = %d, want %d", poolsResponse.Code, http.StatusOK)
 	}
 	var pools []inventory.Pool
-	if err := json.NewDecoder(response.Body).Decode(&pools); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if err := json.NewDecoder(poolsResponse.Body).Decode(&pools); err != nil {
+		t.Fatalf("decode pools: %v", err)
 	}
 	if len(pools) == 0 {
 		t.Fatal("expected Pool inventory")
+	}
+}
+
+func TestClusterScopedReadsRejectUnknownFSID(t *testing.T) {
+	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
+
+	response := serve(server, http.MethodGet, "/api/v1/clusters/00000000-0000-4000-8000-0000000009ff/health")
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusNotFound, response.Body.String())
+	}
+	if class := decodeErrorClass(t, response); class != "NotFound" {
+		t.Fatalf("error class = %q, want NotFound", class)
+	}
+}
+
+func TestClusterIndexRejectsBadPaging(t *testing.T) {
+	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
+
+	response := serve(server, http.MethodGet, "/api/v1/clusters?limit=-3")
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	response = serve(server, http.MethodGet, "/api/v1/clusters?offset=abc")
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusBadRequest, response.Body.String())
 	}
 }
 
@@ -236,7 +225,7 @@ func TestCasesEndpointRequiresPostgresReadSource(t *testing.T) {
 
 func TestProviderErrorsUseStructuredEnvelope(t *testing.T) {
 	server := NewServer(app.New(config.Config{FakeScenario: "missing"}))
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/current/health", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+fakeHealthyFSID+"/health", nil)
 	response := httptest.NewRecorder()
 
 	server.Routes().ServeHTTP(response, request)

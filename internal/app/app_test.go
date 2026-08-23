@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/config"
+	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
 func TestNewFromConfigDefaultsToProviderReadSource(t *testing.T) {
@@ -18,12 +19,12 @@ func TestNewFromConfigDefaultsToProviderReadSource(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = application.Close() })
 
-	identity, err := application.CephProvider.ClusterIdentity(context.Background())
+	index, err := application.ClusterInventory.ListClusterSummaries(context.Background(), store.ListClustersQuery{})
 	if err != nil {
-		t.Fatalf("ClusterIdentity returned error: %v", err)
+		t.Fatalf("ListClusterSummaries returned error: %v", err)
 	}
-	if identity.FSID == "" {
-		t.Fatal("expected fake provider cluster identity")
+	if index.Total != 1 || len(index.Clusters) != 1 || index.Clusters[0].FSID == nil {
+		t.Fatalf("index = %+v, want the fake provider's cluster", index)
 	}
 }
 

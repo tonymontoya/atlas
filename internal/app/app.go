@@ -10,9 +10,10 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/config"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/identity"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory"
 	"github.com/tonymontoya/ceph-atlas/internal/operations"
-	"github.com/tonymontoya/ceph-atlas/internal/providers"
 	"github.com/tonymontoya/ceph-atlas/internal/providers/fake"
+	"github.com/tonymontoya/ceph-atlas/internal/providers/singlecluster"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 	"github.com/tonymontoya/ceph-atlas/internal/workflowdispatch"
 	"github.com/tonymontoya/ceph-atlas/internal/workflows"
@@ -20,7 +21,7 @@ import (
 
 type App struct {
 	Config               config.Config
-	CephProvider         providers.CephReadProvider
+	ClusterInventory     ClusterInventory
 	InventorySyncRuns    InventorySyncRunReader
 	AlertEvaluationRuns  AlertEvaluationRunReader
 	Cases                CaseReader
@@ -32,6 +33,20 @@ type App struct {
 	WorkflowLifecycle    *workflowdispatch.Lifecycle
 	Verifier             *identity.Verifier
 	close                func() error
+}
+
+// ClusterInventory is the cluster-scoped read seam: the index plus the
+// per-entity latest-snapshot reads, addressable by cluster FSID. The
+// postgres arm serves it from the read model; the provider arm serves
+// it through the single-cluster adapter over the configured provider.
+type ClusterInventory interface {
+	ListClusterSummaries(ctx context.Context, query store.ListClustersQuery) (store.ClusterIndex, error)
+	ClusterHealth(ctx context.Context, fsid string) (inventory.Health, error)
+	ClusterOSDs(ctx context.Context, fsid string) ([]inventory.OSD, error)
+	ClusterHosts(ctx context.Context, fsid string) ([]inventory.Host, error)
+	ClusterStorageDevices(ctx context.Context, fsid string) ([]inventory.StorageDevice, error)
+	ClusterDaemons(ctx context.Context, fsid string) ([]inventory.Daemon, error)
+	ClusterPools(ctx context.Context, fsid string) ([]inventory.Pool, error)
 }
 
 type ClusterRegistrationStore interface {
@@ -61,7 +76,7 @@ type AlertEvaluationRunReader interface {
 }
 
 type CaseReader interface {
-	ListCases(ctx context.Context, limit int) ([]cases.Case, error)
+	ListCases(ctx context.Context, limit int, clusterFSID string) ([]cases.Case, error)
 	GetCase(ctx context.Context, id int64) (cases.Case, error)
 	ListCaseTimeline(ctx context.Context, caseID int64) ([]cases.TimelineEvent, error)
 }
@@ -82,8 +97,8 @@ type WorkflowReader interface {
 
 func New(cfg config.Config) *App {
 	return &App{
-		Config:       cfg,
-		CephProvider: fake.New(fake.DefaultFixtureRoot(), cfg.FakeScenario),
+		Config:           cfg,
+		ClusterInventory: singlecluster.New(fake.New(fake.DefaultFixtureRoot(), cfg.FakeScenario)),
 	}
 }
 
@@ -106,7 +121,12 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 	switch cfg.ReadSource {
 	case config.ReadSourceProvider:
-		return &App{Config: cfg, CephProvider: fake.New(fake.DefaultFixtureRoot(), cfg.FakeScenario), Verifier: verifier, EnrollmentCA: enrollmentCA}, nil
+		return &App{
+			Config:           cfg,
+			ClusterInventory: singlecluster.New(fake.New(fake.DefaultFixtureRoot(), cfg.FakeScenario)),
+			Verifier:         verifier,
+			EnrollmentCA:     enrollmentCA,
+		}, nil
 	case config.ReadSourcePostgres:
 		db, err := store.OpenPostgres(ctx, cfg.DatabaseURL)
 		if err != nil {
@@ -138,7 +158,7 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 		}
 		application := &App{
 			Config:               cfg,
-			CephProvider:         postgresStore,
+			ClusterInventory:     postgresStore,
 			InventorySyncRuns:    postgresStore,
 			AlertEvaluationRuns:  postgresStore,
 			Cases:                postgresStore,
