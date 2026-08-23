@@ -78,6 +78,9 @@ type Config struct {
 
 	EnrollmentCACertPath string
 	EnrollmentCAKeyPath  string
+
+	APITLSCertPath string
+	APITLSKeyPath  string
 }
 
 // Load reads the ATLAS_* environment and returns a validated Config.
@@ -110,6 +113,9 @@ func Load() (Config, error) {
 
 		EnrollmentCACertPath: env("ATLAS_ENROLLMENT_CA_CERT_PATH", ""),
 		EnrollmentCAKeyPath:  env("ATLAS_ENROLLMENT_CA_KEY_PATH", ""),
+
+		APITLSCertPath: env("ATLAS_API_TLS_CERT_PATH", ""),
+		APITLSKeyPath:  env("ATLAS_API_TLS_KEY_PATH", ""),
 	}
 
 	var errs []error
@@ -176,6 +182,18 @@ func Load() (Config, error) {
 	}
 	if set != 0 && set != 2 {
 		errs = append(errs, errors.New("agent enrollment requires both ATLAS_ENROLLMENT_CA_CERT_PATH and ATLAS_ENROLLMENT_CA_KEY_PATH"))
+	}
+
+	// The API serving certificate is control-plane configuration too:
+	// TLS serving is optional, but never half-configured.
+	set = 0
+	for _, value := range []string{cfg.APITLSCertPath, cfg.APITLSKeyPath} {
+		if value != "" {
+			set++
+		}
+	}
+	if set != 0 && set != 2 {
+		errs = append(errs, errors.New("TLS serving requires both ATLAS_API_TLS_CERT_PATH and ATLAS_API_TLS_KEY_PATH"))
 	}
 
 	if cfg.ProviderMode == ProviderModeCeph {

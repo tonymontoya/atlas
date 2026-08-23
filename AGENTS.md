@@ -63,6 +63,17 @@ The current implementation supports:
   all-or-none); no default local path configures key material, and tests
   use an in-process test CA (`internal/ca/catest`). Certificates map to
   clusters by recorded serial (migration 000013).
+- Agent observation ingestion (ADR-0025): `POST
+  /api/v1/agent/observations` accepts one typed Observation Batch per
+  collection cycle from an enrolled Agent, authenticated by its client
+  certificate over mutual TLS (opt-in TLS listener via
+  `ATLAS_API_TLS_CERT_PATH`/`ATLAS_API_TLS_KEY_PATH`; the enrollment CA
+  verifies client certificates). Cluster attribution comes from the
+  certificate's recorded serial (`store.ResolveAgentCluster`), never
+  payload claims — an FSID mismatch is a 409. Batches persist through
+  the existing single-transaction save path with provider `agent`
+  (migration 000014 widens both provider CHECKs); revoked,
+  deregistered, or expired certificates push nothing.
 - A fake inventory sync command that writes one observation batch to PostgreSQL.
 - A read-only real Ceph provider over the Ceph Dashboard REST API (ADR-0023):
   `ATLAS_PROVIDER_MODE=ceph` points inventory sync at a live Dashboard with a

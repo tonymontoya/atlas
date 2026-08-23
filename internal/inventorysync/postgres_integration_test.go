@@ -2,6 +2,7 @@ package inventorysync
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -458,5 +459,93 @@ func TestRunOnceRecordsFailedSyncRun(t *testing.T) {
 	}
 	if errorMessage == "" {
 		t.Fatal("expected sync run error message")
+	}
+}
+
+func TestRunPushPersistsAgentObservationToPostgres(t *testing.T) {
+	ctx := context.Background()
+	db, _ := testdb.Open(t)
+
+	const fsid = "00000000-0000-4000-8000-000000000302"
+	cleanupAgentPush := func() {
+		testdb.DeleteSyncRuns(t, db, "provider = 'agent'")
+		testdb.DeleteClusters(t, db, "fsid = $1", fsid)
+	}
+	cleanupAgentPush()
+	t.Cleanup(cleanupAgentPush)
+
+	writer := store.NewPostgres(db)
+	result, err := RunPush(ctx, writer, store.InventoryObservation{
+		Cluster: fleet.ClusterIdentity{
+			FSID:        fsid,
+			Name:        "agent-push-pg-test",
+			CephVersion: "18.2.x",
+			Type:        fleet.ClusterTypeBareMetal,
+		},
+		Health: inventory.Health{
+			Status:  inventory.HealthWarn,
+			Summary: "1 OSD down",
+			Checks:  []inventory.HealthCheck{{Name: "OSD_DOWN", Severity: "warning", Summary: "1 OSD down"}},
+		},
+		ObservedAt: time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC),
+		OSDs:       []inventory.OSD{{ID: 0, Host: "host-a.example.invalid", Up: true, In: true}, {ID: 1, Host: "host-b.example.invalid", Up: false, In: true}},
+		Hosts:      []inventory.Host{{Name: "host-a.example.invalid"}, {Name: "host-b.example.invalid"}},
+		Devices:    []inventory.StorageDevice{{Host: "host-a.example.invalid", Serial: "nvme-agent-a"}, {Host: "host-b.example.invalid", Serial: "nvme-agent-b"}},
+		Daemons:    []inventory.Daemon{{Type: inventory.DaemonMon, Name: "mon.a", Host: "host-a.example.invalid", Status: inventory.DaemonRunning}},
+		Pools:      []inventory.Pool{{ID: 1, Name: ".mgr", Type: "replicated"}},
+	})
+	if err != nil {
+		t.Fatalf("RunPush returned error: %v", err)
+	}
+	if result.ClusterID == 0 || result.SnapshotID == 0 {
+		t.Fatalf("result = %+v, want non-zero ids", result)
+	}
+
+	var snapshotProvider string
+	var runStatus string
+	var runSnapshotID int64
+	var runScenario sql.NullString
+	if err := db.QueryRowContext(ctx, `
+		SELECT snapshots.provider, runs.status, runs.snapshot_id, runs.scenario
+		FROM inventory_snapshots AS snapshots
+		JOIN inventory_sync_runs AS runs ON runs.snapshot_id = snapshots.id
+		WHERE snapshots.cluster_id = $1 AND snapshots.id = $2
+	`, result.ClusterID, result.SnapshotID).Scan(&snapshotProvider, &runStatus, &runSnapshotID, &runScenario); err != nil {
+		t.Fatalf("query snapshot and run: %v", err)
+	}
+	if snapshotProvider != "agent" {
+		t.Fatalf("snapshot provider = %q, want agent", snapshotProvider)
+	}
+	if runStatus != "succeeded" {
+		t.Fatalf("sync run status = %q, want succeeded", runStatus)
+	}
+	if runSnapshotID != result.SnapshotID {
+		t.Fatalf("sync run snapshot = %d, want %d", runSnapshotID, result.SnapshotID)
+	}
+	if runScenario.Valid {
+		t.Fatalf("sync run scenario = %q, want none", runScenario.String)
+	}
+
+	var runProvider string
+	if err := db.QueryRowContext(ctx, `
+		SELECT provider FROM inventory_sync_runs WHERE snapshot_id = $1
+	`, result.SnapshotID).Scan(&runProvider); err != nil {
+		t.Fatalf("query run provider: %v", err)
+	}
+	if runProvider != "agent" {
+		t.Fatalf("run provider = %q, want agent", runProvider)
+	}
+
+	var osdCount int
+	var hasDownOSD bool
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*), bool_or(NOT osd_up)
+		FROM cluster_current_osds
+		WHERE fsid = $1
+	`, fsid).Scan(&osdCount, &hasDownOSD); err != nil {
+		t.Fatalf("query current osds: %v", err)
+	}
+	if osdCount != 2 || !hasDownOSD {
+		t.Fatalf("current OSDs = (%d, down=%t), want (2, true)", osdCount, hasDownOSD)
 	}
 }

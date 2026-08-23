@@ -56,7 +56,7 @@ func newEnrollmentHarness(t *testing.T) *enrollmentHarness {
 	}
 	t.Cleanup(func() { _ = application.Close() })
 	return &enrollmentHarness{
-		writeHarness: writeHarness{server: NewServer(application), token: token},
+		writeHarness: writeHarness{server: NewServer(application), token: token, db: db},
 		authority:    authority,
 	}
 }

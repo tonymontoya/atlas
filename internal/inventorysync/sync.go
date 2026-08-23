@@ -18,6 +18,11 @@ type Writer interface {
 	FailInventorySyncRun(ctx context.Context, failure store.SyncRunFailure) error
 }
 
+// AgentProviderName is the provider recorded on runs and snapshots an
+// enrolled Atlas Agent pushed. RunPush pins it server-side so pushes
+// are never attributed by payload claims (ADR-0025).
+const AgentProviderName = "agent"
+
 type Options struct {
 	// ProviderName is recorded on the sync run and the observation batch
 	// (for example "fake" or "ceph"). RunFakeOnce sets it to "fake".
@@ -35,15 +40,36 @@ func RunOnce(ctx context.Context, writer Writer, provider providers.CephReadProv
 	if opts.ProviderName == "" {
 		return store.SaveInventoryResult{}, errors.New("inventorysync.Options.ProviderName is required")
 	}
-	runID, err := writer.BeginInventorySyncRun(ctx, store.BeginSyncRun{
+	return recordRun(ctx, writer, store.BeginSyncRun{
 		Provider: opts.ProviderName,
 		Scenario: opts.Scenario,
+	}, func(ctx context.Context) (store.SaveInventoryResult, error) {
+		return runOnce(ctx, writer, provider, opts)
 	})
+}
+
+// RunPush persists one agent-pushed Observation Batch (ADR-0025). The
+// batch was already collected by the Agent, so there is no provider to
+// pull from: the run lifecycle wraps the existing single-transaction
+// save path, pinning provider to "agent" and leaving the scenario
+// empty. A save failure still records a failed run; the batch itself
+// stays all-or-nothing.
+func RunPush(ctx context.Context, writer Writer, obs store.InventoryObservation) (store.SaveInventoryResult, error) {
+	obs.Provider = AgentProviderName
+	return recordRun(ctx, writer, store.BeginSyncRun{Provider: AgentProviderName}, func(ctx context.Context) (store.SaveInventoryResult, error) {
+		return writer.SaveInventoryObservation(ctx, obs)
+	})
+}
+
+// recordRun wraps one save in the sync-run lifecycle: begin, save,
+// succeed or fail with the error's class.
+func recordRun(ctx context.Context, writer Writer, run store.BeginSyncRun, save func(context.Context) (store.SaveInventoryResult, error)) (store.SaveInventoryResult, error) {
+	runID, err := writer.BeginInventorySyncRun(ctx, run)
 	if err != nil {
 		return store.SaveInventoryResult{}, err
 	}
 
-	result, err := runOnce(ctx, writer, provider, opts)
+	result, err := save(ctx)
 	if err != nil {
 		failErr := writer.FailInventorySyncRun(ctx, failureFromError(runID, err))
 		if failErr != nil {

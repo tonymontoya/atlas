@@ -19,6 +19,7 @@ tags:
   - name: Inventory
   - name: Cases
   - name: Identity
+  - name: Agents
 paths:
   /healthz:
     get:
@@ -257,6 +258,62 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: Agent enrollment requires the enrollment CA and the postgres read source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/agent/observations:
+    post:
+      tags:
+        - Agents
+      operationId: pushAgentObservations
+      summary: Push an Atlas Agent observation batch
+      description: >
+        Accepts one typed Observation Batch for one collection cycle
+        (ADR-0025): all entity types, one consistent snapshot, the same
+        normalized shape the sync command produces. Authentication is the
+        enrolled client certificate over mutual TLS; Atlas attributes the
+        batch to the Cluster the certificate maps to by its recorded
+        serial number and rejects a batch whose FSID does not match
+        (ADR-0026). The batch is atomic — it fully persists or fails, and
+        Atlas records an inventory sync run with provider "agent". The
+        request deliberately carries no provider or scenario: Atlas
+        records the provider server-side.
+      security:
+        - agentCertificate: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentObservationBatch"
+      responses:
+        "201":
+          description: The batch persisted as one snapshot; cluster attribution came from the certificate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentObservationReceipt"
+        "400":
+          description: Request body failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No verified client certificate was presented, or the certificate is unknown, revoked, expired, or attached to a deregistered cluster.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The batch's cluster FSID does not match the cluster the certificate is enrolled for.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Agent observations require the enrollment CA and the postgres read source.
           content:
             application/json:
               schema:
@@ -1271,9 +1328,18 @@ components:
       description: >
         RS256 JWT issued by the configured OIDC issuer, verified against its
         JWKS. Required on Operator write endpoints; read endpoints stay
-        public. The agent enrollment endpoint is the exception — it
-        authenticates with its one-time enrollment credential in the body
-        (ADR-0026).
+        public. The agent endpoints are the exceptions — enrollment
+        authenticates with its one-time enrollment credential in the body,
+        and observation pushes authenticate with the enrolled client
+        certificate over mutual TLS (ADR-0026).
+    agentCertificate:
+      type: mutualTLS
+      description: >
+        Client certificate chained to the Atlas internal enrollment CA
+        (ADR-0026), presented over mutual TLS on the API's TLS listener.
+        Atlas maps the certificate serial to exactly one registered
+        Cluster; the certificate is the authentication and the cluster
+        attribution, and nothing is accepted from payload claims.
   responses:
     Error:
       description: Request failed before a valid resource response could be produced.
@@ -1447,6 +1513,65 @@ components:
         notAfter:
           type: string
           format: date-time
+    AgentObservationBatch:
+      type: object
+      additionalProperties: false
+      required:
+        - observedAt
+        - cluster
+        - health
+      description: >
+        One typed Observation Batch for one collection cycle (ADR-0025):
+        all entity types in one consistent snapshot, the same normalized
+        shape the sync command produces. The cluster FSID must match the
+        Cluster the presented certificate is enrolled for; Atlas
+        attributes the batch by certificate, never by these claims.
+        Collection failures stay Agent-side; a batch is atomic.
+      properties:
+        observedAt:
+          type: string
+          format: date-time
+          description: When the Agent's collection cycle snapshot was taken.
+        cluster:
+          $ref: "#/components/schemas/ClusterIdentity"
+        health:
+          $ref: "#/components/schemas/ClusterHealth"
+        osds:
+          type: array
+          items:
+            $ref: "#/components/schemas/OSD"
+        hosts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Host"
+        devices:
+          type: array
+          description: Storage Devices across every Host in the batch, each row carrying its Host.
+          items:
+            $ref: "#/components/schemas/StorageDevice"
+        daemons:
+          type: array
+          items:
+            $ref: "#/components/schemas/Daemon"
+        pools:
+          type: array
+          items:
+            $ref: "#/components/schemas/Pool"
+    AgentObservationReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - clusterId
+        - snapshotId
+      properties:
+        clusterId:
+          type: integer
+          format: int64
+          description: The Cluster the certificate mapped to.
+        snapshotId:
+          type: integer
+          format: int64
+          description: The snapshot the batch persisted as.
     ClusterIdentity:
       type: object
       additionalProperties: false
@@ -1648,6 +1773,7 @@ components:
           enum:
             - fake
             - ceph
+            - agent
         scenario:
           type: string
         status:

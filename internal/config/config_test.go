@@ -201,6 +201,36 @@ func TestLoadAcceptsFullEnrollmentCAPair(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsPartialAPITLSPair(t *testing.T) {
+	clearModeEnv(t)
+	t.Setenv("ATLAS_API_TLS_CERT_PATH", "/etc/atlas/api.crt")
+
+	_, err := Load()
+	if err != nil {
+		for _, want := range []string{"ATLAS_API_TLS_CERT_PATH", "ATLAS_API_TLS_KEY_PATH"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("error %q does not name %s", err, want)
+			}
+		}
+		return
+	}
+	t.Fatal("expected error")
+}
+
+func TestLoadAcceptsFullAPITLSPair(t *testing.T) {
+	clearModeEnv(t)
+	t.Setenv("ATLAS_API_TLS_CERT_PATH", "/etc/atlas/api.crt")
+	t.Setenv("ATLAS_API_TLS_KEY_PATH", "/etc/atlas/api.key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.APITLSCertPath != "/etc/atlas/api.crt" || cfg.APITLSKeyPath != "/etc/atlas/api.key" {
+		t.Fatalf("API TLS paths = %q/%q", cfg.APITLSCertPath, cfg.APITLSKeyPath)
+	}
+}
+
 func TestLoadCephModeRequiresDashboardConfiguration(t *testing.T) {
 	clearModeEnv(t)
 	t.Setenv("ATLAS_PROVIDER_MODE", "ceph")

@@ -21,6 +21,7 @@ import (
 type writeHarness struct {
 	server *Server
 	token  string
+	db     *sql.DB
 }
 
 func newWriteHarness(t *testing.T) *writeHarness {
@@ -68,7 +69,7 @@ func newWriteHarnessWithOptions(t *testing.T, agentMode string, fakeAgentScenari
 		t.Fatalf("new app: %v", err)
 	}
 	t.Cleanup(func() { _ = application.Close() })
-	return &writeHarness{server: NewServer(application), token: token}
+	return &writeHarness{server: NewServer(application), token: token, db: db}
 }
 
 func cleanupManualAPIRows(t *testing.T, db *sql.DB) {

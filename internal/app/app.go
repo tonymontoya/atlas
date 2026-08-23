@@ -27,6 +27,7 @@ type App struct {
 	CaseWrites           CaseWriter
 	ClusterRegistrations ClusterRegistrationStore
 	EnrollmentCA         *ca.Authority
+	AgentObservations    AgentObservationStore
 	WorkflowReads        WorkflowReader
 	WorkflowLifecycle    *workflowdispatch.Lifecycle
 	Verifier             *identity.Verifier
@@ -38,6 +39,17 @@ type ClusterRegistrationStore interface {
 	GetClusterRegistration(ctx context.Context, clusterID int64) (fleet.ClusterRegistration, error)
 	DeregisterCluster(ctx context.Context, input store.DeregisterClusterInput) (fleet.ClusterRegistration, error)
 	EnrollAgent(ctx context.Context, input store.EnrollAgentInput, issue store.IssueCertificate) (store.EnrollmentResult, error)
+}
+
+// AgentObservationStore is the write seam for enrolled-Agent
+// observation pushes (ADR-0025): certificate-to-cluster resolution plus
+// the inventory sync-run lifecycle around the single-transaction save.
+type AgentObservationStore interface {
+	ResolveAgentCluster(ctx context.Context, serialNumber string) (store.AgentCluster, error)
+	BeginInventorySyncRun(ctx context.Context, run store.BeginSyncRun) (int64, error)
+	SaveInventoryObservation(ctx context.Context, obs store.InventoryObservation) (store.SaveInventoryResult, error)
+	SucceedInventorySyncRun(ctx context.Context, result store.SyncRunResult) error
+	FailInventorySyncRun(ctx context.Context, failure store.SyncRunFailure) error
 }
 
 type InventorySyncRunReader interface {
@@ -133,6 +145,7 @@ func NewFromConfig(ctx context.Context, cfg config.Config) (*App, error) {
 			CaseWrites:           postgresStore,
 			ClusterRegistrations: postgresStore,
 			EnrollmentCA:         enrollmentCA,
+			AgentObservations:    postgresStore,
 			WorkflowReads:        postgresStore,
 			WorkflowLifecycle:    workflowdispatch.NewLifecycle(postgresStore, workflowRegistry, dispatch),
 			Verifier:             verifier,
