@@ -91,10 +91,10 @@ paths:
             type: string
         - name: limit
           in: query
-          description: Page size, clamped to 1-100; defaults to 50.
+          description: Page size, clamped to at most 100; 0 or absent uses the default 50.
           schema:
             type: integer
-            minimum: 1
+            minimum: 0
         - name: offset
           in: query
           description: Page offset; defaults to 0.
@@ -624,6 +624,12 @@ paths:
                       clusterFsid: 00000000-0000-4000-8000-000000000101
                       createdAt: "2026-08-13T12:00:00Z"
                       updatedAt: "2026-08-13T12:00:00Z"
+        "400":
+          description: The cluster filter is not a UUID.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/Error"
     post:
@@ -1612,9 +1618,11 @@ components:
         - clusterType
       properties:
         id:
-          type: integer
+          type:
+            - integer
+            - "null"
           format: int64
-          description: Cluster registration id.
+          description: Cluster registration id; null in provider mode, where the index serves a provider's implicit cluster.
         fsid:
           type:
             - string
@@ -1664,7 +1672,7 @@ components:
           description: Clusters the query matches, across all pages.
         limit:
           type: integer
-          description: Page size in effect (clamped 1-100).
+          description: Page size in effect (at most 100; 0 selects the default 50).
         offset:
           type: integer
           description: Page offset in effect.

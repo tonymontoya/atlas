@@ -24,9 +24,10 @@ type ListClustersQuery struct {
 // ClusterSummary is one row of the cluster index: the registration
 // fields Operators address a cluster by, the latest observed health,
 // and when an enrolled Agent last pushed (nil when no agent batch has
-// arrived).
+// arrived). ID is nil in provider mode, where the index serves a
+// provider's implicit cluster rather than a registration row.
 type ClusterSummary struct {
-	ID            int64             `json:"id"`
+	ID            *int64            `json:"id"`
 	FSID          *string           `json:"fsid"`
 	Name          string            `json:"name"`
 	ClusterType   fleet.ClusterType `json:"clusterType"`
@@ -68,19 +69,26 @@ func (s *PostgresStore) clusterExistsByFSID(ctx context.Context, fsid string) (b
 	return exists, err
 }
 
+// ClampPage applies the shared paging contract: limits land in 1-100
+// with 50 the default, offsets stay non-negative.
+func ClampPage(limit, offset int) (int, int) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
+}
+
 // ListClusterSummaries returns one page of the active-cluster index
 // (deregistered clusters never list) with each cluster's latest
 // observed health and Agent last-seen time.
 func (s *PostgresStore) ListClusterSummaries(ctx context.Context, query ListClustersQuery) (ClusterIndex, error) {
-	if query.Limit <= 0 {
-		query.Limit = 50
-	}
-	if query.Limit > 100 {
-		query.Limit = 100
-	}
-	if query.Offset < 0 {
-		query.Offset = 0
-	}
+	query.Limit, query.Offset = ClampPage(query.Limit, query.Offset)
 	search := strings.ToLower(query.Search)
 	// strpos substring matching keeps user input literal: no LIKE
 	// wildcard escaping to get wrong. $1 is the search term in both
@@ -122,11 +130,12 @@ func (s *PostgresStore) ListClusterSummaries(ctx context.Context, query ListClus
 	index := ClusterIndex{Clusters: make([]ClusterSummary, 0), Total: total, Limit: query.Limit, Offset: query.Offset}
 	for rows.Next() {
 		var summary ClusterSummary
+		var id int64
 		var fsid sql.NullString
 		var cephVersion, healthStatus, healthSummary sql.NullString
 		var agentLastSeen sql.NullTime
 		if err := rows.Scan(
-			&summary.ID,
+			&id,
 			&fsid,
 			&summary.Name,
 			&summary.ClusterType,
@@ -137,6 +146,7 @@ func (s *PostgresStore) ListClusterSummaries(ctx context.Context, query ListClus
 		); err != nil {
 			return ClusterIndex{}, err
 		}
+		summary.ID = &id
 		if fsid.Valid {
 			value := fsid.String
 			summary.FSID = &value
@@ -184,7 +194,11 @@ func (s *PostgresStore) ClusterHealth(ctx context.Context, fsid string) (invento
 		WHERE fsid = $1::uuid
 	`, normalized).Scan(&health.Status, &health.Summary, &checksJSON)
 	if errors.Is(err, sql.ErrNoRows) {
-		if exists, existsErr := s.clusterExistsByFSID(ctx, fsid); existsErr == nil && !exists {
+		exists, existsErr := s.clusterExistsByFSID(ctx, fsid)
+		if existsErr != nil {
+			return inventory.Health{}, existsErr
+		}
+		if !exists {
 			return inventory.Health{}, clusterFSIDNotFound()
 		}
 		return inventory.Health{}, notFound("cluster health not found")

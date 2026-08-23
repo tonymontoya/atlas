@@ -42,27 +42,20 @@ func (r *Reader) resolve(ctx context.Context, fsid string) error {
 
 // ListClusterSummaries indexes the one cluster the provider serves:
 // identity and health from the provider, and no Agent last-seen —
-// provider-mode observations are pulled, not pushed.
+// provider-mode observations are pulled, not pushed. A provider health
+// failure lists the cluster without health rather than failing the
+// whole index; the scoped health endpoint reports the failure.
 func (r *Reader) ListClusterSummaries(ctx context.Context, query store.ListClustersQuery) (store.ClusterIndex, error) {
-	limit, offset := query.Limit, query.Offset
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	index := store.ClusterIndex{Clusters: make([]store.ClusterSummary, 0), Limit: limit, Offset: offset}
+	query.Limit, query.Offset = store.ClampPage(query.Limit, query.Offset)
+	index := store.ClusterIndex{Clusters: make([]store.ClusterSummary, 0), Limit: query.Limit, Offset: query.Offset}
 
 	identity, err := r.provider.ClusterIdentity(ctx)
 	if err != nil {
 		return store.ClusterIndex{}, err
 	}
-	health, err := r.provider.Health(ctx)
-	if err != nil {
-		return store.ClusterIndex{}, err
+	health, healthErr := r.provider.Health(ctx)
+	if healthErr != nil {
+		health = inventory.Health{}
 	}
 
 	if search := strings.ToLower(query.Search); search != "" &&
@@ -71,20 +64,23 @@ func (r *Reader) ListClusterSummaries(ctx context.Context, query store.ListClust
 		return index, nil
 	}
 	index.Total = 1
-	if offset > 0 {
+	if query.Offset > 0 {
 		return index, nil
 	}
 
 	fsid, name, version := identity.FSID, identity.Name, identity.CephVersion
-	status, summary := string(health.Status), health.Summary
-	index.Clusters = append(index.Clusters, store.ClusterSummary{
-		FSID:          &fsid,
-		Name:          name,
-		ClusterType:   identity.Type,
-		CephVersion:   &version,
-		HealthStatus:  &status,
-		HealthSummary: &summary,
-	})
+	summary := store.ClusterSummary{
+		FSID:        &fsid,
+		Name:        name,
+		ClusterType: identity.Type,
+		CephVersion: &version,
+	}
+	if health.Status != "" {
+		status, healthSummary := string(health.Status), health.Summary
+		summary.HealthStatus = &status
+		summary.HealthSummary = &healthSummary
+	}
+	index.Clusters = append(index.Clusters, summary)
 	return index, nil
 }
 

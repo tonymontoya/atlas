@@ -274,7 +274,7 @@ func TestListClusterSummariesSearchAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("page two: %v", err)
 	}
-	if len(pageTwo.Clusters) != 1 || pageTwo.Clusters[0].ID == pageOne.Clusters[0].ID {
+	if len(pageTwo.Clusters) != 1 || *pageTwo.Clusters[0].ID == *pageOne.Clusters[0].ID {
 		t.Fatalf("page two = %+v, want the next distinct row", pageTwo)
 	}
 }
@@ -355,7 +355,7 @@ func TestListClusterSummariesIncludesRegisteredUnobservedCluster(t *testing.T) {
 	}
 	var found *ClusterSummary
 	for i, summary := range index.Clusters {
-		if summary.ID == registration.ID {
+		if summary.ID != nil && *summary.ID == registration.ID {
 			found = &index.Clusters[i]
 		}
 	}
