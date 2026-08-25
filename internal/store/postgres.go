@@ -7,14 +7,6 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 )
 
-const currentSnapshotCTE = `WITH current_cluster AS (
-	SELECT id AS snapshot_id
-	FROM inventory_snapshots
-	ORDER BY observed_at DESC, id DESC
-	LIMIT 1
-)
-`
-
 type PostgresStore struct {
 	db *sql.DB
 }
