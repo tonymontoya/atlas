@@ -16,9 +16,6 @@ import { ErrorState, PageIntro, StatusTag } from "../components/ui";
 const PAGE_SIZES = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
 
-// ClusterIndexPage is the operator's fleet landing page: every registered
-// cluster with health summary and agent last-seen, searchable by name or
-// FSID (server-side q) and paginated (ADR-0025 fleet reads).
 export function ClusterIndexPage() {
   const [query, setQuery] = React.useState("");
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
@@ -132,11 +129,15 @@ export function ClusterIndexPage() {
               key: "health",
               header: "Health",
               render: (cluster) => (
-                <StatusTag
-                  label={healthStatusLabel(cluster.healthStatus)}
-                  tone={toneForHealth(cluster.healthStatus)}
-                  title={cluster.healthSummary ?? undefined}
-                />
+                <div className="atlas-health-cell">
+                  <StatusTag
+                    label={healthStatusLabel(cluster.healthStatus)}
+                    tone={toneForHealth(cluster.healthStatus)}
+                  />
+                  {cluster.healthSummary ? (
+                    <span className="atlas-subtle">{cluster.healthSummary}</span>
+                  ) : null}
+                </div>
               ),
             },
             {

@@ -2,7 +2,7 @@ import React from "react";
 import { Button } from "@carbon/react";
 import { listSyncRuns, type InventorySyncRun } from "../api";
 import { formatDate, errorMessage } from "../format";
-import { toneForRun } from "../tones";
+import { toneForSyncRunStatus } from "../tones";
 import { AtlasTable } from "../components/tables";
 import { ErrorState, PageIntro, StatusTag } from "../components/ui";
 
@@ -65,7 +65,7 @@ export function SyncRunsPage() {
               key: "status",
               header: "Status",
               render: (run) => (
-                <StatusTag label={run.status} tone={toneForRun(run.status)} />
+                <StatusTag label={run.status} tone={toneForSyncRunStatus(run.status)} />
               ),
             },
             {

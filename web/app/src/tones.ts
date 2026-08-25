@@ -34,7 +34,7 @@ export function toneForHealth(status: string | null | undefined): Tone {
   return "neutral";
 }
 
-export function toneForRun(status: "running" | "succeeded" | "failed"): Tone {
+export function toneForSyncRunStatus(status: "running" | "succeeded" | "failed"): Tone {
   if (status === "succeeded") {
     return "ok";
   }

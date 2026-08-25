@@ -1,3 +1,5 @@
+import { errorMessage } from "./format";
+
 export type ClusterType = "bare-metal" | "rook";
 
 export type ClusterSummary = {
@@ -151,14 +153,15 @@ export type ClusterViewNotFound = {
   notFound: true;
 };
 
-function messageForError(error: unknown): string {
-  if (error instanceof ApiRequestError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "requested data is unavailable";
+// settle turns a promise into a discriminated result so parallel loads
+// can fail independently (a red Case list never blanks the page).
+export function settle<T>(
+  promise: Promise<T>,
+): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
+  return promise.then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
 }
 
 export async function listClusters(
@@ -209,9 +212,11 @@ export async function loadClusterView(
       ),
       request<Daemon[]>(`/api/v1/clusters/${scopedFSID}/daemons`, signal),
       request<Pool[]>(`/api/v1/clusters/${scopedFSID}/pools`, signal),
-      request<CaseRecord[]>(`/api/v1/cases?cluster=${encodeURIComponent(scopedFSID)}`, signal).then(
-        (cases) => ({ ok: true as const, cases }),
-        (error: unknown) => ({ ok: false as const, error }),
+      settle(
+        request<CaseRecord[]>(
+          `/api/v1/cases?cluster=${encodeURIComponent(scopedFSID)}`,
+          signal,
+        ),
       ),
     ]);
 
@@ -223,11 +228,10 @@ export async function loadClusterView(
     storageDevices,
     daemons,
     pools,
-    cases: casesResult.ok ? casesResult.cases : [],
-    casesUnavailable: casesResult.ok ? undefined : messageForError(casesResult.error),
+    cases: casesResult.ok ? casesResult.value : [],
+    casesUnavailable: casesResult.ok ? undefined : errorMessage(casesResult.error),
   };
 }
-
 export async function listCases(
   filter: { cluster?: string } = {},
   signal?: AbortSignal,

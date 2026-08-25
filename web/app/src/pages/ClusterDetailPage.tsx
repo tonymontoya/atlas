@@ -121,6 +121,7 @@ export function ClusterDetailPage() {
             label="Health"
             value={healthStatusLabel(cluster.healthStatus)}
             detail={cluster.healthSummary ?? health.summary}
+            tone={toneForHealth(cluster.healthStatus)}
           />
         </Column>
         <Column sm={4} md={4} lg={4}>
@@ -142,6 +143,7 @@ export function ClusterDetailPage() {
             label="Ceph Daemons"
             value={daemons.length}
             detail={stoppedDaemons === 0 ? "all running" : `${stoppedDaemons} stopped`}
+            tone={stoppedDaemons === 0 ? "ok" : "warn"}
           />
         </Column>
         <Column sm={4} md={4} lg={4}>
@@ -156,7 +158,7 @@ export function ClusterDetailPage() {
         <div className="atlas-panel-heading-row">
           <h2 className="atlas-panel-heading">Health Checks</h2>
           <StatusTag
-            label={health.status.replace("HEALTH_", "")}
+            label={healthStatusLabel(health.status)}
             tone={toneForHealth(health.status)}
           />
         </div>
@@ -192,6 +194,7 @@ export function ClusterDetailPage() {
           token={token}
           defaultClusterFsid={cluster.fsid ?? undefined}
           onCaseCreated={() => setReloadKey((key) => key + 1)}
+          onCasesChanged={() => setReloadKey((key) => key + 1)}
         />
       </section>
     </>

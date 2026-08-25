@@ -42,8 +42,6 @@ import { EmptyState, StatusTag } from "./ui";
 
 const SEVERITIES: CaseRecord["severity"][] = ["info", "low", "medium", "high", "critical"];
 
-// CasesSection owns Case selection for one page: the list, the manual
-// compose form (when signed in), and the shared detail panel.
 export function CasesSection({
   cases,
   casesUnavailable,
@@ -51,6 +49,7 @@ export function CasesSection({
   token,
   defaultClusterFsid,
   onCaseCreated,
+  onCasesChanged,
 }: {
   cases: CaseRecord[];
   casesUnavailable?: string;
@@ -58,6 +57,7 @@ export function CasesSection({
   token: string | null;
   defaultClusterFsid?: string;
   onCaseCreated?: (created: CaseRecord) => void;
+  onCasesChanged?: () => void;
 }) {
   const [selectedCaseID, setSelectedCaseID] = React.useState<number | null>(null);
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -65,7 +65,8 @@ export function CasesSection({
 
   const refresh = React.useCallback(() => {
     setReloadKey((key) => key + 1);
-  }, []);
+    onCasesChanged?.();
+  }, [onCasesChanged]);
 
   return (
     <>

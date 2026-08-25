@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { InlineNotification, Tag, Tile } from "@carbon/react";
 import { tagClassNameFor, tagTypeFor, type Tone } from "../tones";
-
 // One Tag renders every tone. Carbon's Tag has no warning type, so warn
 // tones carry the token-backed atlas-tag-warn class instead (ADR-0028
 // deviation: no yellow Tag exists; the class uses Carbon support tokens).
@@ -25,13 +24,15 @@ export function MetricTile({
   label,
   value,
   detail,
+  tone,
 }: {
   label: string;
   value: ReactNode;
   detail?: ReactNode;
+  tone?: Tone;
 }) {
   return (
-    <Tile className="atlas-metric-tile">
+    <Tile className={tone ? `atlas-metric-tile atlas-metric-${tone}` : "atlas-metric-tile"}>
       <p className="atlas-metric-label">{label}</p>
       <p className="atlas-metric-value">{value}</p>
       {detail ? <p className="atlas-metric-detail">{detail}</p> : null}

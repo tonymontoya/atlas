@@ -8,7 +8,7 @@ import {
   toneForDeviceHealth,
   toneForHealth,
   toneForJobState,
-  toneForRun,
+  toneForSyncRunStatus,
   toneForWorkflowState,
 } from "./tones";
 import type { Tone } from "./tones";
@@ -42,11 +42,11 @@ describe("toneForHealth", () => {
   });
 });
 
-describe("toneForRun", () => {
+describe("toneForSyncRunStatus", () => {
   it("maps sync run statuses", () => {
-    expect(toneForRun("succeeded")).toBe<Tone>("ok");
-    expect(toneForRun("failed")).toBe<Tone>("err");
-    expect(toneForRun("running")).toBe<Tone>("warn");
+    expect(toneForSyncRunStatus("succeeded")).toBe<Tone>("ok");
+    expect(toneForSyncRunStatus("failed")).toBe<Tone>("err");
+    expect(toneForSyncRunStatus("running")).toBe<Tone>("warn");
   });
 });
 

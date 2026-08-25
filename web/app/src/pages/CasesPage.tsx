@@ -6,8 +6,6 @@ import { ErrorState, PageIntro } from "../components/ui";
 import { errorMessage } from "../format";
 import { useOperator } from "../operator";
 
-// CasesPage keeps the global Case list (most recent updates first) with
-// the full detail surface: transitions, assignment, notes, workflows.
 export function CasesPage() {
   const [cases, setCases] = React.useState<CaseRecord[] | null>(null);
   const [casesError, setCasesError] = React.useState<string | null>(null);
@@ -57,6 +55,7 @@ export function CasesPage() {
           operator={operator}
           token={token}
           onCaseCreated={() => setReloadKey((key) => key + 1)}
+          onCasesChanged={() => setReloadKey((key) => key + 1)}
         />
       ) : null}
     </>

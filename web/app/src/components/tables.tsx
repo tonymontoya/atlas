@@ -21,26 +21,18 @@ export type Column<T> = {
 // selection, and filtering; Atlas lists are server-searched and
 // server-paginated (ADR-0028 deviation, recorded here for reviewers).
 export function AtlasTable<T>({
-  title,
-  description,
   columns,
   rows,
   rowKey,
   emptyLabel,
 }: {
-  title?: ReactNode;
-  description?: ReactNode;
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string;
   emptyLabel: string;
 }) {
   return (
-    <TableContainer
-      title={title}
-      description={description}
-      className={title === undefined ? "atlas-table-untitled" : undefined}
-    >
+    <TableContainer className="atlas-table-untitled">
       {rows.length === 0 ? (
         <EmptyState label={emptyLabel} />
       ) : (

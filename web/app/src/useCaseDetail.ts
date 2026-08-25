@@ -5,6 +5,7 @@ import {
   loadCaseTimeline,
   loadCaseWorkflows,
   loadWorkflowJobs,
+  settle,
   type CaseNote,
   type CaseRecord,
   type TimelineEvent,
@@ -81,22 +82,10 @@ export function useCaseDetail(caseID: number | null, reloadKey: number): CaseDet
         setWorkflowsError(null);
 
         const [detailResult, timelineResult, notesResult, workflowsResult] = await Promise.all([
-          loadCase(id, controller.signal).then(
-            (loaded) => ({ ok: true as const, loaded }),
-            (error: unknown) => ({ ok: false as const, error }),
-          ),
-          loadCaseTimeline(id, controller.signal).then(
-            (loaded) => ({ ok: true as const, loaded }),
-            (error: unknown) => ({ ok: false as const, error }),
-          ),
-          loadCaseNotes(id, controller.signal).then(
-            (loaded) => ({ ok: true as const, loaded }),
-            (error: unknown) => ({ ok: false as const, error }),
-          ),
-          loadCaseWorkflows(id, controller.signal).then(
-            (loaded) => ({ ok: true as const, loaded }),
-            (error: unknown) => ({ ok: false as const, error }),
-          ),
+          settle(loadCase(id, controller.signal)),
+          settle(loadCaseTimeline(id, controller.signal)),
+          settle(loadCaseNotes(id, controller.signal)),
+          settle(loadCaseWorkflows(id, controller.signal)),
         ]);
 
         if (controller.signal.aborted) {
@@ -104,7 +93,7 @@ export function useCaseDetail(caseID: number | null, reloadKey: number): CaseDet
         }
 
         if (detailResult.ok) {
-          setDetail(detailResult.loaded);
+          setDetail(detailResult.value);
         } else {
           setDetail(null);
           setDetailError(errorMessage(detailResult.error));
@@ -119,23 +108,23 @@ export function useCaseDetail(caseID: number | null, reloadKey: number): CaseDet
         }
 
         if (timelineResult.ok) {
-          setTimeline(timelineResult.loaded);
+          setTimeline(timelineResult.value);
         } else {
           setTimeline([]);
           setTimelineError(errorMessage(timelineResult.error));
         }
 
         if (notesResult.ok) {
-          setNotes(notesResult.loaded);
+          setNotes(notesResult.value);
         } else {
           setNotes([]);
           setNotesError(errorMessage(notesResult.error));
         }
 
         if (workflowsResult.ok) {
-          setWorkflows(workflowsResult.loaded);
+          setWorkflows(workflowsResult.value);
           const jobEntries = await Promise.all(
-            workflowsResult.loaded.map(async (instance) => {
+            workflowsResult.value.map(async (instance) => {
               try {
                 const jobs = await loadWorkflowJobs(instance.id, controller.signal);
                 return [instance.id, jobs] as const;
