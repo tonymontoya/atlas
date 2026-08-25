@@ -251,6 +251,62 @@ func clusterRows[T any](ctx context.Context, s *PostgresStore, fsid string, enti
 	return out, nil
 }
 
+func scanStorageDevice(scanner rowScanner) (inventory.StorageDevice, error) {
+	var device inventory.StorageDevice
+	var deviceType sql.NullString
+	var devicePath sql.NullString
+	var deviceHealth sql.NullString
+	var osdID sql.NullInt64
+	if err := scanner.Scan(
+		&device.Host,
+		&device.Serial,
+		&deviceType,
+		&devicePath,
+		&deviceHealth,
+		&osdID,
+	); err != nil {
+		return inventory.StorageDevice{}, err
+	}
+	if deviceType.Valid {
+		device.Type = deviceType.String
+	}
+	if devicePath.Valid {
+		device.Path = devicePath.String
+	}
+	if deviceHealth.Valid {
+		device.Health = deviceHealth.String
+	}
+	if osdID.Valid {
+		id := int(osdID.Int64)
+		device.OSDID = &id
+	}
+	return device, nil
+}
+
+func scanPool(scanner rowScanner) (inventory.Pool, error) {
+	var pool inventory.Pool
+	var size sql.NullInt64
+	var minSize sql.NullInt64
+	if err := scanner.Scan(
+		&pool.ID,
+		&pool.Name,
+		&pool.Type,
+		&size,
+		&minSize,
+	); err != nil {
+		return inventory.Pool{}, err
+	}
+	if size.Valid {
+		value := int(size.Int64)
+		pool.Size = &value
+	}
+	if minSize.Valid {
+		value := int(minSize.Int64)
+		pool.MinSize = &value
+	}
+	return pool, nil
+}
+
 func scanOSD(scanner rowScanner) (inventory.OSD, error) {
 	var osd inventory.OSD
 	var device sql.NullString

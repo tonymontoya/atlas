@@ -36,11 +36,11 @@ func TestEveryDeclaredEntityHasStoreReadMethod(t *testing.T) {
 		}
 	}
 
-	// Health is deliberately undeclared: singleton-shaped, not a list.
-	allowed := map[string]bool{"ClusterHealth": true}
+	// Health is deliberately undeclared: singleton-shaped, so its
+	// non-slice return keeps it out of the reverse sweep below.
 	for i := range storeType.NumMethod() {
 		name := storeType.Method(i).Name
-		if declared[name] || allowed[name] || !isClusterReadMethod(storeType.Method(i).Type) {
+		if declared[name] || !isClusterReadMethod(storeType.Method(i).Type) {
 			continue
 		}
 		t.Errorf("cluster read %s returns a list but is not declared in entities.All", name)
