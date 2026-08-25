@@ -33,7 +33,7 @@ func (s *Server) routes() []route {
 		{"GET", "/api/v1/me", s.requireIdentity(s.me)},
 		{"GET", "/api/v1/clusters", s.listClusters},
 		{"POST", "/api/v1/clusters", s.requireIdentity(s.createClusterRegistration)},
-		{"GET", "/api/v1/clusters/{id}", s.clusterRegistration},
+		{"GET", "/api/v1/clusters/{id}", s.requireIdentity(s.clusterRegistration)},
 		{"DELETE", "/api/v1/clusters/{id}", s.requireIdentity(s.deregisterCluster)},
 		{"GET", "/api/v1/clusters/{fsid}/health", s.clusterHealth},
 		{"GET", "/api/v1/clusters/{fsid}/osds", s.osds},

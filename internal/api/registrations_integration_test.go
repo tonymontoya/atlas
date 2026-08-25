@@ -76,7 +76,7 @@ func TestClusterRegistrationLifecycleOverAPI(t *testing.T) {
 	}
 
 	// The credential never appears again: GET returns the registration only.
-	getResponse := harness.do(t, http.MethodGet, "/api/v1/clusters/"+strconv.FormatInt(created.Cluster.ID, 10), nil, false)
+	getResponse := harness.do(t, http.MethodGet, "/api/v1/clusters/"+strconv.FormatInt(created.Cluster.ID, 10), nil, true)
 	if getResponse.Code != http.StatusOK {
 		t.Fatalf("get status = %d, body = %s", getResponse.Code, getResponse.Body.String())
 	}
@@ -124,6 +124,10 @@ func TestClusterRegistrationLifecycleOverAPI(t *testing.T) {
 	if unauthenticated.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated delete status = %d, want 401", unauthenticated.Code)
 	}
+	unauthenticatedGet := harness.do(t, http.MethodGet, "/api/v1/clusters/"+strconv.FormatInt(created.Cluster.ID, 10), nil, false)
+	if unauthenticatedGet.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated get status = %d, want 401", unauthenticatedGet.Code)
+	}
 }
 
 func TestClusterRegistrationValidationOverAPI(t *testing.T) {
@@ -147,7 +151,7 @@ func TestClusterRegistrationValidationOverAPI(t *testing.T) {
 		t.Fatalf("rook status = %d, want 400 (bare-metal only in v0.7)", rook.Code)
 	}
 
-	missing := harness.do(t, http.MethodGet, "/api/v1/clusters/999999999", nil, false)
+	missing := harness.do(t, http.MethodGet, "/api/v1/clusters/999999999", nil, true)
 	if missing.Code != http.StatusNotFound {
 		t.Fatalf("unknown id status = %d, want 404", missing.Code)
 	}
@@ -156,11 +160,12 @@ func TestClusterRegistrationValidationOverAPI(t *testing.T) {
 func TestClusterRegistrationUnsupportedWithoutPostgresReadSource(t *testing.T) {
 	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
 
-	// Reads are public in v0.7 (RBAC lands in v0.8): the registration
-	// read reports the unsupported read source directly.
+	// Registration management is bearer-authenticated like the other
+	// operator endpoints (RBAC lands in v0.8); the unauthenticated GET
+	// reports 401 before the unsupported read source is reachable.
 	get := httptestRequest(t, server, http.MethodGet, "/api/v1/clusters/1", nil)
-	if get.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("get status = %d, want 422", get.Code)
+	if get.Code != http.StatusUnauthorized {
+		t.Fatalf("get status = %d, want 401", get.Code)
 	}
 
 	// Writes run behind requireIdentity, so an unauthenticated call

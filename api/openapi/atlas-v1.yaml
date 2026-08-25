@@ -8,8 +8,9 @@ info:
     Devices, Ceph Daemons, Pools), cluster registration and Agent
     enrollment, Agent observation pushes, explicit inventory sync run
     history, case records with cluster filtering, and the authenticated
-    operator identity probe. Write endpoints carry a bearer-token
-    security scheme; existing read endpoints remain public. 0.7.0 is a
+    operator identity probe. Write endpoints and cluster-registration
+    management carry a bearer-token security scheme; inventory read
+    endpoints remain public. 0.7.0 is a
     documented 0.x breaking change: it adds the cluster index and
     per-cluster reads, and removes the single-cluster
     /api/v1/clusters/current/* family.
@@ -179,6 +180,10 @@ paths:
         Addresses the cluster by registration id rather than FSID: the FSID
         is nil from registration until Enrollment binds it (ADR-0026), so
         FSID-addressed management of fresh registrations is impossible.
+        Registration management is authenticated like the writes it
+        reports on; inventory reads stay public until RBAC (v0.8).
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -194,6 +199,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClusterRegistration"
+        "401":
+          description: No bearer token was presented, the token failed verification, or authentication is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unauthorized:
+                  value:
+                    error:
+                      class: Unauthorized
+                      message: missing bearer token
         "404":
           description: No cluster registration exists with that id.
           content:
