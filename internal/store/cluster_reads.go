@@ -11,6 +11,7 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory/entities"
 )
 
 // ListClustersQuery scopes the cluster index: a case-insensitive
@@ -212,181 +213,102 @@ func (s *PostgresStore) ClusterHealth(ctx context.Context, fsid string) (invento
 	return health, nil
 }
 
-func (s *PostgresStore) ClusterOSDs(ctx context.Context, fsid string) ([]inventory.OSD, error) {
+// clusterRows serves one declared entity's latest-snapshot rows for
+// the cluster the FSID addresses. A malformed or unknown FSID reports
+// the shared cluster not-found; a known cluster whose latest snapshot
+// lacks the entity reports the entity's declared not-found message
+// (ADR-0014).
+func clusterRows[T any](ctx context.Context, s *PostgresStore, fsid string, entity entities.Entity, scan func(rowScanner) (T, error)) ([]T, error) {
 	normalized, ok := normalizeClusterFSID(fsid)
 	if !ok {
 		return nil, clusterFSIDNotFound()
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT osd_id, host, osd_up, osd_in, device
-		FROM cluster_current_osds
+		SELECT `+entity.Columns+`
+		FROM `+entity.View+`
 		WHERE fsid = $1::uuid
-		ORDER BY osd_id
+		ORDER BY `+entity.OrderBy+`
 	`, normalized)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
-	var osds []inventory.OSD
+	out := make([]T, 0)
 	for rows.Next() {
-		var osd inventory.OSD
-		var device sql.NullString
-		if err := rows.Scan(&osd.ID, &osd.Host, &osd.Up, &osd.In, &device); err != nil {
+		value, err := scan(rows)
+		if err != nil {
 			return nil, err
 		}
-		if device.Valid {
-			osd.Device = device.String
-		}
-		osds = append(osds, osd)
+		out = append(out, value)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(osds) == 0 {
-		return nil, s.scopedNotFound(ctx, fsid, "current OSD inventory not found")
+	if len(out) == 0 {
+		return nil, s.scopedNotFound(ctx, fsid, entity.NotFound)
 	}
-	return osds, nil
+	return out, nil
+}
+
+func scanOSD(scanner rowScanner) (inventory.OSD, error) {
+	var osd inventory.OSD
+	var device sql.NullString
+	if err := scanner.Scan(&osd.ID, &osd.Host, &osd.Up, &osd.In, &device); err != nil {
+		return inventory.OSD{}, err
+	}
+	if device.Valid {
+		osd.Device = device.String
+	}
+	return osd, nil
+}
+
+func scanHost(scanner rowScanner) (inventory.Host, error) {
+	var host inventory.Host
+	var address sql.NullString
+	if err := scanner.Scan(&host.Name, &address); err != nil {
+		return inventory.Host{}, err
+	}
+	if address.Valid {
+		host.Address = address.String
+	}
+	return host, nil
+}
+
+func scanDaemon(scanner rowScanner) (inventory.Daemon, error) {
+	var daemon inventory.Daemon
+	var version sql.NullString
+	if err := scanner.Scan(&daemon.Type, &daemon.Name, &daemon.Host, &daemon.Status, &version); err != nil {
+		return inventory.Daemon{}, err
+	}
+	if version.Valid {
+		daemon.Version = version.String
+	}
+	return daemon, nil
+}
+
+// The list-shaped cluster reads delegate to the declaration-driven
+// helper; signatures stay on the interface (completeness is enforced
+// by TestEveryDeclaredEntityHasStoreReadMethod).
+
+func (s *PostgresStore) ClusterOSDs(ctx context.Context, fsid string) ([]inventory.OSD, error) {
+	return clusterRows(ctx, s, fsid, entities.OSDs, scanOSD)
 }
 
 func (s *PostgresStore) ClusterHosts(ctx context.Context, fsid string) ([]inventory.Host, error) {
-	normalized, ok := normalizeClusterFSID(fsid)
-	if !ok {
-		return nil, clusterFSIDNotFound()
-	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT host_name, address
-		FROM cluster_current_hosts
-		WHERE fsid = $1::uuid
-		ORDER BY host_name
-	`, normalized)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var hosts []inventory.Host
-	for rows.Next() {
-		var host inventory.Host
-		var address sql.NullString
-		if err := rows.Scan(&host.Name, &address); err != nil {
-			return nil, err
-		}
-		if address.Valid {
-			host.Address = address.String
-		}
-		hosts = append(hosts, host)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(hosts) == 0 {
-		return nil, s.scopedNotFound(ctx, fsid, "current host inventory not found")
-	}
-	return hosts, nil
+	return clusterRows(ctx, s, fsid, entities.Hosts, scanHost)
 }
 
 func (s *PostgresStore) ClusterStorageDevices(ctx context.Context, fsid string) ([]inventory.StorageDevice, error) {
-	normalized, ok := normalizeClusterFSID(fsid)
-	if !ok {
-		return nil, clusterFSIDNotFound()
-	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT host_name, serial, device_type, device_path, device_health, osd_id
-		FROM cluster_current_storage_devices
-		WHERE fsid = $1::uuid
-		ORDER BY host_name, serial
-	`, normalized)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	devices := make([]inventory.StorageDevice, 0)
-	for rows.Next() {
-		device, err := scanStorageDevice(rows)
-		if err != nil {
-			return nil, err
-		}
-		devices = append(devices, device)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(devices) == 0 {
-		return nil, s.scopedNotFound(ctx, fsid, "current storage device inventory not found")
-	}
-	return devices, nil
+	return clusterRows(ctx, s, fsid, entities.StorageDevices, scanStorageDevice)
 }
 
 func (s *PostgresStore) ClusterDaemons(ctx context.Context, fsid string) ([]inventory.Daemon, error) {
-	normalized, ok := normalizeClusterFSID(fsid)
-	if !ok {
-		return nil, clusterFSIDNotFound()
-	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT daemon_type, daemon_name, host_name, status, ceph_version
-		FROM cluster_current_daemons
-		WHERE fsid = $1::uuid
-		ORDER BY daemon_type, daemon_name
-	`, normalized)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	var daemons []inventory.Daemon
-	for rows.Next() {
-		var daemon inventory.Daemon
-		var version sql.NullString
-		if err := rows.Scan(&daemon.Type, &daemon.Name, &daemon.Host, &daemon.Status, &version); err != nil {
-			return nil, err
-		}
-		if version.Valid {
-			daemon.Version = version.String
-		}
-		daemons = append(daemons, daemon)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(daemons) == 0 {
-		return nil, s.scopedNotFound(ctx, fsid, "current Ceph Daemon inventory not found")
-	}
-	return daemons, nil
+	return clusterRows(ctx, s, fsid, entities.Daemons, scanDaemon)
 }
 
 func (s *PostgresStore) ClusterPools(ctx context.Context, fsid string) ([]inventory.Pool, error) {
-	normalized, ok := normalizeClusterFSID(fsid)
-	if !ok {
-		return nil, clusterFSIDNotFound()
-	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT pool_id, name, pool_type, size, min_size
-		FROM cluster_current_pools
-		WHERE fsid = $1::uuid
-		ORDER BY pool_id
-	`, normalized)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	pools := make([]inventory.Pool, 0)
-	for rows.Next() {
-		pool, err := scanPool(rows)
-		if err != nil {
-			return nil, err
-		}
-		pools = append(pools, pool)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(pools) == 0 {
-		return nil, s.scopedNotFound(ctx, fsid, "current Pool inventory not found")
-	}
-	return pools, nil
+	return clusterRows(ctx, s, fsid, entities.Pools, scanPool)
 }
 
 // scopedNotFound distinguishes an unknown cluster from a known cluster
