@@ -51,8 +51,10 @@ What exists today:
   authenticated manual Case write endpoints (create, transition, assign, note)
 - OIDC bearer-token identity verification (JWT against the issuer's JWKS) with
   a local dev issuer for development stacks
-- React and TypeScript web UI scaffold with operator sign-in, manual Case
-  writes, and Workflow attach/approve/resume forms
+- React and TypeScript web UI on IBM Carbon (ADR-0028) with a searchable
+  cluster index, per-cluster detail pages, global Cases and Sync Runs
+  views, operator sign-in, manual Case writes, and Workflow
+  attach/approve/resume forms
 - PostgreSQL persistence with plain SQL migrations
 - Fake-provider inventory fixtures and an inventory sync command
 - A read-only real Ceph provider: `ATLAS_PROVIDER_MODE=ceph` points the

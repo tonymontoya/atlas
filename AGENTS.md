@@ -60,10 +60,14 @@ The current implementation supports:
   read-only Case endpoints; manual Case writes authenticate with OIDC
   bearer tokens (ADR-0016). The single-cluster
   `/api/v1/clusters/current/*` family was removed as a documented 0.x
-  breaking change; the web UI rebuild on the new API lands with #40.
-  Provider read source serves the same cluster-scoped shape through
-  `internal/providers/singlecluster` (its one provider is the only
-  addressable cluster; anything else 404s).
+  breaking change. Provider read source serves the same cluster-scoped
+  shape through `internal/providers/singlecluster` (its one provider is
+  the only addressable cluster; anything else 404s).
+- An IBM Carbon web UI (ADR-0028): app shell, cluster index (searchable,
+  paginated, health + Agent last-seen), per-cluster detail pages over the
+  cluster-scoped reads, global Cases and Sync Runs pages, operator
+  bearer-token sign-in, manual Case writes, and Workflow
+  attach/approve/resume forms.
 - Agent Enrollment (ADR-0026): `POST /api/v1/agent/enroll` exchanges a
   CSR plus the one-time Enrollment Credential for a client certificate
   from an internal CA, burning the credential and binding the Cluster's

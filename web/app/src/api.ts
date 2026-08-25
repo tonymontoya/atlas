@@ -1,12 +1,27 @@
-export type HealthzResponse = {
-  status: "ok";
+export type ClusterType = "bare-metal" | "rook";
+
+export type ClusterSummary = {
+  id: number | null;
+  fsid: string | null;
+  name: string;
+  clusterType: ClusterType;
+  cephVersion: string | null;
+  healthStatus: string | null;
+  healthSummary: string | null;
+  agentLastSeen: string | null;
 };
 
-export type ClusterIdentity = {
-  fsid: string;
-  name: string;
-  cephVersion: string;
-  type: "bare-metal" | "rook";
+export type ClusterIndex = {
+  clusters: ClusterSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type ClusterQuery = {
+  q?: string;
+  limit?: number;
+  offset?: number;
 };
 
 export type ClusterHealth = {
@@ -61,7 +76,7 @@ export type Pool = {
 
 export type InventorySyncRun = {
   id: number;
-  provider: "fake";
+  provider: "fake" | "ceph" | "agent";
   scenario?: string;
   status: "running" | "succeeded" | "failed";
   startedAt: string;
@@ -120,20 +135,113 @@ export type TimelineEvent = {
   payload: Record<string, unknown>;
 };
 
-export type DashboardSnapshot = {
-  process: HealthzResponse;
-  cluster: ClusterIdentity;
+export type ClusterView = {
+  cluster: ClusterSummary;
   health: ClusterHealth;
   osds: OSD[];
   hosts: Host[];
   storageDevices: StorageDevice[];
   daemons: Daemon[];
   pools: Pool[];
-  syncRuns: InventorySyncRun[];
-  syncRunsUnavailable?: string;
   cases: CaseRecord[];
   casesUnavailable?: string;
 };
+
+export type ClusterViewNotFound = {
+  notFound: true;
+};
+
+function messageForError(error: unknown): string {
+  if (error instanceof ApiRequestError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "requested data is unavailable";
+}
+
+export async function listClusters(
+  query: ClusterQuery = {},
+  signal?: AbortSignal,
+): Promise<ClusterIndex> {
+  const params = new URLSearchParams();
+  if (query.q !== undefined && query.q !== "") {
+    params.set("q", query.q);
+  }
+  if (query.limit !== undefined) {
+    params.set("limit", String(query.limit));
+  }
+  if (query.offset !== undefined && query.offset > 0) {
+    params.set("offset", String(query.offset));
+  }
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return request<ClusterIndex>(`/api/v1/clusters${suffix}`, signal);
+}
+
+// loadClusterView gathers everything the per-cluster page shows. The
+// cluster itself is resolved through the index (searching by FSID) so
+// provider-mode clusters — whose numeric id is null — stay addressable.
+// A FSID no registered cluster carries resolves to notFound.
+export async function loadClusterView(
+  fsid: string,
+  signal?: AbortSignal,
+): Promise<ClusterView | ClusterViewNotFound> {
+  const index = await listClusters({ q: fsid }, signal);
+  const cluster = index.clusters.find(
+    (candidate) =>
+      candidate.fsid !== null &&
+      candidate.fsid.toLowerCase() === fsid.toLowerCase(),
+  );
+  if (!cluster || cluster.fsid === null) {
+    return { notFound: true };
+  }
+
+  const scopedFSID = cluster.fsid;
+  const [health, osds, hosts, storageDevices, daemons, pools, casesResult] =
+    await Promise.all([
+      request<ClusterHealth>(`/api/v1/clusters/${scopedFSID}/health`, signal),
+      request<OSD[]>(`/api/v1/clusters/${scopedFSID}/osds`, signal),
+      request<Host[]>(`/api/v1/clusters/${scopedFSID}/hosts`, signal),
+      request<StorageDevice[]>(
+        `/api/v1/clusters/${scopedFSID}/storage-devices`,
+        signal,
+      ),
+      request<Daemon[]>(`/api/v1/clusters/${scopedFSID}/daemons`, signal),
+      request<Pool[]>(`/api/v1/clusters/${scopedFSID}/pools`, signal),
+      request<CaseRecord[]>(`/api/v1/cases?cluster=${encodeURIComponent(scopedFSID)}`, signal).then(
+        (cases) => ({ ok: true as const, cases }),
+        (error: unknown) => ({ ok: false as const, error }),
+      ),
+    ]);
+
+  return {
+    cluster,
+    health,
+    osds,
+    hosts,
+    storageDevices,
+    daemons,
+    pools,
+    cases: casesResult.ok ? casesResult.cases : [],
+    casesUnavailable: casesResult.ok ? undefined : messageForError(casesResult.error),
+  };
+}
+
+export async function listCases(
+  filter: { cluster?: string } = {},
+  signal?: AbortSignal,
+): Promise<CaseRecord[]> {
+  const suffix =
+    filter.cluster !== undefined && filter.cluster !== ""
+      ? `?cluster=${encodeURIComponent(filter.cluster)}`
+      : "";
+  return request<CaseRecord[]>(`/api/v1/cases${suffix}`, signal);
+}
+
+export async function listSyncRuns(signal?: AbortSignal): Promise<InventorySyncRun[]> {
+  return request<InventorySyncRun[]>("/api/v1/inventory-sync-runs", signal);
+}
 
 export type Operator = {
   subject: string;
@@ -173,45 +281,6 @@ export class ApiRequestError extends Error {
     this.status = status;
     this.errorClass = errorClass;
   }
-}
-
-export async function loadDashboard(
-  signal?: AbortSignal,
-): Promise<DashboardSnapshot> {
-  const [process, cluster, health, osds, hosts, storageDevices, daemons, pools, syncRunsResult, casesResult] =
-    await Promise.all([
-      request<HealthzResponse>("/healthz", signal),
-      request<ClusterIdentity>("/api/v1/clusters/current", signal),
-      request<ClusterHealth>("/api/v1/clusters/current/health", signal),
-      request<OSD[]>("/api/v1/clusters/current/osds", signal),
-      request<Host[]>("/api/v1/clusters/current/hosts", signal),
-      request<StorageDevice[]>("/api/v1/clusters/current/storage-devices", signal),
-      request<Daemon[]>("/api/v1/clusters/current/daemons", signal),
-      request<Pool[]>("/api/v1/clusters/current/pools", signal),
-      request<InventorySyncRun[]>("/api/v1/inventory-sync-runs", signal).then(
-        (syncRuns) => ({ ok: true as const, syncRuns }),
-        (error: unknown) => ({ ok: false as const, error }),
-      ),
-      request<CaseRecord[]>("/api/v1/cases", signal).then(
-        (cases) => ({ ok: true as const, cases }),
-        (error: unknown) => ({ ok: false as const, error }),
-      ),
-    ]);
-
-  return {
-    process,
-    cluster,
-    health,
-    osds,
-    hosts,
-    storageDevices,
-    daemons,
-    pools,
-    syncRuns: syncRunsResult.ok ? syncRunsResult.syncRuns : [],
-    syncRunsUnavailable: syncRunsResult.ok ? undefined : messageForError(syncRunsResult.error),
-    cases: casesResult.ok ? casesResult.cases : [],
-    casesUnavailable: casesResult.ok ? undefined : messageForError(casesResult.error),
-  };
 }
 
 export async function loadCase(id: number, signal?: AbortSignal): Promise<CaseRecord> {
@@ -434,14 +503,4 @@ async function readErrorBody(response: Response): Promise<ApiErrorBody> {
   } catch {
     return {};
   }
-}
-
-function messageForError(error: unknown): string {
-  if (error instanceof ApiRequestError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "requested data is unavailable";
 }
