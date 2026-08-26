@@ -13,6 +13,12 @@
 // Health is deliberately absent: it is singleton-shaped (one row, a
 // JSON checks column, and a view the cluster index joins) rather than
 // list-shaped, so it stays hand-written at each consumer.
+//
+// Failure convention for a missing entry: consumers that construct at
+// process start (the singlecluster adapter, the API route table)
+// panic; test-only consumers (the contract suite) report the gap as a
+// test failure. Either way the omission surfaces before an entity can
+// be served half-wired.
 package entities
 
 // Entity declares one list-shaped inventory read: how the read model

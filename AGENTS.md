@@ -63,6 +63,15 @@ The current implementation supports:
   breaking change. Provider read source serves the same cluster-scoped
   shape through `internal/providers/singlecluster` (its one provider is
   the only addressable cluster; anything else 404s).
+- An inventory entity declaration (`internal/inventory/entities`) that
+  the list-shaped cluster reads derive from: the Postgres read
+  methods, the singlecluster adapter bindings, the API routes and
+  handlers, and the provider contract-test coverage all loop the
+  registry, and a declared entity missing its wiring fails that
+  consumer's construction or completeness tests. Adding a list entity
+  means one declaration entry plus the artifacts that cannot be
+  derived (migration, OpenAPI path, web page, and one typed binding
+  entry per consumer).
 - An IBM Carbon web UI (ADR-0028): app shell, cluster index (searchable,
   paginated, health + Agent last-seen), per-cluster detail pages over the
   cluster-scoped reads, global Cases and Sync Runs pages, operator
