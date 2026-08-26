@@ -128,6 +128,36 @@ func TestScopedReadsServeOnlyTheProvidersCluster(t *testing.T) {
 	}
 }
 
+// TestListReadsServeEveryDeclaredEntity drives every declared entity's
+// named read through the adapter. Row counts come from the
+// reef-healthy-baremetal fixture: 2 OSDs, 3 hosts, 3 Storage Devices
+// across those hosts, 7 Daemons, 2 Pools.
+func TestListReadsServeEveryDeclaredEntity(t *testing.T) {
+	reader := New(fake.New(fake.DefaultFixtureRoot(), "reef-healthy-baremetal"))
+	ctx := context.Background()
+
+	osds, err := reader.ClusterOSDs(ctx, fakeHealthyFSID)
+	if err != nil || len(osds) != 2 {
+		t.Fatalf("ClusterOSDs = %d rows, err %v, want 2 rows", len(osds), err)
+	}
+	hosts, err := reader.ClusterHosts(ctx, fakeHealthyFSID)
+	if err != nil || len(hosts) != 3 {
+		t.Fatalf("ClusterHosts = %d rows, err %v, want 3 rows", len(hosts), err)
+	}
+	devices, err := reader.ClusterStorageDevices(ctx, fakeHealthyFSID)
+	if err != nil || len(devices) != 3 {
+		t.Fatalf("ClusterStorageDevices = %d rows, err %v, want 3 rows across all hosts", len(devices), err)
+	}
+	daemons, err := reader.ClusterDaemons(ctx, fakeHealthyFSID)
+	if err != nil || len(daemons) != 7 {
+		t.Fatalf("ClusterDaemons = %d rows, err %v, want 7 rows", len(daemons), err)
+	}
+	pools, err := reader.ClusterPools(ctx, fakeHealthyFSID)
+	if err != nil || len(pools) != 2 {
+		t.Fatalf("ClusterPools = %d rows, err %v, want 2 rows", len(pools), err)
+	}
+}
+
 func TestScopedReadsRejectOtherFSIDs(t *testing.T) {
 	reader := New(fake.New(fake.DefaultFixtureRoot(), "reef-healthy-baremetal"))
 	ctx := context.Background()
@@ -138,7 +168,9 @@ func TestScopedReadsRejectOtherFSIDs(t *testing.T) {
 	}{
 		{"health", func() error { _, err := reader.ClusterHealth(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
 		{"osds", func() error { _, err := reader.ClusterOSDs(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
+		{"hosts", func() error { _, err := reader.ClusterHosts(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
 		{"devices", func() error { _, err := reader.ClusterStorageDevices(ctx, "not-a-uuid"); return err }},
+		{"daemons", func() error { _, err := reader.ClusterDaemons(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
 		{"pools", func() error { _, err := reader.ClusterPools(ctx, ""); return err }},
 	}
 	for _, read := range reads {
