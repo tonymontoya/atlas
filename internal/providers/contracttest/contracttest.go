@@ -3,10 +3,12 @@ package contracttest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory/entities"
 	"github.com/tonymontoya/ceph-atlas/internal/observability"
 	"github.com/tonymontoya/ceph-atlas/internal/providers"
 )
@@ -31,7 +33,168 @@ type ReadProvider interface {
 // suite skips that scenario.
 type ReadProviderFactory func(t *testing.T, scenario Scenario) ReadProvider
 
+// providerRead is one read the suite exercises: the error-path call
+// every scenario runs, the success verification, and optional
+// entity-specific semantics run as extra subtests.
+type providerRead struct {
+	name          string
+	call          func(ctx context.Context, p ReadProvider) error
+	verifySuccess func(t *testing.T, p ReadProvider)
+	// extraSubtests runs read-specific semantics as subtests of this
+	// read's scope; nil when the shared checks suffice.
+	extraSubtests func(t *testing.T, p ReadProvider)
+}
+
+// entityReads names the suite's per-entity coverage: how each declared
+// entity is exercised on a read provider. Storage Devices keep their
+// host-scoped provider shape: their exercise probes HostDevices per
+// host and asserts the unknown-host semantic.
+var entityReads = map[entities.Entity]providerRead{
+	entities.OSDs: {
+		name: "OSDs",
+		call: func(ctx context.Context, p ReadProvider) error {
+			_, err := p.OSDs(ctx)
+			return err
+		},
+		verifySuccess: func(t *testing.T, p ReadProvider) {
+			osds, err := p.OSDs(context.Background())
+			if err != nil {
+				t.Fatalf("OSDs returned error: %v", err)
+			}
+			if len(osds) == 0 {
+				t.Fatal("OSDs returned empty inventory for a success scenario")
+			}
+		},
+	},
+	entities.Hosts: {
+		name: "Hosts",
+		call: func(ctx context.Context, p ReadProvider) error {
+			_, err := p.Hosts(ctx)
+			return err
+		},
+		verifySuccess: func(t *testing.T, p ReadProvider) {
+			hosts, err := p.Hosts(context.Background())
+			if err != nil {
+				t.Fatalf("Hosts returned error: %v", err)
+			}
+			if len(hosts) == 0 {
+				t.Fatal("Hosts returned empty inventory for a success scenario")
+			}
+			for _, host := range hosts {
+				if host.Name == "" {
+					t.Fatal("Hosts returned a host with an empty name")
+				}
+			}
+		},
+	},
+	entities.StorageDevices: {
+		name: "HostDevices",
+		call: func(ctx context.Context, p ReadProvider) error {
+			_, err := p.HostDevices(ctx, "host-device-probe.example.invalid")
+			return err
+		},
+		verifySuccess: func(t *testing.T, p ReadProvider) {
+			hosts, err := p.Hosts(context.Background())
+			if err != nil {
+				t.Fatalf("Hosts returned error: %v", err)
+			}
+			if len(hosts) == 0 {
+				t.Fatal("Hosts returned empty inventory; cannot probe HostDevices")
+			}
+			devices, err := p.HostDevices(context.Background(), hosts[0].Name)
+			if err != nil {
+				t.Fatalf("HostDevices returned error: %v", err)
+			}
+			for _, device := range devices {
+				if device.Serial == "" {
+					t.Fatal("HostDevices returned a Storage Device with an empty serial")
+				}
+				if device.Host != hosts[0].Name {
+					t.Fatalf("HostDevices returned device for host %q, want %q", device.Host, hosts[0].Name)
+				}
+			}
+		},
+		extraSubtests: func(t *testing.T, p ReadProvider) {
+			t.Run("UnknownHost", func(t *testing.T) {
+				_, err := p.HostDevices(context.Background(), "host-device-probe.example.invalid")
+				assertErrorClass(t, err, apperr.NotFound)
+			})
+		},
+	},
+	entities.Daemons: {
+		name: "Daemons",
+		call: func(ctx context.Context, p ReadProvider) error {
+			_, err := p.Daemons(ctx)
+			return err
+		},
+		verifySuccess: func(t *testing.T, p ReadProvider) {
+			daemons, err := p.Daemons(context.Background())
+			if err != nil {
+				t.Fatalf("Daemons returned error: %v", err)
+			}
+			if len(daemons) == 0 {
+				t.Fatal("Daemons returned empty inventory for a success scenario")
+			}
+			for _, daemon := range daemons {
+				if daemon.Type == "" || daemon.Name == "" {
+					t.Fatalf("Daemons returned a Ceph Daemon with an empty type or name: %+v", daemon)
+				}
+				switch daemon.Type {
+				case inventory.DaemonMon, inventory.DaemonMgr, inventory.DaemonOsd, inventory.DaemonMds, inventory.DaemonRgw:
+				default:
+					t.Fatalf("Ceph Daemon type = %q, want a known DaemonType", daemon.Type)
+				}
+				switch daemon.Status {
+				case inventory.DaemonRunning, inventory.DaemonStopped, inventory.DaemonStarting, inventory.DaemonError, inventory.DaemonUnknown:
+				default:
+					t.Fatalf("Ceph Daemon status = %q, want a known DaemonStatus", daemon.Status)
+				}
+			}
+		},
+	},
+	entities.Pools: {
+		name: "Pools",
+		call: func(ctx context.Context, p ReadProvider) error {
+			_, err := p.Pools(ctx)
+			return err
+		},
+		verifySuccess: func(t *testing.T, p ReadProvider) {
+			pools, err := p.Pools(context.Background())
+			if err != nil {
+				t.Fatalf("Pools returned error: %v", err)
+			}
+			if len(pools) == 0 {
+				t.Fatal("Pools returned empty inventory for a success scenario")
+			}
+			for _, pool := range pools {
+				if pool.Name == "" {
+					t.Fatal("Pools returned a Pool with an empty name")
+				}
+			}
+		},
+	},
+}
+
+// declaredEntityReads builds the suite's per-entity coverage in
+// declaration order, reporting a declared entity that lacks coverage —
+// a newly declared entity cannot silently skip contract testing.
+func declaredEntityReads() ([]providerRead, error) {
+	reads := make([]providerRead, 0, len(entities.All))
+	for _, entity := range entities.All {
+		read, ok := entityReads[entity]
+		if !ok {
+			return nil, fmt.Errorf("declared entity %q lacks provider contract coverage", entity.Noun)
+		}
+		reads = append(reads, read)
+	}
+	return reads, nil
+}
+
 func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
+	declared, err := declaredEntityReads()
+	if err != nil {
+		t.Fatal(err)
+	}
 	errorScenarios := []struct {
 		scenario Scenario
 		class    apperr.Class
@@ -41,11 +204,9 @@ func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 		{ScenarioMalformed, apperr.MalformedResponse},
 		{ScenarioPartial, apperr.Partial},
 	}
-	methods := []struct {
-		name          string
-		call          func(ctx context.Context, p ReadProvider) error
-		verifySuccess func(t *testing.T, p ReadProvider)
-	}{
+	// ClusterIdentity and Health stay bespoke: singleton-shaped, not
+	// declared list entities.
+	bespokeReads := []providerRead{
 		{
 			name: "ClusterIdentity",
 			call: func(ctx context.Context, p ReadProvider) error {
@@ -80,128 +241,12 @@ func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 				}
 			},
 		},
-		{
-			name: "OSDs",
-			call: func(ctx context.Context, p ReadProvider) error {
-				_, err := p.OSDs(ctx)
-				return err
-			},
-			verifySuccess: func(t *testing.T, p ReadProvider) {
-				osds, err := p.OSDs(context.Background())
-				if err != nil {
-					t.Fatalf("OSDs returned error: %v", err)
-				}
-				if len(osds) == 0 {
-					t.Fatal("OSDs returned empty inventory for a success scenario")
-				}
-			},
-		},
-		{
-			name: "Hosts",
-			call: func(ctx context.Context, p ReadProvider) error {
-				_, err := p.Hosts(ctx)
-				return err
-			},
-			verifySuccess: func(t *testing.T, p ReadProvider) {
-				hosts, err := p.Hosts(context.Background())
-				if err != nil {
-					t.Fatalf("Hosts returned error: %v", err)
-				}
-				if len(hosts) == 0 {
-					t.Fatal("Hosts returned empty inventory for a success scenario")
-				}
-				for _, host := range hosts {
-					if host.Name == "" {
-						t.Fatal("Hosts returned a host with an empty name")
-					}
-				}
-			},
-		},
-		{
-			name: "HostDevices",
-			call: func(ctx context.Context, p ReadProvider) error {
-				_, err := p.HostDevices(ctx, "host-device-probe.example.invalid")
-				return err
-			},
-			verifySuccess: func(t *testing.T, p ReadProvider) {
-				hosts, err := p.Hosts(context.Background())
-				if err != nil {
-					t.Fatalf("Hosts returned error: %v", err)
-				}
-				if len(hosts) == 0 {
-					t.Fatal("Hosts returned empty inventory; cannot probe HostDevices")
-				}
-				devices, err := p.HostDevices(context.Background(), hosts[0].Name)
-				if err != nil {
-					t.Fatalf("HostDevices returned error: %v", err)
-				}
-				for _, device := range devices {
-					if device.Serial == "" {
-						t.Fatal("HostDevices returned a Storage Device with an empty serial")
-					}
-					if device.Host != hosts[0].Name {
-						t.Fatalf("HostDevices returned device for host %q, want %q", device.Host, hosts[0].Name)
-					}
-				}
-			},
-		},
-		{
-			name: "Daemons",
-			call: func(ctx context.Context, p ReadProvider) error {
-				_, err := p.Daemons(ctx)
-				return err
-			},
-			verifySuccess: func(t *testing.T, p ReadProvider) {
-				daemons, err := p.Daemons(context.Background())
-				if err != nil {
-					t.Fatalf("Daemons returned error: %v", err)
-				}
-				if len(daemons) == 0 {
-					t.Fatal("Daemons returned empty inventory for a success scenario")
-				}
-				for _, daemon := range daemons {
-					if daemon.Type == "" || daemon.Name == "" {
-						t.Fatalf("Daemons returned a Ceph Daemon with an empty type or name: %+v", daemon)
-					}
-					switch daemon.Type {
-					case inventory.DaemonMon, inventory.DaemonMgr, inventory.DaemonOsd, inventory.DaemonMds, inventory.DaemonRgw:
-					default:
-						t.Fatalf("Ceph Daemon type = %q, want a known DaemonType", daemon.Type)
-					}
-					switch daemon.Status {
-					case inventory.DaemonRunning, inventory.DaemonStopped, inventory.DaemonStarting, inventory.DaemonError, inventory.DaemonUnknown:
-					default:
-						t.Fatalf("Ceph Daemon status = %q, want a known DaemonStatus", daemon.Status)
-					}
-				}
-			},
-		},
-		{
-			name: "Pools",
-			call: func(ctx context.Context, p ReadProvider) error {
-				_, err := p.Pools(ctx)
-				return err
-			},
-			verifySuccess: func(t *testing.T, p ReadProvider) {
-				pools, err := p.Pools(context.Background())
-				if err != nil {
-					t.Fatalf("Pools returned error: %v", err)
-				}
-				if len(pools) == 0 {
-					t.Fatal("Pools returned empty inventory for a success scenario")
-				}
-				for _, pool := range pools {
-					if pool.Name == "" {
-						t.Fatal("Pools returned a Pool with an empty name")
-					}
-				}
-			},
-		},
 	}
-	for _, method := range methods {
-		t.Run(method.name, func(t *testing.T) {
+	reads := append(bespokeReads, declared...)
+	for _, read := range reads {
+		t.Run(read.name, func(t *testing.T) {
 			t.Run("Success", func(t *testing.T) {
-				method.verifySuccess(t, factory(t, ScenarioSuccess))
+				read.verifySuccess(t, factory(t, ScenarioSuccess))
 			})
 			for _, s := range errorScenarios {
 				t.Run(string(s.scenario), func(t *testing.T) {
@@ -210,24 +255,22 @@ func RunReadProviderSuite(t *testing.T, factory ReadProviderFactory) {
 						t.Logf("provider does not produce scenario %q; skipping", s.scenario)
 						return
 					}
-					err := method.call(context.Background(), p)
+					err := read.call(context.Background(), p)
 					assertErrorClass(t, err, s.class)
 				})
 			}
+			if read.extraSubtests != nil {
+				read.extraSubtests(t, factory(t, ScenarioSuccess))
+			}
 		})
 	}
-	t.Run("HostDevicesUnknownHost", func(t *testing.T) {
-		provider := factory(t, ScenarioSuccess)
-		_, err := provider.HostDevices(context.Background(), "host-device-probe.example.invalid")
-		assertErrorClass(t, err, apperr.NotFound)
-	})
 	t.Run("ContextCancellation", func(t *testing.T) {
 		provider := factory(t, ScenarioSuccess)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		for _, method := range methods {
-			t.Run(method.name, func(t *testing.T) {
-				assertErrorClass(t, method.call(ctx, provider), apperr.Timeout)
+		for _, read := range reads {
+			t.Run(read.name, func(t *testing.T) {
+				assertErrorClass(t, read.call(ctx, provider), apperr.Timeout)
 			})
 		}
 	})
