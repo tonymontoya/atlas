@@ -1,9 +1,13 @@
 package api
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 
+	"github.com/tonymontoya/ceph-atlas/internal/app"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory/entities"
 	"github.com/tonymontoya/ceph-atlas/internal/store"
 )
 
@@ -62,47 +66,69 @@ func (s *Server) clusterHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, health)
 }
 
-func (s *Server) osds(w http.ResponseWriter, r *http.Request) {
-	osds, err := s.app.ClusterInventory.ClusterOSDs(r.Context(), clusterFSID(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, osds)
+// inventoryRead serves one declared entity's rows through the cluster
+// inventory seam. The concrete slice type crosses only into the JSON
+// encoder; handlers never inspect it.
+type inventoryRead func(inv app.ClusterInventory, ctx context.Context, fsid string) (any, error)
+
+// inventoryReadBindings names how the cluster inventory seam serves
+// each declared entity.
+var inventoryReadBindings = map[entities.Entity]inventoryRead{
+	entities.OSDs: func(inv app.ClusterInventory, ctx context.Context, fsid string) (any, error) {
+		return inv.ClusterOSDs(ctx, fsid)
+	},
+	entities.Hosts: func(inv app.ClusterInventory, ctx context.Context, fsid string) (any, error) {
+		return inv.ClusterHosts(ctx, fsid)
+	},
+	entities.StorageDevices: func(inv app.ClusterInventory, ctx context.Context, fsid string) (any, error) {
+		return inv.ClusterStorageDevices(ctx, fsid)
+	},
+	entities.Daemons: func(inv app.ClusterInventory, ctx context.Context, fsid string) (any, error) {
+		return inv.ClusterDaemons(ctx, fsid)
+	},
+	entities.Pools: func(inv app.ClusterInventory, ctx context.Context, fsid string) (any, error) {
+		return inv.ClusterPools(ctx, fsid)
+	},
 }
 
-func (s *Server) hosts(w http.ResponseWriter, r *http.Request) {
-	hosts, err := s.app.ClusterInventory.ClusterHosts(r.Context(), clusterFSID(r))
-	if err != nil {
-		writeError(w, err)
-		return
+// validateInventoryReadBindings fails loudly when a declared entity
+// lacks its read binding.
+func validateInventoryReadBindings(bindings map[entities.Entity]inventoryRead) {
+	for _, entity := range entities.All {
+		if _, ok := bindings[entity]; !ok {
+			panic(fmt.Sprintf("api: declared entity %q has no cluster inventory read binding", entity.Noun))
+		}
 	}
-	writeJSON(w, http.StatusOK, hosts)
 }
 
-func (s *Server) storageDevices(w http.ResponseWriter, r *http.Request) {
-	devices, err := s.app.ClusterInventory.ClusterStorageDevices(r.Context(), clusterFSID(r))
-	if err != nil {
-		writeError(w, err)
-		return
+// clusterEntityRoutes generates one route per declared entity: the
+// entity's Noun addresses it under the cluster scope, and its binding
+// names the seam method that serves it. A declared entity without a
+// binding fails construction loudly; the OpenAPI parity test then
+// proves every generated route is documented and every documented
+// entity path is generated.
+func (s *Server) clusterEntityRoutes() []route {
+	validateInventoryReadBindings(inventoryReadBindings)
+	routes := make([]route, 0, len(entities.All))
+	for _, entity := range entities.All {
+		routes = append(routes, route{
+			method:  http.MethodGet,
+			pattern: "/api/v1/clusters/{fsid}/" + entity.Noun,
+			handler: s.clusterEntityRead(inventoryReadBindings[entity]),
+		})
 	}
-	writeJSON(w, http.StatusOK, devices)
+	return routes
 }
 
-func (s *Server) daemons(w http.ResponseWriter, r *http.Request) {
-	daemons, err := s.app.ClusterInventory.ClusterDaemons(r.Context(), clusterFSID(r))
-	if err != nil {
-		writeError(w, err)
-		return
+// clusterEntityRead adapts one entity's seam read to the shared
+// scoped-read response: the entity's rows, or the seam's error.
+func (s *Server) clusterEntityRead(read inventoryRead) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rows, err := read(s.app.ClusterInventory, r.Context(), clusterFSID(r))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, rows)
 	}
-	writeJSON(w, http.StatusOK, daemons)
-}
-
-func (s *Server) pools(w http.ResponseWriter, r *http.Request) {
-	pools, err := s.app.ClusterInventory.ClusterPools(r.Context(), clusterFSID(r))
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, pools)
 }

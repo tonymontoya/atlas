@@ -28,7 +28,7 @@ type route struct {
 }
 
 func (s *Server) routes() []route {
-	return []route{
+	routes := []route{
 		{"GET", "/healthz", s.healthz},
 		{"GET", "/api/v1/me", s.requireIdentity(s.me)},
 		{"GET", "/api/v1/clusters", s.listClusters},
@@ -36,33 +36,35 @@ func (s *Server) routes() []route {
 		{"GET", "/api/v1/clusters/{id}", s.requireIdentity(s.clusterRegistration)},
 		{"DELETE", "/api/v1/clusters/{id}", s.requireIdentity(s.deregisterCluster)},
 		{"GET", "/api/v1/clusters/{fsid}/health", s.clusterHealth},
-		{"GET", "/api/v1/clusters/{fsid}/osds", s.osds},
-		{"GET", "/api/v1/clusters/{fsid}/hosts", s.hosts},
-		{"GET", "/api/v1/clusters/{fsid}/storage-devices", s.storageDevices},
-		{"GET", "/api/v1/clusters/{fsid}/daemons", s.daemons},
-		{"GET", "/api/v1/clusters/{fsid}/pools", s.pools},
+	}
+	// The cluster-scoped list reads are generated from the entity
+	// declaration: one route and handler per declared entity. Health
+	// and the index above stay hand-registered — singleton- and
+	// page-shaped, not list-shaped.
+	routes = append(routes, s.clusterEntityRoutes()...)
+	return append(routes,
 		// Credential-authenticated, not bearer-authenticated (ADR-0026):
 		// the one-time Enrollment Credential in the body is the auth.
-		{"POST", "/api/v1/agent/enroll", s.enrollAgent},
+		route{"POST", "/api/v1/agent/enroll", s.enrollAgent},
 		// Certificate-authenticated, not bearer-authenticated (ADR-0026):
 		// the enrolled client certificate over mutual TLS is the auth.
-		{"POST", "/api/v1/agent/observations", s.pushAgentObservations},
-		{"GET", "/api/v1/inventory-sync-runs", s.inventorySyncRuns},
-		{"GET", "/api/v1/alert-evaluation-runs", s.alertEvaluationRuns},
-		{"GET", "/api/v1/cases", s.cases},
-		{"POST", "/api/v1/cases", s.requireIdentity(s.createCase)},
-		{"GET", "/api/v1/cases/{id}", s.caseByID},
-		{"GET", "/api/v1/cases/{id}/timeline", s.caseTimeline},
-		{"POST", "/api/v1/cases/{id}/transitions", s.requireIdentity(s.transitionCase)},
-		{"POST", "/api/v1/cases/{id}/assignment", s.requireIdentity(s.assignCase)},
-		{"POST", "/api/v1/cases/{id}/notes", s.requireIdentity(s.addCaseNote)},
-		{"GET", "/api/v1/cases/{id}/notes", s.caseNotes},
-		{"POST", "/api/v1/cases/{id}/workflows", s.requireIdentity(s.attachWorkflow)},
-		{"GET", "/api/v1/cases/{id}/workflows", s.listCaseWorkflows},
-		{"POST", "/api/v1/workflow-instances/{id}/approvals", s.requireIdentity(s.approveWorkflowGate)},
-		{"POST", "/api/v1/workflow-instances/{id}/task-completions", s.requireIdentity(s.completeWorkflowTask)},
-		{"GET", "/api/v1/workflow-instances/{id}/jobs", s.listWorkflowJobs},
-	}
+		route{"POST", "/api/v1/agent/observations", s.pushAgentObservations},
+		route{"GET", "/api/v1/inventory-sync-runs", s.inventorySyncRuns},
+		route{"GET", "/api/v1/alert-evaluation-runs", s.alertEvaluationRuns},
+		route{"GET", "/api/v1/cases", s.cases},
+		route{"POST", "/api/v1/cases", s.requireIdentity(s.createCase)},
+		route{"GET", "/api/v1/cases/{id}", s.caseByID},
+		route{"GET", "/api/v1/cases/{id}/timeline", s.caseTimeline},
+		route{"POST", "/api/v1/cases/{id}/transitions", s.requireIdentity(s.transitionCase)},
+		route{"POST", "/api/v1/cases/{id}/assignment", s.requireIdentity(s.assignCase)},
+		route{"POST", "/api/v1/cases/{id}/notes", s.requireIdentity(s.addCaseNote)},
+		route{"GET", "/api/v1/cases/{id}/notes", s.caseNotes},
+		route{"POST", "/api/v1/cases/{id}/workflows", s.requireIdentity(s.attachWorkflow)},
+		route{"GET", "/api/v1/cases/{id}/workflows", s.listCaseWorkflows},
+		route{"POST", "/api/v1/workflow-instances/{id}/approvals", s.requireIdentity(s.approveWorkflowGate)},
+		route{"POST", "/api/v1/workflow-instances/{id}/task-completions", s.requireIdentity(s.completeWorkflowTask)},
+		route{"GET", "/api/v1/workflow-instances/{id}/jobs", s.listWorkflowJobs},
+	)
 }
 
 func (s *Server) Routes() http.Handler {
