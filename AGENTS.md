@@ -76,7 +76,14 @@ The current implementation supports:
   paginated, health + Agent last-seen), per-cluster detail pages over the
   cluster-scoped reads, global Cases and Sync Runs pages, operator
   bearer-token sign-in, manual Case writes, and Workflow
-  attach/approve/resume forms.
+  attach/approve/resume forms. The load/submit choreography (abort,
+  stale-result ignoring, data retention, double-submit guarding,
+  formatted errors) is centralized in two hook-tested seams —
+  `useResource` and `useMutation` in `web/app/src/resources.ts` — and
+  every page load, the Case detail loader, and every Case-write
+  handler goes through them; the hooks render under jsdom +
+  @testing-library/react, so new load/submit behavior is hook-tested
+  rather than re-authored per page.
 - Agent Enrollment (ADR-0026): `POST /api/v1/agent/enroll` exchanges a
   CSR plus the one-time Enrollment Credential for a client certificate
   from an internal CA, burning the credential and binding the Cluster's

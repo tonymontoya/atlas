@@ -9,7 +9,7 @@ import {
   TextInput,
 } from "@carbon/react";
 import { createCase, type CaseRecord } from "../../api";
-import { errorMessage } from "../../format";
+import { useMutation } from "../../resources";
 
 const SEVERITIES: CaseRecord["severity"][] = ["info", "low", "medium", "high", "critical"];
 
@@ -26,35 +26,37 @@ export function CaseComposePanel({
   const [summary, setSummary] = React.useState("");
   const [severity, setSeverity] = React.useState<CaseRecord["severity"]>("medium");
   const [clusterFsid, setClusterFsid] = React.useState(defaultClusterFsid ?? "");
-  const [busy, setBusy] = React.useState(false);
-  const [composeError, setComposeError] = React.useState<string | null>(null);
+  // run resolves a boolean by contract, so the action stashes the
+  // created record for the success path to hand to onCreated.
+  const lastCreated = React.useRef<CaseRecord | null>(null);
+  const create = useMutation(async (input: {
+    title: string;
+    summary: string;
+    severity: CaseRecord["severity"];
+    clusterFsid?: string;
+  }) => {
+    lastCreated.current = await createCase(input, token);
+  });
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy || title.trim() === "" || summary.trim() === "") {
+    if (title.trim() === "" || summary.trim() === "") {
       return;
     }
-    try {
-      setBusy(true);
-      setComposeError(null);
-      const created = await createCase(
-        {
-          title: title.trim(),
-          summary: summary.trim(),
-          severity,
-          clusterFsid: clusterFsid.trim() === "" ? undefined : clusterFsid.trim(),
-        },
-        token,
-      );
+    lastCreated.current = null;
+    const ok = await create.run({
+      title: title.trim(),
+      summary: summary.trim(),
+      severity,
+      clusterFsid: clusterFsid.trim() === "" ? undefined : clusterFsid.trim(),
+    });
+    const created = lastCreated.current;
+    if (ok && created) {
       setTitle("");
       setSummary("");
       setSeverity("medium");
       setClusterFsid(defaultClusterFsid ?? "");
       onCreated(created);
-    } catch (submitError) {
-      setComposeError(errorMessage(submitError));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -105,10 +107,13 @@ export function CaseComposePanel({
           </Column>
         </Grid>
         <div className="atlas-action-row">
-          <Button type="submit" disabled={busy || title.trim() === "" || summary.trim() === ""}>
-            {busy ? "Creating…" : "Create case"}
+          <Button
+            type="submit"
+            disabled={create.busy || title.trim() === "" || summary.trim() === ""}
+          >
+            {create.busy ? "Creating…" : "Create case"}
           </Button>
-          {composeError ? <p className="atlas-form-error">{composeError}</p> : null}
+          {create.error ? <p className="atlas-form-error">{create.error}</p> : null}
         </div>
       </form>
     </section>

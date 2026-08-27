@@ -1,7 +1,8 @@
 import React from "react";
 import { Button, TextArea } from "@carbon/react";
 import { addCaseNote, type CaseNote, type Operator } from "../../api";
-import { formatDate, errorMessage } from "../../format";
+import { formatDate } from "../../format";
+import { useMutation } from "../../resources";
 import { EmptyState } from "../ui";
 
 export function CaseNotes({
@@ -22,24 +23,17 @@ export function CaseNotes({
   onChanged: () => void;
 }) {
   const [body, setBody] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const [noteError, setNoteError] = React.useState<string | null>(null);
+  const add = useMutation((trimmedBody: string) => addCaseNote(caseID, trimmedBody, token ?? ""));
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy || body.trim() === "" || !token) {
+    if (body.trim() === "" || !token) {
       return;
     }
-    try {
-      setBusy(true);
-      setNoteError(null);
-      await addCaseNote(caseID, body.trim(), token);
+    const ok = await add.run(body.trim());
+    if (ok) {
       setBody("");
       onChanged();
-    } catch (submitError) {
-      setNoteError(errorMessage(submitError));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -77,10 +71,15 @@ export function CaseNotes({
             onChange={(event) => setBody(event.target.value)}
           />
           <div className="atlas-action-row">
-            <Button type="submit" size="sm" kind="secondary" disabled={busy || body.trim() === ""}>
-              {busy ? "Adding…" : "Add note"}
+            <Button
+              type="submit"
+              size="sm"
+              kind="secondary"
+              disabled={add.busy || body.trim() === ""}
+            >
+              {add.busy ? "Adding…" : "Add note"}
             </Button>
-            {noteError ? <p className="atlas-form-error">{noteError}</p> : null}
+            {add.error ? <p className="atlas-form-error">{add.error}</p> : null}
           </div>
         </form>
       ) : null}

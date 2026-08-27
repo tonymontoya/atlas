@@ -2,7 +2,7 @@ import React from "react";
 import { Button, TextInput } from "@carbon/react";
 import { assignCase, transitionCase, type CaseRecord } from "../../api";
 import { availableCaseActions } from "../../caseActions";
-import { errorMessage } from "../../format";
+import { useMutation } from "../../resources";
 
 export function CaseActions({
   detail,
@@ -13,24 +13,14 @@ export function CaseActions({
   token: string;
   onChanged: () => void;
 }) {
-  const [busy, setBusy] = React.useState(false);
-  const [actionError, setActionError] = React.useState<string | null>(null);
   const [assignee, setAssignee] = React.useState("");
   const [assigneeName, setAssigneeName] = React.useState("");
+  const mutation = useMutation((action: () => Promise<unknown>) => action());
 
   async function run(action: () => Promise<unknown>) {
-    if (busy) {
-      return;
-    }
-    try {
-      setBusy(true);
-      setActionError(null);
-      await action();
+    const ok = await mutation.run(action);
+    if (ok) {
       onChanged();
-    } catch (actionThrown) {
-      setActionError(errorMessage(actionThrown));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -43,7 +33,7 @@ export function CaseActions({
         {actions.canTriage ? (
           <Button
             size="sm"
-            disabled={busy}
+            disabled={mutation.busy}
             onClick={() => run(() => transitionCase(detail.id, "triaged", token))}
           >
             Triage
@@ -53,7 +43,7 @@ export function CaseActions({
           <Button
             size="sm"
             kind="danger"
-            disabled={busy}
+            disabled={mutation.busy}
             onClick={() => run(() => transitionCase(detail.id, "closed", token))}
           >
             Close case
@@ -84,7 +74,7 @@ export function CaseActions({
             <Button
               size="sm"
               kind="secondary"
-              disabled={busy || !assignFormReady}
+              disabled={mutation.busy || !assignFormReady}
               onClick={() =>
                 run(async () => {
                   await assignCase(detail.id, assignee.trim(), assigneeName.trim(), token);
@@ -98,7 +88,7 @@ export function CaseActions({
             <Button
               size="sm"
               kind="ghost"
-              disabled={busy || !detail.assignee}
+              disabled={mutation.busy || !detail.assignee}
               onClick={() => run(() => assignCase(detail.id, "", "", token))}
             >
               Unassign
@@ -106,7 +96,7 @@ export function CaseActions({
           </div>
         )}
       </div>
-      {actionError ? <p className="atlas-form-error">{actionError}</p> : null}
+      {mutation.error ? <p className="atlas-form-error">{mutation.error}</p> : null}
     </div>
   );
 }

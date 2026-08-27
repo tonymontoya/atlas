@@ -7,7 +7,8 @@ import {
   type WorkflowInstanceRecord,
   type WorkflowJobRecord,
 } from "../../api";
-import { formatDate, errorMessage } from "../../format";
+import { formatDate } from "../../format";
+import { useMutation } from "../../resources";
 import { toneForJobState, toneForWorkflowState } from "../../tones";
 import { EmptyState, StatusTag } from "../ui";
 
@@ -32,24 +33,19 @@ export function CaseWorkflows({
 }) {
   const [workflowID, setWorkflowID] = React.useState("replace-osd");
   const [workflowVersion, setWorkflowVersion] = React.useState("1");
-  const [busy, setBusy] = React.useState(false);
-  const [attachError, setAttachError] = React.useState<string | null>(null);
+  const attach = useMutation((input: { workflowId: string; version: number }) =>
+    attachCaseWorkflow(caseID, input.workflowId, input.version, token ?? ""),
+  );
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const version = Number.parseInt(workflowVersion, 10);
-    if (busy || workflowID.trim() === "" || !Number.isInteger(version) || version < 1 || !token) {
+    if (workflowID.trim() === "" || !Number.isInteger(version) || version < 1 || !token) {
       return;
     }
-    try {
-      setBusy(true);
-      setAttachError(null);
-      await attachCaseWorkflow(caseID, workflowID.trim(), version, token);
+    const ok = await attach.run({ workflowId: workflowID.trim(), version });
+    if (ok) {
       onChanged();
-    } catch (thrown) {
-      setAttachError(errorMessage(thrown));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -136,10 +132,10 @@ export function CaseWorkflows({
             value={workflowVersion}
             onChange={(event) => setWorkflowVersion(event.target.value)}
           />
-          <Button type="submit" size="sm" kind="secondary" disabled={busy || !formReady}>
-            {busy ? "Attaching…" : "Attach workflow"}
+          <Button type="submit" size="sm" kind="secondary" disabled={attach.busy || !formReady}>
+            {attach.busy ? "Attaching…" : "Attach workflow"}
           </Button>
-          {attachError ? <p className="atlas-form-error">{attachError}</p> : null}
+          {attach.error ? <p className="atlas-form-error">{attach.error}</p> : null}
         </form>
       ) : null}
     </section>
@@ -158,24 +154,16 @@ function WorkflowApproveForm({
   onChanged: () => void;
 }) {
   const [reason, setReason] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const [approveError, setApproveError] = React.useState<string | null>(null);
+  const approve = useMutation((trimmedReason: string) =>
+    approveWorkflowGate(instanceID, gateID, trimmedReason, token),
+  );
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy) {
-      return;
-    }
-    try {
-      setBusy(true);
-      setApproveError(null);
-      await approveWorkflowGate(instanceID, gateID, reason.trim(), token);
+    const ok = await approve.run(reason.trim());
+    if (ok) {
       setReason("");
       onChanged();
-    } catch (thrown) {
-      setApproveError(errorMessage(thrown));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -190,9 +178,9 @@ function WorkflowApproveForm({
         onChange={(event) => setReason(event.target.value)}
       />
       <Button type="submit" size="sm">
-        {busy ? "Approving…" : `Approve ${gateID}`}
+        {approve.busy ? "Approving…" : `Approve ${gateID}`}
       </Button>
-      {approveError ? <p className="atlas-form-error">{approveError}</p> : null}
+      {approve.error ? <p className="atlas-form-error">{approve.error}</p> : null}
     </form>
   );
 }
@@ -209,24 +197,16 @@ function WorkflowResumeForm({
   onChanged: () => void;
 }) {
   const [note, setNote] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const [resumeError, setResumeError] = React.useState<string | null>(null);
+  const resume = useMutation((trimmedNote: string) =>
+    completeWorkflowTask(instanceID, taskID, trimmedNote, token),
+  );
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy) {
-      return;
-    }
-    try {
-      setBusy(true);
-      setResumeError(null);
-      await completeWorkflowTask(instanceID, taskID, note.trim(), token);
+    const ok = await resume.run(note.trim());
+    if (ok) {
       setNote("");
       onChanged();
-    } catch (thrown) {
-      setResumeError(errorMessage(thrown));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -241,9 +221,9 @@ function WorkflowResumeForm({
         onChange={(event) => setNote(event.target.value)}
       />
       <Button type="submit" size="sm">
-        {busy ? "Resuming…" : `Done: ${taskID}`}
+        {resume.busy ? "Resuming…" : `Done: ${taskID}`}
       </Button>
-      {resumeError ? <p className="atlas-form-error">{resumeError}</p> : null}
+      {resume.error ? <p className="atlas-form-error">{resume.error}</p> : null}
     </form>
   );
 }
