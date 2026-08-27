@@ -1,14 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Column, Grid, Pagination, Search } from "@carbon/react";
-import { listClusters, type ClusterIndex } from "../api";
+import { listClusters } from "../api";
 import {
   agentLastSeenLabel,
   clusterRoute,
   healthStatusLabel,
   offsetForPage,
 } from "../clusters";
-import { errorMessage } from "../format";
+import { useResource } from "../resources";
 import { toneForHealth } from "../tones";
 import { AtlasTable } from "../components/tables";
 import { ErrorState, PageIntro, StatusTag } from "../components/ui";
@@ -21,9 +21,19 @@ export function ClusterIndexPage() {
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
-  const [index, setIndex] = React.useState<ClusterIndex | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+
+  const index = useResource(
+    (signal) =>
+      listClusters(
+        {
+          q: debouncedQuery === "" ? undefined : debouncedQuery,
+          limit: pageSize,
+          offset: offsetForPage(page, pageSize),
+        },
+        signal,
+      ),
+    [debouncedQuery, page, pageSize],
+  );
 
   React.useEffect(() => {
     setPage(1);
@@ -33,41 +43,8 @@ export function ClusterIndexPage() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  React.useEffect(() => {
-    const controller = new AbortController();
-
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-        const loaded = await listClusters(
-          {
-            q: debouncedQuery === "" ? undefined : debouncedQuery,
-            limit: pageSize,
-            offset: offsetForPage(page, pageSize),
-          },
-          controller.signal,
-        );
-        setIndex(loaded);
-      } catch (loadError) {
-        if (controller.signal.aborted) {
-          return;
-        }
-        setError(errorMessage(loadError));
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => controller.abort();
-  }, [debouncedQuery, page, pageSize]);
-
-  const rows = index?.clusters ?? [];
-  const total = index?.total ?? 0;
+  const rows = index.data?.clusters ?? [];
+  const total = index.data?.total ?? 0;
 
   return (
     <>
@@ -88,9 +65,11 @@ export function ClusterIndexPage() {
           />
         </Column>
       </Grid>
-      {error ? <ErrorState message={error} /> : null}
-      {!error && loading && !index ? <p className="atlas-empty">Loading clusters…</p> : null}
-      {index ? (
+      {index.error ? <ErrorState message={index.error} /> : null}
+      {!index.error && index.loading && !index.data ? (
+        <p className="atlas-empty">Loading clusters…</p>
+      ) : null}
+      {index.data ? (
         <AtlasTable
           columns={[
             {

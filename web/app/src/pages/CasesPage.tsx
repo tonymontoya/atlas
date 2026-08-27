@@ -1,43 +1,14 @@
 import React from "react";
-import { listCases, type CaseRecord } from "../api";
+import { listCases } from "../api";
 import { CasesSection } from "../components/cases";
 import { OperatorPanel } from "../components/OperatorPanel";
 import { ErrorState, PageIntro } from "../components/ui";
-import { errorMessage } from "../format";
+import { useResource } from "../resources";
 import { useOperator } from "../operator";
 
 export function CasesPage() {
-  const [cases, setCases] = React.useState<CaseRecord[] | null>(null);
-  const [casesError, setCasesError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [reloadKey, setReloadKey] = React.useState(0);
+  const cases = useResource((signal) => listCases({}, signal), []);
   const { operator, token, signIn, signOut } = useOperator();
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-
-    async function load() {
-      try {
-        setLoading(true);
-        setCasesError(null);
-        const loaded = await listCases({}, controller.signal);
-        setCases(loaded);
-      } catch (loadError) {
-        if (controller.signal.aborted) {
-          return;
-        }
-        setCasesError(errorMessage(loadError));
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => controller.abort();
-  }, [reloadKey]);
 
   return (
     <>
@@ -47,15 +18,15 @@ export function CasesPage() {
         operator token.
       </PageIntro>
       <OperatorPanel operator={operator} onSignIn={signIn} onSignOut={signOut} />
-      {loading && !cases ? <p className="atlas-empty">Loading cases…</p> : null}
-      {casesError ? <ErrorState message={casesError} /> : null}
-      {cases || casesError ? (
+      {cases.loading && !cases.data ? <p className="atlas-empty">Loading cases…</p> : null}
+      {cases.error ? <ErrorState message={cases.error} /> : null}
+      {cases.data || cases.error ? (
         <CasesSection
-          cases={cases ?? []}
+          cases={cases.data ?? []}
           operator={operator}
           token={token}
-          onCaseCreated={() => setReloadKey((key) => key + 1)}
-          onCasesChanged={() => setReloadKey((key) => key + 1)}
+          onCaseCreated={cases.reload}
+          onCasesChanged={cases.reload}
         />
       ) : null}
     </>

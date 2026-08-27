@@ -13,7 +13,7 @@ import {
 } from "../components/inventoryTables";
 import { ErrorState, MetricTile, PageIntro, StatusTag } from "../components/ui";
 import { useOperator } from "../operator";
-import { errorMessage } from "../format";
+import { useResource } from "../resources";
 import { stoppedDaemonCount } from "../inventory";
 import { agentLastSeenLabel, healthStatusLabel } from "../clusters";
 import { toneForHealth } from "../tones";
@@ -23,58 +23,22 @@ import { toneForHealth } from "../tones";
 // cluster's Cases — all keyed by the FSID in the route.
 export function ClusterDetailPage() {
   const { fsid } = useParams();
-  const [view, setView] = React.useState<ClusterView | null>(null);
-  const [notFound, setNotFound] = React.useState(false);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [reloadKey, setReloadKey] = React.useState(0);
   const { operator, token, signIn, signOut } = useOperator();
 
-  React.useEffect(() => {
-    if (!fsid) {
-      return;
-    }
-    const clusterFSID = fsid;
-    const controller = new AbortController();
-
-    async function load() {
-      try {
-        setLoading(true);
-        setError(null);
-        setNotFound(false);
-        const loaded = await loadClusterView(clusterFSID, controller.signal);
-        if ("notFound" in loaded) {
-          setView(null);
-          setNotFound(true);
-        } else {
-          setView(loaded);
-        }
-      } catch (loadError) {
-        if (controller.signal.aborted) {
-          return;
-        }
-        setError(errorMessage(loadError));
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => controller.abort();
-  }, [fsid, reloadKey]);
+  const view = useResource(
+    fsid ? (signal) => loadClusterView(fsid, signal) : null,
+    [fsid],
+  );
 
   if (!fsid) {
     return <ErrorState message="No cluster FSID in the route." />;
   }
 
-  if (loading && !view && !notFound) {
+  if (view.loading && !view.data) {
     return <p className="atlas-empty">Loading cluster…</p>;
   }
 
-  if (notFound) {
+  if (view.data && "notFound" in view.data) {
     return (
       <div>
         <InlineNotification
@@ -90,11 +54,12 @@ export function ClusterDetailPage() {
     );
   }
 
-  if (error || !view) {
-    return <ErrorState message={error ?? "No cluster data returned."} />;
+  if (view.error || !view.data) {
+    return <ErrorState message={view.error ?? "No cluster data returned."} />;
   }
 
-  const { cluster, health, osds, hosts, storageDevices, daemons, pools, cases } = view;
+  const clusterView: ClusterView = view.data;
+  const { cluster, health, osds, hosts, storageDevices, daemons, pools, cases } = clusterView;
   const downOsds = osds.filter((osd) => !osd.up).length;
   const outOsds = osds.filter((osd) => !osd.in).length;
   const stoppedDaemons = stoppedDaemonCount(daemons);
@@ -189,12 +154,12 @@ export function ClusterDetailPage() {
         <h2 className="atlas-panel-heading">Cases</h2>
         <CasesSection
           cases={cases}
-          casesUnavailable={view.casesUnavailable}
+          casesUnavailable={clusterView.casesUnavailable}
           operator={operator}
           token={token}
           defaultClusterFsid={cluster.fsid ?? undefined}
-          onCaseCreated={() => setReloadKey((key) => key + 1)}
-          onCasesChanged={() => setReloadKey((key) => key + 1)}
+          onCaseCreated={view.reload}
+          onCasesChanged={view.reload}
         />
       </section>
     </>
