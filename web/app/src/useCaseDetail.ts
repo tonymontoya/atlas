@@ -83,6 +83,8 @@ export function useCaseDetail(caseID: number | null, reloadKey: number): CaseDet
     workflows: workflows.data ?? [],
     workflowJobs: jobs.data ?? {},
     workflowsError: workflows.error,
-    workflowsLoading: workflows.loading,
+    // The old loader kept this true until the Job fan-out assembled,
+    // so the panel never renders instances before their Jobs.
+    workflowsLoading: workflows.loading || jobs.loading,
   };
 }

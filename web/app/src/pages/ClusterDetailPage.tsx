@@ -34,7 +34,7 @@ export function ClusterDetailPage() {
     return <ErrorState message="No cluster FSID in the route." />;
   }
 
-  if (view.loading && !view.data) {
+  if (view.loading && (!view.data || "notFound" in view.data)) {
     return <p className="atlas-empty">Loading cluster…</p>;
   }
 
