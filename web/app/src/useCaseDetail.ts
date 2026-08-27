@@ -1,18 +1,16 @@
-import React from "react";
 import {
   loadCase,
   loadCaseNotes,
   loadCaseTimeline,
   loadCaseWorkflows,
   loadWorkflowJobs,
-  settle,
   type CaseNote,
   type CaseRecord,
   type TimelineEvent,
   type WorkflowInstanceRecord,
   type WorkflowJobRecord,
 } from "./api";
-import { errorMessage } from "./format";
+import { useResource } from "./resources";
 
 export type CaseDetailState = {
   detail: CaseRecord | null;
@@ -31,158 +29,60 @@ export type CaseDetailState = {
 };
 
 // useCaseDetail loads one Case with its Timeline Events, Notes, and
-// Workflow Instances (plus per-instance Jobs) whenever the selection or
-// the reload counter changes. Writes bump the reload counter through the
-// returned refresh function so every section re-reads together.
+// Workflow Instances (plus per-instance Jobs) whenever the selection
+// or the reload key changes. Each section is an independent resource:
+// a null selection idles every fetcher, and a failed section shows its
+// own error without blanking the others. The Jobs fan-out is its own
+// resource that runs once the Workflow Instances are known.
 export function useCaseDetail(caseID: number | null, reloadKey: number): CaseDetailState {
-  const [detail, setDetail] = React.useState<CaseRecord | null>(null);
-  const [detailError, setDetailError] = React.useState<string | null>(null);
-  const [detailLoading, setDetailLoading] = React.useState(false);
-  const [timeline, setTimeline] = React.useState<TimelineEvent[]>([]);
-  const [timelineError, setTimelineError] = React.useState<string | null>(null);
-  const [timelineLoading, setTimelineLoading] = React.useState(false);
-  const [notes, setNotes] = React.useState<CaseNote[]>([]);
-  const [notesError, setNotesError] = React.useState<string | null>(null);
-  const [notesLoading, setNotesLoading] = React.useState(false);
-  const [workflows, setWorkflows] = React.useState<WorkflowInstanceRecord[]>([]);
-  const [workflowJobs, setWorkflowJobs] = React.useState<Record<number, WorkflowJobRecord[]>>({});
-  const [workflowsError, setWorkflowsError] = React.useState<string | null>(null);
-  const [workflowsLoading, setWorkflowsLoading] = React.useState(false);
+  const detail = useResource(
+    caseID === null ? null : (signal) => loadCase(caseID, signal),
+    [caseID, reloadKey],
+  );
+  const timeline = useResource(
+    caseID === null ? null : (signal) => loadCaseTimeline(caseID, signal),
+    [caseID, reloadKey],
+  );
+  const notes = useResource(
+    caseID === null ? null : (signal) => loadCaseNotes(caseID, signal),
+    [caseID, reloadKey],
+  );
+  const workflows = useResource(
+    caseID === null ? null : (signal) => loadCaseWorkflows(caseID, signal),
+    [caseID, reloadKey],
+  );
 
-  React.useEffect(() => {
-    if (caseID === null) {
-      setDetail(null);
-      setDetailError(null);
-      setDetailLoading(false);
-      setTimeline([]);
-      setTimelineError(null);
-      setTimelineLoading(false);
-      setNotes([]);
-      setNotesError(null);
-      setNotesLoading(false);
-      setWorkflows([]);
-      setWorkflowJobs({});
-      setWorkflowsError(null);
-      setWorkflowsLoading(false);
-      return;
-    }
-
-    const id = caseID;
-    const controller = new AbortController();
-
-    async function loadSelectedCase() {
-      try {
-        setDetailLoading(true);
-        setTimelineLoading(true);
-        setNotesLoading(true);
-        setWorkflowsLoading(true);
-        setDetailError(null);
-        setTimelineError(null);
-        setNotesError(null);
-        setWorkflowsError(null);
-
-        const [detailResult, timelineResult, notesResult, workflowsResult] = await Promise.all([
-          settle(loadCase(id, controller.signal)),
-          settle(loadCaseTimeline(id, controller.signal)),
-          settle(loadCaseNotes(id, controller.signal)),
-          settle(loadCaseWorkflows(id, controller.signal)),
-        ]);
-
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        if (detailResult.ok) {
-          setDetail(detailResult.value);
-        } else {
-          setDetail(null);
-          setDetailError(errorMessage(detailResult.error));
-          setTimeline([]);
-          setTimelineError(null);
-          setNotes([]);
-          setNotesError(null);
-          setWorkflows([]);
-          setWorkflowJobs({});
-          setWorkflowsError(null);
-          return;
-        }
-
-        if (timelineResult.ok) {
-          setTimeline(timelineResult.value);
-        } else {
-          setTimeline([]);
-          setTimelineError(errorMessage(timelineResult.error));
-        }
-
-        if (notesResult.ok) {
-          setNotes(notesResult.value);
-        } else {
-          setNotes([]);
-          setNotesError(errorMessage(notesResult.error));
-        }
-
-        if (workflowsResult.ok) {
-          setWorkflows(workflowsResult.value);
-          const jobEntries = await Promise.all(
-            workflowsResult.value.map(async (instance) => {
+  const workflowInstances = workflows.data;
+  const jobs = useResource(
+    workflowInstances === null
+      ? null
+      : (signal) =>
+          Promise.all(
+            workflowInstances.map(async (instance) => {
               try {
-                const jobs = await loadWorkflowJobs(instance.id, controller.signal);
-                return [instance.id, jobs] as const;
+                const loaded = await loadWorkflowJobs(instance.id, signal);
+                return [instance.id, loaded] as const;
               } catch {
                 return [instance.id, []] as const;
               }
             }),
-          );
-          if (controller.signal.aborted) {
-            return;
-          }
-          setWorkflowJobs(Object.fromEntries(jobEntries));
-        } else {
-          setWorkflows([]);
-          setWorkflowJobs({});
-          setWorkflowsError(errorMessage(workflowsResult.error));
-        }
-      } catch (loadError) {
-        if (controller.signal.aborted) {
-          return;
-        }
-        setDetail(null);
-        setTimeline([]);
-        setNotes([]);
-        setWorkflows([]);
-        setWorkflowJobs({});
-        setDetailError(errorMessage(loadError));
-        setTimelineError(errorMessage(loadError));
-        setNotesError(errorMessage(loadError));
-        setWorkflowsError(errorMessage(loadError));
-      } finally {
-        if (!controller.signal.aborted) {
-          setDetailLoading(false);
-          setTimelineLoading(false);
-          setNotesLoading(false);
-          setWorkflowsLoading(false);
-        }
-      }
-    }
-
-    void loadSelectedCase();
-
-    return () => controller.abort();
-  }, [caseID, reloadKey]);
+          ).then((entries) => Object.fromEntries(entries)),
+    [workflowInstances],
+  );
 
   return {
-    detail,
-    detailError,
-    detailLoading,
-    timeline,
-    timelineError,
-    timelineLoading,
-    notes,
-    notesError,
-    notesLoading,
-    workflows,
-    workflowJobs,
-    workflowsError,
-    workflowsLoading,
+    detail: detail.data,
+    detailError: detail.error,
+    detailLoading: detail.loading,
+    timeline: timeline.data ?? [],
+    timelineError: timeline.error,
+    timelineLoading: timeline.loading,
+    notes: notes.data ?? [],
+    notesError: notes.error,
+    notesLoading: notes.loading,
+    workflows: workflows.data ?? [],
+    workflowJobs: jobs.data ?? {},
+    workflowsError: workflows.error,
+    workflowsLoading: workflows.loading,
   };
 }
