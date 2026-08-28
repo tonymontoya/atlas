@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,23 +12,27 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 	"github.com/tonymontoya/ceph-atlas/internal/fleet"
 	"github.com/tonymontoya/ceph-atlas/internal/inventory"
+	"github.com/tonymontoya/ceph-atlas/internal/inventory/entities"
 	"github.com/tonymontoya/ceph-atlas/internal/testdb"
 )
 
 const (
 	clusterReadsFSIDA = "00000000-0000-4000-8000-000000000901"
 	clusterReadsFSIDB = "00000000-0000-4000-8000-000000000902"
+	clusterReadsFSIDC = "00000000-0000-4000-8000-000000000903"
 )
 
 func cleanupClusterReadsRows(t *testing.T, db *sql.DB) {
 	t.Helper()
-	testdb.DeleteClusters(t, db, "fsid::text IN ($1, $2)", clusterReadsFSIDA, clusterReadsFSIDB)
+	testdb.DeleteClusters(t, db, "fsid::text IN ($1, $2, $3)", clusterReadsFSIDA, clusterReadsFSIDB, clusterReadsFSIDC)
 	testdb.DeleteClusters(t, db, "name LIKE 'store-clusterreads-nofsid%'")
 }
 
-// seedClusterReads persists two clusters with distinct entity sets in
+// seedClusterReads persists three clusters with distinct entity sets in
 // the same database: A is a fake-provider sync (osd 10, one host), B is
-// an agent push (osd 20/21, two hosts, a down OSD, its own pools).
+// an agent push (osd 20/21, two hosts, a down OSD, its own pools), and
+// C is a fake-provider sync carrying health only — the known cluster
+// whose latest snapshot lacks every list entity.
 func seedClusterReads(t *testing.T, store *PostgresStore) {
 	t.Helper()
 	ctx := context.Background()
@@ -71,6 +76,11 @@ func seedClusterReads(t *testing.T, store *PostgresStore) {
 	b.Pools = []inventory.Pool{{ID: 2, Name: "pool-b", Type: "replicated"}}
 	if _, err := store.SaveInventoryObservation(ctx, b); err != nil {
 		t.Fatalf("seed cluster B: %v", err)
+	}
+
+	c := base(clusterReadsFSIDC, "clusterreads-c", "fake")
+	if _, err := store.SaveInventoryObservation(ctx, c); err != nil {
+		t.Fatalf("seed cluster C: %v", err)
 	}
 }
 
@@ -145,7 +155,43 @@ func TestClusterScopedReadsIsolateClusters(t *testing.T) {
 	}
 }
 
-func TestClusterScopedReadsReportNotFound(t *testing.T) {
+// callDeclaredEntityRead invokes the store method the entity names. The
+// completeness test pins the scoped-read signature to
+// (context.Context, string) ([]T, error), so a registry loop can
+// exercise every declared entity without a per-entity test entry.
+func callDeclaredEntityRead(t *testing.T, store *PostgresStore, ctx context.Context, entity entities.Entity, fsid string) (reflect.Value, error) {
+	t.Helper()
+	method := reflect.ValueOf(store).MethodByName(entity.StoreMethod)
+	if !method.IsValid() {
+		t.Fatalf("declared entity %q names store method %s, which does not exist", entity.Noun, entity.StoreMethod)
+	}
+	results := method.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(fsid)})
+	err, _ := results[1].Interface().(error)
+	return results[0], err
+}
+
+// requireScopedNotFound asserts the scoped-read failure: the apperr
+// NotFound class with exactly the wanted message.
+func requireScopedNotFound(t *testing.T, err error, message string) {
+	t.Helper()
+	var appErr apperr.Error
+	if !errors.As(err, &appErr) || appErr.Class != apperr.NotFound {
+		t.Fatalf("error = %v, want NotFound (%q)", err, message)
+	}
+	if appErr.Message != message {
+		t.Fatalf("message = %q, want %q", appErr.Message, message)
+	}
+}
+
+// TestEveryDeclaredEntityScopedRead loops the entity registry: every
+// declared entity's store read must report the shared unknown-cluster
+// failure for an unknown or malformed FSID, its declared not-found
+// message for a known cluster whose latest snapshot lacks the entity
+// (ADR-0014), and at least one row through its scan for a cluster that
+// observed it. A newly declared entity without working view SQL, scan
+// wiring, or seed coverage fails here against real Postgres, not only
+// in the completeness shape check.
+func TestEveryDeclaredEntityScopedRead(t *testing.T) {
 	db, _ := testdb.Open(t)
 	store := NewPostgres(db)
 	cleanupClusterReadsRows(t, db)
@@ -153,46 +199,46 @@ func TestClusterScopedReadsReportNotFound(t *testing.T) {
 	seedClusterReads(t, store)
 	ctx := context.Background()
 
-	reads := []struct {
-		name string
-		call func() error
-	}{
-		{"health", func() error { _, err := store.ClusterHealth(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
-		{"osds", func() error { _, err := store.ClusterOSDs(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
-		{"hosts", func() error { _, err := store.ClusterHosts(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
-		{"devices", func() error {
-			_, err := store.ClusterStorageDevices(ctx, "00000000-0000-4000-8000-0000000009ff")
-			return err
-		}},
-		{"daemons", func() error { _, err := store.ClusterDaemons(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
-		{"pools", func() error { _, err := store.ClusterPools(ctx, "00000000-0000-4000-8000-0000000009ff"); return err }},
-		{"malformed fsid", func() error { _, err := store.ClusterPools(ctx, "not-a-uuid"); return err }},
-	}
-	for _, read := range reads {
-		t.Run(read.name, func(t *testing.T) {
-			err := read.call()
-			var appErr apperr.Error
-			if !errors.As(err, &appErr) || appErr.Class != apperr.NotFound {
-				t.Fatalf("error = %v, want NotFound", err)
+	for _, entity := range entities.All {
+		t.Run(entity.Noun, func(t *testing.T) {
+			for _, fsid := range []string{
+				"00000000-0000-4000-8000-0000000009ff",
+				"not-a-uuid",
+			} {
+				_, err := callDeclaredEntityRead(t, store, ctx, entity, fsid)
+				requireScopedNotFound(t, err, "cluster not found")
 			}
-			if appErr.Message != "cluster not found" {
-				t.Fatalf("message = %q, want the unknown-cluster message", appErr.Message)
+
+			_, err := callDeclaredEntityRead(t, store, ctx, entity, clusterReadsFSIDC)
+			requireScopedNotFound(t, err, entity.NotFound)
+
+			rows, err := callDeclaredEntityRead(t, store, ctx, entity, clusterReadsFSIDB)
+			if err != nil {
+				t.Fatalf("read for the fully-seeded cluster: %v", err)
+			}
+			if rows.Len() < 1 {
+				t.Fatalf("fully-seeded cluster served no rows; seed cluster B for entity %q", entity.Noun)
 			}
 		})
 	}
+}
 
-	// Cluster A observed no devices: known cluster, missing entity.
-	if _, err := store.ClusterStorageDevices(ctx, clusterReadsFSIDA); err == nil {
-		t.Fatal("expected NotFound for a known cluster without device observations")
-	} else {
-		var appErr apperr.Error
-		if !errors.As(err, &appErr) || appErr.Class != apperr.NotFound {
-			t.Fatalf("error = %v, want NotFound", err)
-		}
-		if appErr.Message == "cluster not found" {
-			t.Fatalf("message must distinguish a known cluster: %q", appErr.Message)
-		}
-	}
+// TestClusterScopedReadsReportNotFound covers the singleton-shaped
+// health read, which the entity registry deliberately does not declare;
+// the list entities' scoped not-found behavior loops the registry in
+// TestEveryDeclaredEntityScopedRead.
+func TestClusterScopedReadsReportNotFound(t *testing.T) {
+	db, _ := testdb.Open(t)
+	store := NewPostgres(db)
+	cleanupClusterReadsRows(t, db)
+	t.Cleanup(func() { cleanupClusterReadsRows(t, db) })
+	seedClusterReads(t, store)
+
+	_, err := store.ClusterHealth(context.Background(), "00000000-0000-4000-8000-0000000009ff")
+	requireScopedNotFound(t, err, "cluster not found")
+
+	_, err = store.ClusterHealth(context.Background(), "not-a-uuid")
+	requireScopedNotFound(t, err, "cluster not found")
 }
 
 func TestListClusterSummariesIndexesHealthAndAgentLastSeen(t *testing.T) {
