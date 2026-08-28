@@ -6,6 +6,8 @@ Bearer tokens were rejected because a copyable secret granting standing access r
 
 Go standard library (`crypto/x509`) covers the whole mechanism. v0.7 keeps lifetimes long and renewal manual; v0.9 hardens the same mechanism (shorter lifetimes, automated renewal, revocation lists) rather than replacing it, since operation dispatch joins this identity.
 
+**Amendment, 2026-08-28 (renewal path, #44):** renewal is re-enrollment — always a new registration and a fresh single-use credential, since deregistration burns live credentials and retires certificates. A deregistered Cluster's retained FSID is a stale claim, not an owner: inside the enrollment transaction, binding an FSID first releases it from any deregistered row holding it, then binds immutably on the enrolling registration. Total FSID uniqueness across rows stays (the release is a transfer, not a duplication), so no read model or constraint changes; a live holder still rejects the bind. Deferred to the v0.9 hardening pass: an audit record of the transfer beyond row state (the release is reconstructible from the rows' `fsid` and `updated_at`).
+
 **Consequences**
 
 - Atlas runs an internal CA; its key is control-plane configuration with its own protection story (security checklist; single-zone MVP keeps it on the Atlas host).

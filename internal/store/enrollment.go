@@ -99,8 +99,20 @@ func (s *PostgresStore) EnrollAgent(ctx context.Context, input EnrollAgentInput,
 }
 
 // bindClusterFSIDInTx is the in-transaction core of BindClusterFSID:
-// FSID binds once, immutably, and uniquely across clusters.
+// FSID binds once, immutably, and uniquely across clusters. A fresh
+// enrollment of a physical cluster whose FSID a deregistered row still
+// holds releases that stale claim first (#44, ADR-0026 amendment):
+// total uniqueness stays, the release touches deregistered rows only,
+// and a live holder keeps blocking the bind.
 func bindClusterFSIDInTx(ctx context.Context, tx *sql.Tx, clusterID int64, fsid string) (fleet.ClusterRegistration, error) {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE atlas_clusters
+		SET fsid = NULL, updated_at = now()
+		WHERE fsid = $1::uuid AND deregistered_at IS NOT NULL
+	`, strings.ToLower(fsid)); err != nil {
+		return fleet.ClusterRegistration{}, err
+	}
+
 	row := tx.QueryRowContext(ctx, `
 		UPDATE atlas_clusters
 		SET fsid = $2, updated_at = now()

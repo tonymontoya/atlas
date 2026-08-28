@@ -87,8 +87,11 @@ The current implementation supports:
 - Agent Enrollment (ADR-0026): `POST /api/v1/agent/enroll` exchanges a
   CSR plus the one-time Enrollment Credential for a client certificate
   from an internal CA, burning the credential and binding the Cluster's
-  FSID in one transaction. The CA is control-plane configuration
-  (`ATLAS_ENROLLMENT_CA_CERT_PATH`/`ATLAS_ENROLLMENT_CA_KEY_PATH`,
+  FSID in one transaction. Binding first releases a stale FSID claim
+  from a deregistered row (renewal is re-enrollment with a fresh
+  registration and credential; live holders still conflict, total
+  uniqueness stays — 2026-08-28 amendment). The CA is control-plane
+  configuration (`ATLAS_ENROLLMENT_CA_CERT_PATH`/`ATLAS_ENROLLMENT_CA_KEY_PATH`,
   all-or-none); no default local path configures key material, and tests
   use an in-process test CA (`internal/ca/catest`). Certificates map to
   clusters by recorded serial (migration 000013).
