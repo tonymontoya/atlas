@@ -1,7 +1,6 @@
 package atlasagent
 
 import (
-	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -71,7 +70,7 @@ func mintEnrollment(t *testing.T, authority *catest.TestCA) *Enrollment {
 		t.Fatalf("issue enrollment: %v", err)
 	}
 	chain := catest.ParseChain(t, issued.PEMChain)
-	return &Enrollment{ChainPEM: issued.PEMChain, Leaf: chain[0], Key: key.(crypto.Signer)}
+	return &Enrollment{ChainPEM: issued.PEMChain, Leaf: chain[0], Key: key}
 }
 
 // clusterIdentityFixture is the identity the dashtest dashboard

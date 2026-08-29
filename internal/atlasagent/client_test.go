@@ -52,13 +52,6 @@ func errorEnvelope(w http.ResponseWriter, status int, class, message string) {
 	})
 }
 
-func testTLSOptions(t *testing.T) TLSOptions {
-	t.Helper()
-	authority := catest.New(t)
-	certPath, _ := authority.WriteFiles(t)
-	return TLSOptions{RootCAPath: certPath}
-}
-
 func TestEnrollClientEnrollsAndReturnsEnrollment(t *testing.T) {
 	authority := catest.New(t)
 	enrollment := mintEnrollment(t, authority)
