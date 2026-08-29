@@ -221,7 +221,7 @@ func (c *PushClient) Push(ctx context.Context, batch ObservationBatch) (PushRece
 	if err := json.NewDecoder(response.Body).Decode(&receipt); err != nil {
 		return PushReceipt{}, fmt.Errorf("decode push receipt: %w", err)
 	}
-	return PushReceipt{ClusterID: receipt.ClusterID, SnapshotID: receipt.SnapshotID}, nil
+	return PushReceipt(receipt), nil
 }
 
 // statusError turns a non-2xx Atlas answer into a classified error:
@@ -255,7 +255,7 @@ func newHTTPClient(opts TLSOptions, clientCert *tls.Certificate) (*http.Client, 
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(caPEM) {
-			return nil, fmt.Errorf("Atlas CA bundle %s holds no certificates", opts.RootCAPath)
+			return nil, fmt.Errorf("atlas CA bundle %s holds no certificates", opts.RootCAPath)
 		}
 		tlsConfig.RootCAs = pool
 	}
