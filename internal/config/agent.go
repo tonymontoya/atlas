@@ -131,7 +131,7 @@ func LoadAgent() (AgentConfig, error) {
 		errs = append(errs, errors.New("ATLAS_AGENT_ATLAS_URL is required (for example https://atlas.example.invalid)"))
 	} else if !absoluteURL(cfg.AtlasURL) {
 		errs = append(errs, fmt.Errorf("ATLAS_AGENT_ATLAS_URL %q must be an absolute URL with a scheme (for example https://atlas.example.invalid)", cfg.AtlasURL))
-	} else if atlasScheme(cfg.AtlasURL) != "https" {
+	} else if urlScheme(cfg.AtlasURL) != "https" {
 		errs = append(errs, fmt.Errorf("ATLAS_AGENT_ATLAS_URL %q must use https: observation ingestion requires mutual TLS", cfg.AtlasURL))
 	}
 
@@ -150,9 +150,9 @@ func LoadAgent() (AgentConfig, error) {
 	return cfg, errors.Join(errs...)
 }
 
-// atlasScheme reports the URL's scheme, lowercased; the URL is already
+// urlScheme reports a URL's scheme, lowercased; the URL is already
 // known to parse.
-func atlasScheme(raw string) string {
+func urlScheme(raw string) string {
 	parsed, err := url.Parse(strings.TrimRight(raw, "/"))
 	if err != nil {
 		return ""

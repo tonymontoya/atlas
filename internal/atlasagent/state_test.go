@@ -65,8 +65,8 @@ func TestStateStoreRoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(loaded.Key.Public(), enrollment.Key.Public()) {
 		t.Fatal("loaded key differs from the saved key")
 	}
-	if len(loaded.ChainPEM) == 0 || loaded.KeyPEM == nil {
-		t.Fatal("loaded PEM material is empty")
+	if len(loaded.ChainPEM) == 0 {
+		t.Fatal("loaded chain PEM is empty")
 	}
 
 	// The persisted chain keeps every block, leaf first.

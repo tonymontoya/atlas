@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -136,10 +135,11 @@ func (c *EnrollClient) Enroll(ctx context.Context, request EnrollRequest, key cr
 	if err := json.NewDecoder(response.Body).Decode(&parsed); err != nil {
 		return Enrollment{}, EnrollReceipt{}, fmt.Errorf("decode enrollment response: %w", err)
 	}
-	leaf, _, err := parseCertificateChain([]byte(parsed.Certificate.PEM))
+	chain, err := parseCertificateChain([]byte(parsed.Certificate.PEM))
 	if err != nil {
 		return Enrollment{}, EnrollReceipt{}, fmt.Errorf("issued certificate chain: %w", err)
 	}
+	leaf := chain[0]
 	if parsed.Cluster.FSID == nil || *parsed.Cluster.FSID != request.FSID {
 		return Enrollment{}, EnrollReceipt{}, fmt.Errorf("enrolled cluster fsid %v does not match the requested fsid", parsed.Cluster.FSID)
 	}
@@ -177,9 +177,9 @@ func NewPushClient(baseURL string, enrollment *Enrollment, opts TLSOptions) (*Pu
 	if enrollment == nil {
 		return nil, errors.New("push client requires an enrollment")
 	}
-	rawChain := certificateBlocks(enrollment.ChainPEM)
-	if len(rawChain) == 0 {
-		return nil, errors.New("enrollment holds no certificate chain")
+	rawChain, err := certificateDERs(enrollment.ChainPEM)
+	if err != nil {
+		return nil, fmt.Errorf("enrollment certificate chain: %w", err)
 	}
 	cert := tls.Certificate{
 		Certificate: rawChain,
@@ -268,21 +268,16 @@ func newHTTPClient(opts TLSOptions, clientCert *tls.Certificate) (*http.Client, 
 	}, nil
 }
 
-// certificateBlocks extracts each CERTIFICATE block's DER from a PEM
-// chain, leaf first.
-func certificateBlocks(chainPEM []byte) [][]byte {
-	var blocks [][]byte
-	rest := chainPEM
-	for {
-		var block *pem.Block
-		block, rest = pem.Decode(rest)
-		if block == nil {
-			break
-		}
-		if block.Type != "CERTIFICATE" {
-			continue
-		}
-		blocks = append(blocks, block.Bytes)
+// certificateDERs returns each certificate's DER from a PEM chain,
+// leaf first, for a tls.Certificate.
+func certificateDERs(chainPEM []byte) ([][]byte, error) {
+	chain, err := parseCertificateChain(chainPEM)
+	if err != nil {
+		return nil, err
 	}
-	return blocks
+	ders := make([][]byte, len(chain))
+	for i, certificate := range chain {
+		ders[i] = certificate.Raw
+	}
+	return ders, nil
 }

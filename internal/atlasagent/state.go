@@ -34,7 +34,6 @@ var ErrNoEnrollment = errors.New("no stored enrollment in state directory")
 // matches the leaf.
 type Enrollment struct {
 	ChainPEM []byte
-	KeyPEM   []byte
 	Leaf     *x509.Certificate
 	Key      crypto.Signer
 }
@@ -94,10 +93,11 @@ func (s StateStore) Load() (*Enrollment, error) {
 		return nil, fmt.Errorf("read %s: %w", keyPath, keyErr)
 	}
 
-	leaf, _, err := parseCertificateChain(chainRaw)
+	chain, err := parseCertificateChain(chainRaw)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", certPath, err)
 	}
+	leaf := chain[0]
 
 	keyBlock, _ := pem.Decode(keyRaw)
 	if keyBlock == nil {
@@ -117,31 +117,33 @@ func (s StateStore) Load() (*Enrollment, error) {
 
 	return &Enrollment{
 		ChainPEM: chainRaw,
-		KeyPEM:   pem.EncodeToMemory(keyBlock),
 		Leaf:     leaf,
 		Key:      signer,
 	}, nil
 }
 
-// parseCertificateChain decodes the PEM chain and returns the leaf plus
-// the full chain, leaf first.
-func parseCertificateChain(chainPEM []byte) (*x509.Certificate, []*x509.Certificate, error) {
+// parseCertificateChain decodes the PEM chain and returns the
+// certificates, leaf first. Non-certificate blocks are skipped.
+func parseCertificateChain(chainPEM []byte) ([]*x509.Certificate, error) {
 	var chain []*x509.Certificate
 	rest := chainPEM
 	for {
-		block, more := pem.Decode(rest)
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
 		if block == nil {
 			break
 		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
 		certificate, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
-			return nil, nil, fmt.Errorf("certificate at offset %d: %w", len(chainPEM)-len(rest), err)
+			return nil, fmt.Errorf("certificate at offset %d: %w", len(chainPEM)-len(rest), err)
 		}
 		chain = append(chain, certificate)
-		rest = more
 	}
 	if len(chain) == 0 {
-		return nil, nil, errors.New("no certificates found")
+		return nil, errors.New("no certificates found")
 	}
-	return chain[0], chain, nil
+	return chain, nil
 }

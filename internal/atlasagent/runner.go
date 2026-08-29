@@ -83,10 +83,7 @@ func (r *Runner) RunDaemon(ctx context.Context) error {
 	}
 	r.log.Printf("atlas-agent collecting every %s until shutdown", r.cfg.CollectInterval)
 
-	if err := r.RunCycle(ctx); err != nil {
-		if ctx.Err() != nil {
-			return nil
-		}
+	if err := r.cycleUntilShutdown(ctx); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(r.cfg.CollectInterval)
@@ -96,14 +93,21 @@ func (r *Runner) RunDaemon(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := r.RunCycle(ctx); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
+			if err := r.cycleUntilShutdown(ctx); err != nil {
 				return err
 			}
 		}
 	}
+}
+
+// cycleUntilShutdown runs one collect-and-push cycle. A cycle error
+// surfaces unless the context already ended — shutdown is clean, never
+// a failure.
+func (r *Runner) cycleUntilShutdown(ctx context.Context) error {
+	if err := r.RunCycle(ctx); err != nil && ctx.Err() == nil {
+		return err
+	}
+	return nil
 }
 
 // EnsureEnrolled leaves the Runner holding a push client for the
