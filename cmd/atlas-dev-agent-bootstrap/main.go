@@ -103,7 +103,7 @@ func waitForHealth(ctx context.Context, client *http.Client, opts options) error
 		if err != nil {
 			return false, nil
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		var health struct {
 			Status string `json:"status"`
 		}
@@ -125,7 +125,7 @@ func waitForToken(ctx context.Context, client *http.Client, opts options) (strin
 		if err != nil {
 			return false, nil
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		var issued struct {
 			Token string `json:"token"`
 		}
@@ -202,7 +202,7 @@ func listClusters(ctx context.Context, client *http.Client, opts options, token,
 	if err != nil {
 		return nil, fmt.Errorf("list clusters for %q: %w", search, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("list clusters for %q: status %d", search, response.StatusCode)
 	}
@@ -231,7 +231,7 @@ func createRegistration(ctx context.Context, client *http.Client, opts options, 
 	if err != nil {
 		return "", fmt.Errorf("create cluster registration: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusCreated {
 		responseBody, _ := io.ReadAll(response.Body)
 		return "", fmt.Errorf("create cluster registration: status %d: %s", response.StatusCode, responseBody)

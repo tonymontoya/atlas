@@ -20,7 +20,7 @@ func TestHandlerServesDashboardContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("post login: %v", err)
 	}
-	defer loginResponse.Body.Close()
+	defer func() { _ = loginResponse.Body.Close() }()
 	if loginResponse.StatusCode != http.StatusCreated {
 		t.Fatalf("login status = %d, want %d", loginResponse.StatusCode, http.StatusCreated)
 	}
@@ -40,7 +40,7 @@ func TestHandlerServesDashboardContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get cluster fsid: %v", err)
 	}
-	defer fsIDResponse.Body.Close()
+	defer func() { _ = fsIDResponse.Body.Close() }()
 	if fsIDResponse.StatusCode != http.StatusOK {
 		t.Fatalf("cluster fsid status = %d, want %d", fsIDResponse.StatusCode, http.StatusOK)
 	}
@@ -60,7 +60,7 @@ func TestHandlerServesDashboardContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get summary without token: %v", err)
 	}
-	defer unauthenticated.Body.Close()
+	defer func() { _ = unauthenticated.Body.Close() }()
 	if unauthenticated.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated summary status = %d, want %d", unauthenticated.StatusCode, http.StatusUnauthorized)
 	}
