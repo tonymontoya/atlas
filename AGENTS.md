@@ -107,6 +107,21 @@ The current implementation supports:
   (migration 000014 widens both provider CHECKs); revoked,
   deregistered, or expired certificates push nothing.
 - A fake inventory sync command that writes one observation batch to PostgreSQL.
+- The atlas-agent binary (`cmd/atlas-agent`, ADR-0025/0026): one-shot
+  (`-once`) or daemon operation from agent-local `ATLAS_AGENT_*`
+  config (`internal/config.LoadAgent`). It enrolls on first start with
+  a locally generated Ed25519 key plus the one-time Enrollment
+  Credential, persists the issued certificate chain and key under
+  `ATLAS_AGENT_STATE_DIR`, re-enrolls when the stored certificate is
+  expired and a fresh credential is provided, then collects full
+  inventory batches through the Ceph Dashboard read provider running
+  inside the Agent and pushes them over mutual TLS with backoff
+  (`internal/atlasagent`). Permanent failures (4xx from Atlas, corrupt
+  state, missing credential) stop the Agent; the binary is read-only
+  by construction — no dispatch or command surface — and Dashboard
+  credentials never leave the Agent. Tests drive the whole loop
+  against the real API server over TLS plus the in-process fake
+  Dashboard and test CA; no real Ceph, no real certificates.
 - A read-only real Ceph provider over the Ceph Dashboard REST API (ADR-0023):
   `ATLAS_PROVIDER_MODE=ceph` points inventory sync at a live Dashboard with a
   dedicated read-only user. Explicit opt-in only — no default local path uses

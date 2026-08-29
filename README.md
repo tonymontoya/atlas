@@ -311,6 +311,36 @@ manual — rotation means re-enrollment), and map to exactly one
 registered Cluster through their recorded serial number. Revocation in
 v0.7 is Atlas rejecting the certificate.
 
+### Run the atlas-agent binary
+
+`cmd/atlas-agent` runs the enrolled Agent (ADR-0025): it enrolls on
+first start with a locally generated key and the registration's
+one-time credential, persists the issued certificate under
+`ATLAS_AGENT_STATE_DIR`, then collects full inventory batches from the
+local Ceph Dashboard and pushes them over mutual TLS. The Agent is
+read-only by construction — no dispatch or command surface — and the
+Dashboard credentials never leave the Agent.
+
+```sh
+ATLAS_AGENT_ATLAS_URL=https://atlas.example.invalid \
+ATLAS_AGENT_ATLAS_CA_PATH=/etc/atlas-agent/atlas-ca.pem \
+ATLAS_AGENT_ENROLLMENT_CREDENTIAL='atl_enroll_…' \
+ATLAS_AGENT_STATE_DIR=/var/lib/atlas-agent \
+ATLAS_AGENT_DASHBOARD_URL=https://mon.example.invalid:8443 \
+ATLAS_AGENT_DASHBOARD_USER=atlas-reader \
+ATLAS_AGENT_DASHBOARD_PASSWORD='…' \
+go run ./cmd/atlas-agent
+```
+
+`ATLAS_AGENT_ATLAS_URL` must use `https` because ingestion requires
+mutual TLS; `ATLAS_AGENT_ATLAS_CA_PATH` trusts a control plane whose
+serving certificate comes from a private CA. `ATLAS_AGENT_COLLECT_INTERVAL`
+(default `60s`) drives the ticker, and `-once` runs a single
+collect-and-push cycle for deterministic CI runs. Transient failures
+back off and retry; permanent ones — a burnt credential, a rejected
+certificate, an FSID conflict — stop the Agent for an operator. See
+`cmd/atlas-agent/README.md` for the full variable list.
+
 ## Contributing
 
 See `CONTRIBUTING.md`. Atlas is design-first: read `CONTEXT.md` and
