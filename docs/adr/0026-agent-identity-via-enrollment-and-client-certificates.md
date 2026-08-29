@@ -12,5 +12,5 @@ Go standard library (`crypto/x509`) covers the whole mechanism. v0.7 keeps lifet
 
 - Atlas runs an internal CA; its key is control-plane configuration with its own protection story (security checklist; single-zone MVP keeps it on the Atlas host).
 - Enrollment Credentials are single-use, short-lived, and stored only in hashed/one-time form if persisted at all.
-- The dev stack and CI never exercise real certificates end to end beyond an in-process test CA; the fake-provider paths are unchanged.
+- The dev stack exercises real certificates end to end (#43): an ephemeral dev CA generated inside the API container at every start signs both the API's serving certificate and the dev Agent's enrolled client certificate, so mutual TLS runs for real with key material that is never real and never leaves the dev containers. CI stays on the in-process test CA; the fake-provider paths are unchanged.
 - An Agent's certificate maps to exactly one registered Cluster, so Atlas attributes pushed observations to clusters by certificate identity, not by payload claims.

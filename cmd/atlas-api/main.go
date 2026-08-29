@@ -34,39 +34,34 @@ func main() {
 	// the published HTTP port while Agents enroll and push over mutual
 	// TLS.
 	if cfg.APITLSCertPath != "" && cfg.APITLSKeyPath != "" && cfg.HTTPSAddr != "" {
-		go func() {
-			log.Printf("atlas-api listening on https://%s (client certificates verified by the enrollment CA)", cfg.HTTPSAddr)
-			err := (&http.Server{
-				Addr:      cfg.HTTPSAddr,
-				Handler:   server.Routes(),
-				TLSConfig: server.ClientCertTLSConfig(),
-			}).ListenAndServeTLS(cfg.APITLSCertPath, cfg.APITLSKeyPath)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}()
-		log.Printf("atlas-api listening on %s with provider mode %s and read source %s", cfg.HTTPAddr, cfg.ProviderMode, cfg.ReadSource)
-		if err := http.ListenAndServe(cfg.HTTPAddr, server.Routes()); err != nil {
-			log.Fatal(err)
-		}
+		go serveTLS(cfg.HTTPSAddr, cfg, server)
+		serveHTTP(cfg.HTTPAddr, cfg, server)
 		return
 	}
 
 	if cfg.APITLSCertPath != "" && cfg.APITLSKeyPath != "" {
-		log.Printf("atlas-api listening on https://%s with provider mode %s and read source %s", cfg.HTTPAddr, cfg.ProviderMode, cfg.ReadSource)
-		err := (&http.Server{
-			Addr:      cfg.HTTPAddr,
-			Handler:   server.Routes(),
-			TLSConfig: server.ClientCertTLSConfig(),
-		}).ListenAndServeTLS(cfg.APITLSCertPath, cfg.APITLSKeyPath)
-		if err != nil {
-			log.Fatal(err)
-		}
+		serveTLS(cfg.HTTPAddr, cfg, server)
 		return
 	}
 
-	log.Printf("atlas-api listening on %s with provider mode %s and read source %s", cfg.HTTPAddr, cfg.ProviderMode, cfg.ReadSource)
-	if err := http.ListenAndServe(cfg.HTTPAddr, server.Routes()); err != nil {
+	serveHTTP(cfg.HTTPAddr, cfg, server)
+}
+
+func serveHTTP(addr string, cfg config.Config, server *atlasapi.Server) {
+	log.Printf("atlas-api listening on %s with provider mode %s and read source %s", addr, cfg.ProviderMode, cfg.ReadSource)
+	if err := http.ListenAndServe(addr, server.Routes()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func serveTLS(addr string, cfg config.Config, server *atlasapi.Server) {
+	log.Printf("atlas-api listening on https://%s with provider mode %s and read source %s (client certificates verified by the enrollment CA)", addr, cfg.ProviderMode, cfg.ReadSource)
+	err := (&http.Server{
+		Addr:      addr,
+		Handler:   server.Routes(),
+		TLSConfig: server.ClientCertTLSConfig(),
+	}).ListenAndServeTLS(cfg.APITLSCertPath, cfg.APITLSKeyPath)
+	if err != nil {
 		log.Fatal(err)
 	}
 }

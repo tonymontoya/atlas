@@ -17,6 +17,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -190,7 +191,10 @@ type clusterSummary struct {
 }
 
 func listClusters(ctx context.Context, client *http.Client, opts options, token, search string) ([]clusterSummary, error) {
-	request, err := authorizedRequest(ctx, http.MethodGet, opts.apiURL+"/api/v1/clusters?limit=100&q="+search, token, nil)
+	query := url.Values{}
+	query.Set("limit", "100")
+	query.Set("q", search)
+	request, err := authorizedRequest(ctx, http.MethodGet, opts.apiURL+"/api/v1/clusters?"+query.Encode(), token, nil)
 	if err != nil {
 		return nil, err
 	}

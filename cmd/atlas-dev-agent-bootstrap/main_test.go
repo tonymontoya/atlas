@@ -22,16 +22,10 @@ type stubAtlas struct {
 	mu sync.Mutex
 
 	healthFailures int
-	clusters       []stubCluster
+	clusters       []clusterSummary
 	deleted        []int64
 	bearerSeen     []string
 	nextID         int64
-}
-
-type stubCluster struct {
-	ID   int64   `json:"id"`
-	FSID *string `json:"fsid"`
-	Name string  `json:"name"`
 }
 
 func (s *stubAtlas) handler(t *testing.T) http.Handler {
@@ -51,7 +45,7 @@ func (s *stubAtlas) handler(t *testing.T) http.Handler {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		search := r.URL.Query().Get("q")
-		matches := []stubCluster{}
+		matches := []clusterSummary{}
 		for _, cluster := range s.clusters {
 			if search == "" || cluster.Name == search || (cluster.FSID != nil && *cluster.FSID == search) {
 				matches = append(matches, cluster)
@@ -81,9 +75,9 @@ func (s *stubAtlas) handler(t *testing.T) http.Handler {
 			s.bearerSeen = append(s.bearerSeen, bearer)
 		}
 		s.nextID++
-		s.clusters = append(s.clusters, stubCluster{ID: s.nextID, Name: "dev-agent-cluster"})
+		s.clusters = append(s.clusters, clusterSummary{ID: s.nextID, Name: "dev-agent-cluster"})
 		writeStubJSON(w, http.StatusCreated, map[string]any{
-			"cluster":              stubCluster{ID: s.nextID, Name: "dev-agent-cluster"},
+			"cluster":              clusterSummary{ID: s.nextID, Name: "dev-agent-cluster"},
 			"enrollmentCredential": map[string]any{"token": "atl_enroll_stub_token"},
 		})
 	})
@@ -121,7 +115,7 @@ func TestBootstrapDeregistersStaleRowsAndRegistersFresh(t *testing.T) {
 	staleFSID := dashfake.FSID
 	dormantFSID := ""
 	atlas := &stubAtlas{
-		clusters: []stubCluster{
+		clusters: []clusterSummary{
 			{ID: 11, FSID: &staleFSID, Name: "previous-bringup"},
 			{ID: 12, FSID: &dormantFSID, Name: "dev-agent-cluster"},
 		},
@@ -177,7 +171,7 @@ func TestBootstrapFailsWithoutACredential(t *testing.T) {
 			return
 		}
 		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/clusters" {
-			writeStubJSON(w, http.StatusCreated, map[string]any{"cluster": stubCluster{ID: 1, Name: "dev-agent-cluster"}})
+			writeStubJSON(w, http.StatusCreated, map[string]any{"cluster": clusterSummary{ID: 1, Name: "dev-agent-cluster"}})
 			return
 		}
 		writeStubJSON(w, http.StatusOK, map[string]any{"clusters": []any{}, "total": 0})
@@ -206,7 +200,7 @@ func writeStubJSON(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-func filterClusters(clusters []stubCluster, id int64) []stubCluster {
+func filterClusters(clusters []clusterSummary, id int64) []clusterSummary {
 	kept := clusters[:0]
 	for _, cluster := range clusters {
 		if cluster.ID != id {
