@@ -49,7 +49,9 @@ The current implementation supports:
 - React and TypeScript UI scaffolding.
 - PostgreSQL local development through Docker Compose.
 - Full local Docker Compose stack for PostgreSQL, migrations, fake inventory
-  sync, API, web UI, and a dev OIDC issuer.
+  sync, API, web UI, a dev OIDC issuer, and the full enrolled Agent loop
+  (fake Dashboard container, ephemeral dev CA, mutual-TLS API listener,
+  registration bootstrap, real atlas-agent).
 - Plain SQL migrations.
 - Fake-provider inventory fixtures.
 - A REST API v1 scaffold: the cluster index (`GET /api/v1/clusters`,
@@ -122,6 +124,21 @@ The current implementation supports:
   credentials never leave the Agent. Tests drive the whole loop
   against the real API server over TLS plus the in-process fake
   Dashboard and test CA; no real Ceph, no real certificates.
+- A dev stack that runs the full enrolled loop (issue #43): the
+  `stack` compose profile adds a fixture-backed fake Dashboard
+  container (`cmd/atlas-dev-dashboard` over the pure
+  `internal/providers/ceph/dashfake` handler that `dashtest` wraps),
+  an ephemeral dev CA generated inside the API container at every
+  start (`cmd/atlas-dev-ca`, `internal/ca/devca`), an additional
+  API TLS listener with client-certificate verification
+  (`ATLAS_HTTPS_ADDR`, in-network only), a bootstrap that retires the
+  previous bring-up's rows and creates a fresh registration through
+  the Operator API (`cmd/atlas-dev-agent-bootstrap`), and a real
+  atlas-agent service that enrolls, collects from the fake Dashboard,
+  and pushes over mutual TLS (its one-time credential arrives via
+  `ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE`). `make dev-stack-check`
+  asserts register → enroll → push → read end to end and stays green
+  across reruns against the persistent PostgreSQL volume.
 - A read-only real Ceph provider over the Ceph Dashboard REST API (ADR-0023):
   `ATLAS_PROVIDER_MODE=ceph` points inventory sync at a live Dashboard with a
   dedicated read-only user. Explicit opt-in only — no default local path uses

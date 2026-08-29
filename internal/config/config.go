@@ -81,6 +81,14 @@ type Config struct {
 
 	APITLSCertPath string
 	APITLSKeyPath  string
+
+	// HTTPSAddr optionally serves the same routes over TLS with
+	// client-certificate verification in addition to the plain HTTP
+	// listener — the shape a control plane uses when Operators reach
+	// the API through HTTP while Agents enroll and push over mutual
+	// TLS. Empty means TLS serving (when configured at all) replaces
+	// the HTTP listener.
+	HTTPSAddr string
 }
 
 // Load reads the ATLAS_* environment and returns a validated Config.
@@ -116,6 +124,7 @@ func Load() (Config, error) {
 
 		APITLSCertPath: env("ATLAS_API_TLS_CERT_PATH", ""),
 		APITLSKeyPath:  env("ATLAS_API_TLS_KEY_PATH", ""),
+		HTTPSAddr:      env("ATLAS_HTTPS_ADDR", ""),
 	}
 
 	var errs []error
@@ -177,6 +186,13 @@ func Load() (Config, error) {
 	// TLS serving is optional, but never half-configured.
 	if countSet(cfg.APITLSCertPath, cfg.APITLSKeyPath) == 1 {
 		errs = append(errs, errors.New("TLS serving requires both ATLAS_API_TLS_CERT_PATH and ATLAS_API_TLS_KEY_PATH"))
+	}
+
+	// The additional TLS listener rides on the same serving
+	// certificate: ATLAS_HTTPS_ADDR without it would silently serve
+	// nothing over TLS.
+	if cfg.HTTPSAddr != "" && countSet(cfg.APITLSCertPath, cfg.APITLSKeyPath) != 2 {
+		errs = append(errs, errors.New("ATLAS_HTTPS_ADDR requires both ATLAS_API_TLS_CERT_PATH and ATLAS_API_TLS_KEY_PATH"))
 	}
 
 	if cfg.ProviderMode == ProviderModeCeph {

@@ -163,7 +163,14 @@ make db-up
 The full local stack runs PostgreSQL, applies migrations, seeds one fake
 inventory snapshot, runs one fake alert evaluation that creates a detected
 Case, starts a local dev OIDC issuer on `127.0.0.1:18090`, starts the API on
-`127.0.0.1:8080`, and starts the web UI on `127.0.0.1:5173`:
+`127.0.0.1:8080`, and starts the web UI on `127.0.0.1:5173`. It also runs
+the whole enrolled Agent loop with nothing real except the software itself:
+a fixture-backed fake Ceph Dashboard service, an ephemeral dev certificate
+authority generated inside the API container at every start, and a real
+`atlas-agent` that enrolls against the real enrollment endpoint using a
+registration a bootstrap creates through the API, collects from the fake
+Dashboard, and pushes observations over real mutual TLS. The pushed cluster
+(`dev-agent-reef`) coexists with the seeded fake scenarios.
 
 ```sh
 make dev-stack-up
@@ -211,8 +218,11 @@ make dev-stack-check
 
 The smoke check exercises the whole loop — attach, approve, complete the
 Task, terminal state, Timeline Events — plus 401-without-token assertions
-on the write endpoints. It creates its own probe Case per run, so it stays
-green against a persistent database volume.
+on the write endpoints and the full register → enroll → push → read Agent
+loop (including the cluster-scoped reads reflecting agent-pushed
+observations). It creates its own probe Case per run, and the bootstrap
+retires the previous run's registration before minting a fresh one, so it
+stays green against a persistent database volume.
 
 Stop the full stack with:
 

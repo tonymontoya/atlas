@@ -170,6 +170,34 @@ wait_for_json "inventory sync runs" "$api_base/api/v1/inventory-sync-runs" \
     'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded"'
 wait_for_json "alert evaluation runs" "$api_base/api/v1/alert-evaluation-runs" \
     'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded" and .[0].alertsEvaluated == 1'
+
+# The enrolled Agent loop (#43): a real atlas-agent enrolled against
+# the real enrollment endpoint using a registration the bootstrap made
+# through this API, collected from the fake Dashboard service, and
+# pushed over mutual TLS. These reads reflect agent-pushed
+# observations, coexisting with the seeded fake scenarios above.
+agent_fsid="00000000-0000-4000-8000-000000000301"
+enroll_csr='-----BEGIN CERTIFICATE REQUEST-----\nMIGlMFkCAQAwJjEkMCIGA1UEAwwbYXRsYXMtYWdlbnQtZGV2LXN0YWNrLWNoZWNr\nMCowBQYDK2VwAyEAK5TJ0H2u/YEuVpG79YjQ4w/TCyd07RchDNUxac1SUbKgADAF\nBgMrZXADQQBD5wwHLfcRht4eI8+lGiBDUC7myCI4fg0tGbpDptV0h8fQcnmMDt7w\nKQv/ZPwx4S8t3eGzlIQoI3w0SlJ8PpQK\n-----END CERTIFICATE REQUEST-----\n'
+wait_for_json "agent-enrolled cluster in index" "$api_base/api/v1/clusters?q=dev-agent-reef" \
+    '.total == 1 and .clusters[0].fsid == "00000000-0000-4000-8000-000000000301" and .clusters[0].healthStatus == "HEALTH_OK" and .clusters[0].agentLastSeen != null'
+wait_for_json "agent cluster health" "$api_base/api/v1/clusters/$agent_fsid/health" \
+    '.status == "HEALTH_OK"'
+wait_for_json "agent cluster osds" "$api_base/api/v1/clusters/$agent_fsid/osds" \
+    'length == 3 and any(.[]; .id == 2 and .up == false)'
+wait_for_json "agent cluster hosts" "$api_base/api/v1/clusters/$agent_fsid/hosts" \
+    'length == 2 and any(.[]; .name == "host-a.example.invalid")'
+wait_for_json "agent cluster storage devices" "$api_base/api/v1/clusters/$agent_fsid/storage-devices" \
+    'length == 3 and any(.[]; .serial == "nvme-serial-a1")'
+wait_for_json "agent cluster daemons" "$api_base/api/v1/clusters/$agent_fsid/daemons" \
+    'length == 5 and any(.[]; .type == "mon" and .status == "running") and any(.[]; .status == "stopped")'
+wait_for_json "agent cluster pools" "$api_base/api/v1/clusters/$agent_fsid/pools" \
+    'length == 2 and any(.[]; .name == "device_health_metrics")'
+expect_post_status "agent enrollment with a bogus credential is rejected" \
+    "$api_base/api/v1/agent/enroll" 401 \
+    "{\"credentialToken\":\"atl_enroll_dev_stack_check_bogus\",\"fsid\":\"$agent_fsid\",\"csr\":\"$enroll_csr\"}"
+expect_post_status "agent push without a client certificate is rejected" \
+    "$api_base/api/v1/agent/observations" 401 '{}'
+
 wait_for_json "cases" "$api_base/api/v1/cases" \
     'any(.[]; .title == "CephOSDDown on osd=1" and .status == "detected" and .severity == "high") and any(.[]; .title == "Review weekly capacity trend" and .status == "triaged")'
 wait_for_json "cluster-filtered cases" "$api_base/api/v1/cases?cluster=00000000-0000-4000-8000-000000000102" \

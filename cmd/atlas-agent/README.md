@@ -20,6 +20,7 @@ command surface, and Dashboard credentials never leave the Agent.
 | `ATLAS_AGENT_ATLAS_CA_PATH` | system roots | PEM CA bundle verifying the Atlas serving certificate |
 | `ATLAS_AGENT_ATLAS_INSECURE_TLS` | `false` | dev-only: skip Atlas certificate verification |
 | `ATLAS_AGENT_ENROLLMENT_CREDENTIAL` | unset | one-time credential from the Cluster's registration; needed for first enrollment and renewal |
+| `ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE` | unset | file carrying the same one-time credential (container deployments); mutually exclusive with the inline form |
 | `ATLAS_AGENT_STATE_DIR` | `atlas-agent-state` | where the certificate chain and private key persist |
 | `ATLAS_AGENT_COLLECT_INTERVAL` | `60s` | collection ticker; must be positive |
 | `ATLAS_AGENT_RETRY_INITIAL` / `ATLAS_AGENT_RETRY_MAX` | `1s` / `30s` | exponential backoff bounds after transient failures |

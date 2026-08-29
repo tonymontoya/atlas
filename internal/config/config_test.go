@@ -229,6 +229,39 @@ func TestLoadAcceptsFullAPITLSPair(t *testing.T) {
 	if cfg.APITLSCertPath != "/etc/atlas/api.crt" || cfg.APITLSKeyPath != "/etc/atlas/api.key" {
 		t.Fatalf("API TLS paths = %q/%q", cfg.APITLSCertPath, cfg.APITLSKeyPath)
 	}
+	if cfg.HTTPSAddr != "" {
+		t.Fatalf("HTTPSAddr = %q, want empty by default (TLS serving replaces the HTTP listener)", cfg.HTTPSAddr)
+	}
+}
+
+func TestLoadAcceptsHTTPSAddrWithTLSPair(t *testing.T) {
+	clearModeEnv(t)
+	t.Setenv("ATLAS_API_TLS_CERT_PATH", "/etc/atlas/api.crt")
+	t.Setenv("ATLAS_API_TLS_KEY_PATH", "/etc/atlas/api.key")
+	t.Setenv("ATLAS_HTTPS_ADDR", ":8443")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.HTTPSAddr != ":8443" {
+		t.Fatalf("HTTPSAddr = %q, want :8443", cfg.HTTPSAddr)
+	}
+}
+
+func TestLoadRejectsHTTPSAddrWithoutTLSPair(t *testing.T) {
+	clearModeEnv(t)
+	t.Setenv("ATLAS_HTTPS_ADDR", ":8443")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	for _, want := range []string{"ATLAS_HTTPS_ADDR", "ATLAS_API_TLS_CERT_PATH", "ATLAS_API_TLS_KEY_PATH"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not name %s", err, want)
+		}
+	}
 }
 
 func TestLoadCephModeRequiresDashboardConfiguration(t *testing.T) {

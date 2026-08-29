@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ func clearAgentEnv(t *testing.T) {
 		"ATLAS_AGENT_ATLAS_CA_PATH",
 		"ATLAS_AGENT_ATLAS_INSECURE_TLS",
 		"ATLAS_AGENT_ENROLLMENT_CREDENTIAL",
+		"ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE",
 		"ATLAS_AGENT_STATE_DIR",
 		"ATLAS_AGENT_COLLECT_INTERVAL",
 		"ATLAS_AGENT_RETRY_INITIAL",
@@ -202,5 +205,55 @@ func TestLoadAgentAcceptsExplicitValues(t *testing.T) {
 	}
 	if !cfg.DashboardInsecureTLS {
 		t.Fatal("DashboardInsecureTLS = false, want true")
+	}
+}
+
+func TestLoadAgentReadsCredentialFile(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "enrollment-credential")
+	if err := os.WriteFile(credentialPath, []byte("atl_enroll_from_file\n"), 0o600); err != nil {
+		t.Fatalf("write credential file: %v", err)
+	}
+	env := validAgentEnv()
+	env["ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE"] = credentialPath
+	setAgentEnv(t, env)
+
+	cfg, err := LoadAgent()
+	if err != nil {
+		t.Fatalf("LoadAgent returned error: %v", err)
+	}
+	if cfg.EnrollmentCredential != "atl_enroll_from_file" {
+		t.Fatalf("EnrollmentCredential = %q, want the trimmed file contents", cfg.EnrollmentCredential)
+	}
+}
+
+func TestLoadAgentRejectsCredentialFileWithInlineCredential(t *testing.T) {
+	credentialPath := filepath.Join(t.TempDir(), "enrollment-credential")
+	if err := os.WriteFile(credentialPath, []byte("atl_enroll_from_file"), 0o600); err != nil {
+		t.Fatalf("write credential file: %v", err)
+	}
+	env := validAgentEnv()
+	env["ATLAS_AGENT_ENROLLMENT_CREDENTIAL"] = "atl_enroll_inline"
+	env["ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE"] = credentialPath
+	setAgentEnv(t, env)
+
+	_, err := LoadAgent()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	for _, want := range []string{"ATLAS_AGENT_ENROLLMENT_CREDENTIAL", "ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not name %s", err, want)
+		}
+	}
+}
+
+func TestLoadAgentRejectsMissingCredentialFile(t *testing.T) {
+	env := validAgentEnv()
+	env["ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE"] = filepath.Join(t.TempDir(), "absent")
+	setAgentEnv(t, env)
+
+	_, err := LoadAgent()
+	if err == nil || !strings.Contains(err.Error(), "ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE") {
+		t.Fatalf("error = %v, want a missing-credential-file error naming the variable", err)
 	}
 }

@@ -125,13 +125,87 @@ services:
       ATLAS_OIDC_ISSUER: http://dev-issuer:8090
       ATLAS_OIDC_AUDIENCE: atlas-api
       ATLAS_OIDC_JWKS_URL: http://dev-issuer:8090/.well-known/jwks.json
+      # The enrolled Agent loop (#43): an additional TLS listener serves
+      # Agent enrollment and observation ingestion with client-certificate
+      # verification, while the published HTTP port keeps Operator traffic.
+      ATLAS_HTTPS_ADDR: :8443
+      ATLAS_API_TLS_CERT_PATH: /atlas-dev-ca/api.crt
+      ATLAS_API_TLS_KEY_PATH: /atlas-dev-ca/api.key
+      ATLAS_ENROLLMENT_CA_CERT_PATH: /atlas-dev-ca/ca.crt
+      ATLAS_ENROLLMENT_CA_KEY_PATH: /atlas-dev-ca/ca.key
     ports:
       - "${ATLAS_BIND_HOST:-127.0.0.1}:${ATLAS_API_PORT:-8080}:8080"
     volumes:
       - ..:/workspace
       - atlas-go-build-cache:/root/.cache/go-build
       - atlas-go-mod-cache:/go/pkg/mod
-    command: ["go", "run", "./cmd/atlas-api"]
+      - atlas-dev-ca:/atlas-dev-ca
+    # The ephemeral dev CA is generated at every API container start, so
+    # the in-memory enrollment authority always matches the files on the
+    # volume the Agent trusts.
+    command: ["sh", "-c", "go run ./cmd/atlas-dev-ca -out-dir /atlas-dev-ca -server-dns api && exec go run ./cmd/atlas-api"]
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.api
+    profiles:
+      - stack
+    volumes:
+      - ..:/workspace
+      - atlas-go-build-cache:/root/.cache/go-build
+      - atlas-go-mod-cache:/go/pkg/mod
+    command: ["go", "run", "./cmd/atlas-dev-dashboard", "-addr", ":8080"]
+
+  agent-bootstrap:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.api
+    profiles:
+      - stack
+    depends_on:
+      api:
+        condition: service_started
+      dev-issuer:
+        condition: service_started
+    volumes:
+      - ..:/workspace
+      - atlas-go-build-cache:/root/.cache/go-build
+      - atlas-go-mod-cache:/go/pkg/mod
+      - atlas-agent-enrollment:/agent
+    command: ["go", "run", "./cmd/atlas-dev-agent-bootstrap", "-credential-path", "/agent/enrollment-credential"]
+
+  atlas-agent:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.api
+    profiles:
+      - stack
+    depends_on:
+      agent-bootstrap:
+        condition: service_completed_successfully
+      dashboard:
+        condition: service_started
+    environment:
+      ATLAS_AGENT_ATLAS_URL: https://api:8443
+      ATLAS_AGENT_ATLAS_CA_PATH: /atlas-dev-ca/ca.crt
+      ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE: /agent/enrollment-credential
+      # Ephemeral by design: each bring-up mints a fresh CA and a fresh
+      # registration, so the Agent enrolls anew instead of holding a
+      # certificate the new CA cannot verify.
+      ATLAS_AGENT_STATE_DIR: /state
+      ATLAS_AGENT_COLLECT_INTERVAL: 10s
+      ATLAS_AGENT_DASHBOARD_URL: http://dashboard:8080
+      ATLAS_AGENT_DASHBOARD_USER: atlas-reader
+      ATLAS_AGENT_DASHBOARD_PASSWORD: atlas-reader-password
+      ATLAS_AGENT_DASHBOARD_CLUSTER_NAME: dev-agent-reef
+    volumes:
+      - ..:/workspace
+      - atlas-go-build-cache:/root/.cache/go-build
+      - atlas-go-mod-cache:/go/pkg/mod
+      - atlas-dev-ca:/atlas-dev-ca:ro
+      - atlas-agent-enrollment:/agent:ro
+    command: ["go", "run", "./cmd/atlas-agent"]
 
   web:
     build:
@@ -155,3 +229,5 @@ volumes:
   atlas-go-build-cache:
   atlas-go-mod-cache:
   atlas-web-node-modules:
+  atlas-dev-ca:
+  atlas-agent-enrollment:

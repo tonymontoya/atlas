@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -48,7 +49,9 @@ type AgentConfig struct {
 
 	// EnrollmentCredential is the one-time credential from the
 	// Cluster's registration. Required only on first enrollment and
-	// on renewal (re-enrollment); otherwise it may stay unset.
+	// on renewal (re-enrollment); otherwise it may stay unset. It
+	// comes from the environment or, in container deployments, from
+	// the file ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE names.
 	EnrollmentCredential string
 
 	// StateDir persists the enrolled certificate chain and private
@@ -91,6 +94,22 @@ func LoadAgent() (AgentConfig, error) {
 	}
 
 	var errs []error
+
+	// The credential file carries the same one-time credential in
+	// container deployments (a bootstrap writes it, a mounted
+	// secret holds it); inline and file forms are mutually
+	// exclusive so the active credential is never ambiguous.
+	credentialFile := env("ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE", "")
+	if credentialFile != "" && cfg.EnrollmentCredential != "" {
+		errs = append(errs, errors.New("set only one of ATLAS_AGENT_ENROLLMENT_CREDENTIAL and ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE"))
+	} else if credentialFile != "" {
+		credentialPEM, err := os.ReadFile(credentialFile)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("read ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE %s: %w", credentialFile, err))
+		} else {
+			cfg.EnrollmentCredential = strings.TrimSpace(string(credentialPEM))
+		}
+	}
 
 	atlasInsecure, err := envBool("ATLAS_AGENT_ATLAS_INSECURE_TLS", false)
 	cfg.AtlasInsecureTLS = atlasInsecure
