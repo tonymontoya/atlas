@@ -470,6 +470,58 @@ export async function loadCaseNotes(
   return request<CaseNote[]>(`/api/v1/cases/${id}/notes`, signal);
 }
 
+export type ClusterRegistration = {
+  id: number;
+  fsid: string | null;
+  name: string;
+  cephVersion: string | null;
+  clusterType: ClusterType;
+  registeredAt: string | null;
+  registeredBy: string;
+  deregisteredAt: string | null;
+};
+
+export type EnrollmentCredential = {
+  token: string;
+  expiresAt: string;
+};
+
+export type CreateClusterRegistrationInput = {
+  name: string;
+  clusterType: ClusterType;
+};
+
+export type CreateClusterRegistrationResponse = {
+  cluster: ClusterRegistration;
+  enrollmentCredential: EnrollmentCredential;
+};
+
+// registerCluster creates a registration and returns the one-time
+// Enrollment Credential. The credential exists only in this response —
+// no later read can re-display it (ADR-0026).
+export async function registerCluster(
+  input: CreateClusterRegistrationInput,
+  token: string,
+  signal?: AbortSignal,
+): Promise<CreateClusterRegistrationResponse> {
+  return request<CreateClusterRegistrationResponse>("/api/v1/clusters", signal, token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// deregisterCluster retires a registration: the row and its history stay,
+// any live Enrollment Credential is consumed, and Cases are preserved.
+export async function deregisterCluster(
+  id: number,
+  token: string,
+  signal?: AbortSignal,
+): Promise<ClusterRegistration> {
+  return request<ClusterRegistration>(`/api/v1/clusters/${id}`, signal, token, {
+    method: "DELETE",
+  });
+}
+
 export async function loadWorkflowJobs(
   instanceID: number,
   signal?: AbortSignal,

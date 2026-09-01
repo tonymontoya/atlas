@@ -4,15 +4,21 @@ import type { Operator } from "../api";
 import { errorMessage } from "../format";
 
 // OperatorPanel carries the paste-a-bearer-token sign-in model (ADR-0016):
-// manual Case writes need an OIDC bearer token, verified through /api/v1/me.
+// authenticated writes (manual Cases, cluster registration) need an OIDC
+// bearer token, verified through /api/v1/me. Pages override the copy to
+// name the writes they gate.
 export function OperatorPanel({
   operator,
   onSignIn,
   onSignOut,
+  helperText = "Paste a bearer token to enable manual case writes. Local development: request one from the dev issuer (POST /token on the dev issuer port).",
+  signedInNote = "Manual case writes are enabled.",
 }: {
   operator: Operator | null;
   onSignIn: (token: string) => Promise<void>;
   onSignOut: () => void;
+  helperText?: string;
+  signedInNote?: string;
 }) {
   const [tokenInput, setTokenInput] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -41,8 +47,7 @@ export function OperatorPanel({
       <section className="atlas-operator" aria-label="Operator session">
         <p>
           Signed in as <strong>{operator.displayName}</strong>{" "}
-          <span className="atlas-subtle">({operator.subject})</span>. Manual case writes are
-          enabled.
+          <span className="atlas-subtle">({operator.subject})</span>. {signedInNote}
         </p>
         <Button size="sm" kind="secondary" onClick={onSignOut}>
           Sign out
@@ -58,7 +63,7 @@ export function OperatorPanel({
           id="operator-token"
           type="password"
           labelText="Operator token"
-          helperText="Paste a bearer token to enable manual case writes. Local development: request one from the dev issuer (POST /token on the dev issuer port)."
+          helperText={helperText}
           placeholder="eyJhbGciOiJSUzI1NiIs..."
           value={tokenInput}
           onChange={(event) => setTokenInput(event.target.value)}

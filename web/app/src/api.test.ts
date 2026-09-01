@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  deregisterCluster,
   listCases,
   listClusters,
   listSyncRuns,
   loadClusterView,
+  registerCluster,
   type CaseRecord,
   type ClusterIndex,
 } from "./api";
@@ -50,6 +52,15 @@ function stubFetch(handler: (path: string) => Response) {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://atlas.test");
     return handler(url.pathname + (url.search === "" ? "" : url.search));
+  });
+}
+
+// captureFetch stubs fetch while handing the test the request init so
+// method, auth header, and body can be asserted together.
+function captureFetch(handler: (path: string, init?: RequestInit) => Response) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), "http://atlas.test");
+    return handler(url.pathname, init);
   });
 }
 
@@ -191,5 +202,102 @@ describe("loadClusterView", () => {
     }
     expect(view.cases).toEqual([]);
     expect(view.casesUnavailable).toBe("cases are down");
+  });
+});
+
+describe("registerCluster and deregisterCluster", () => {
+  const REGISTRATION_JSON = {
+    id: 9,
+    fsid: null,
+    name: "storage-a",
+    cephVersion: null,
+    clusterType: "bare-metal",
+    registeredAt: "2026-09-01T12:00:00Z",
+    registeredBy: "ops@example.invalid",
+    deregisteredAt: null,
+  };
+
+  it("posts the registration with the bearer token and returns the one-time credential", async () => {
+    const fetchMock = captureFetch((path, init) => {
+      expect(path).toBe("/api/v1/clusters");
+      expect(init?.method).toBe("POST");
+      const headers = init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe("Bearer token-1");
+      expect(headers["Content-Type"]).toBe("application/json");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        name: "storage-a",
+        clusterType: "bare-metal",
+      });
+      return jsonResponse(
+        {
+          cluster: REGISTRATION_JSON,
+          enrollmentCredential: {
+            token: "atl_enroll_one-time",
+            expiresAt: "2026-09-02T12:00:00Z",
+          },
+        },
+        201,
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await registerCluster(
+      { name: "storage-a", clusterType: "bare-metal" },
+      "token-1",
+    );
+    expect(result.cluster.id).toBe(9);
+    expect(result.enrollmentCredential.token).toBe("atl_enroll_one-time");
+    expect(result.enrollmentCredential.expiresAt).toBe("2026-09-02T12:00:00Z");
+  });
+
+  it("surfaces the API error body when registration is rejected", async () => {
+    const fetchMock = captureFetch(() =>
+      jsonResponse(
+        { error: { class: "InvalidRequest", message: "name is required" } },
+        400,
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      registerCluster({ name: "", clusterType: "bare-metal" }, "token-1"),
+    ).rejects.toMatchObject({ status: 400, message: "name is required" });
+  });
+
+  it("deletes the registration by id with the bearer token", async () => {
+    const fetchMock = captureFetch((path, init) => {
+      expect(path).toBe("/api/v1/clusters/9");
+      expect(init?.method).toBe("DELETE");
+      const headers = init?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe("Bearer token-1");
+      return jsonResponse({
+        ...REGISTRATION_JSON,
+        deregisteredAt: "2026-09-01T13:00:00Z",
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const registration = await deregisterCluster(9, "token-1");
+    expect(registration.deregisteredAt).toBe("2026-09-01T13:00:00Z");
+  });
+
+  it("surfaces the conflict when the cluster is already deregistered", async () => {
+    const fetchMock = captureFetch(() =>
+      jsonResponse(
+        {
+          error: {
+            class: "Conflict",
+            message: "cluster is already deregistered",
+          },
+        },
+        409,
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(deregisterCluster(9, "token-1")).rejects.toMatchObject({
+      status: 409,
+      message: "cluster is already deregistered",
+    });
   });
 });

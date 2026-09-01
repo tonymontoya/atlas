@@ -53,8 +53,10 @@ What exists today:
   a local dev issuer for development stacks
 - React and TypeScript web UI on IBM Carbon (ADR-0028) with a searchable
   cluster index, per-cluster detail pages, global Cases and Sync Runs
-  views, operator sign-in, manual Case writes, and Workflow
-  attach/approve/resume forms
+  views, operator sign-in, manual Case writes, Workflow
+  attach/approve/resume forms, and Cluster Registration — the one-time
+  Enrollment Credential is shown exactly once with the Agent install
+  instructions, and the index carries a deregister action
 - PostgreSQL persistence with plain SQL migrations
 - Fake-provider inventory fixtures and an inventory sync command
 - A read-only real Ceph provider: `ATLAS_PROVIDER_MODE=ceph` points the

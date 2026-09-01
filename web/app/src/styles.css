@@ -22,6 +22,15 @@
   margin: 0 0 0.5rem;
 }
 
+.atlas-page-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
 .atlas-page-intro {
   color: var(--cds-text-secondary);
   margin: 0 0 1.5rem;
@@ -127,6 +136,20 @@
 .atlas-form-error {
   color: var(--cds-text-error);
   margin: 0.5rem 0 0;
+}
+
+/* The one-time Enrollment Credential block: token in a copyable
+ * CodeSnippet, agent install instructions in a wrapped one. */
+.atlas-credential {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 1rem 0;
+}
+
+.atlas-instructions {
+  margin: 0.5rem 0 1rem;
+  max-width: 40rem;
 }
 
 .atlas-action-row {

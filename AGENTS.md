@@ -77,8 +77,13 @@ The current implementation supports:
 - An IBM Carbon web UI (ADR-0028): app shell, cluster index (searchable,
   paginated, health + Agent last-seen), per-cluster detail pages over the
   cluster-scoped reads, global Cases and Sync Runs pages, operator
-  bearer-token sign-in, manual Case writes, and Workflow
-  attach/approve/resume forms. The load/submit choreography (abort,
+  bearer-token sign-in, manual Case writes, Workflow
+  attach/approve/resume forms, and Cluster Registration through the UI —
+  a Register flow that shows the one-time Enrollment Credential and
+  Agent install instructions exactly once behind an explicit
+  acknowledgment (the credential is never re-displayable; it lives only
+  in the registration response), plus a deregister row action on the
+  index. The load/submit choreography (abort,
   stale-result ignoring, data retention, double-submit guarding,
   formatted errors) is centralized in two hook-tested seams —
   `useResource` and `useMutation` in `web/app/src/resources.ts` — and
