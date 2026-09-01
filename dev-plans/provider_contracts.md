@@ -193,7 +193,7 @@ Atlas methods should normalize failures into these classes.
 | `Unavailable` | Provider endpoint cannot be reached. | Ceph Dashboard unreachable. |
 | `Unauthorized` | Credentials are missing or insufficient. | OIDC token lacks Ceph API access. |
 | `Unsupported` | Provider cannot support the requested method for this cluster. | Rook-only method on bare-metal cluster. |
-| `VersionUnsupported` | Ceph or Rook version is outside validated support. | Ceph 16 mutating operation requested. |
+| `VersionUnsupported` | Ceph or Rook version is outside validated support. | Mutating operation requested on a Ceph version outside validated support. |
 | `NotFound` | Requested object does not exist. | OSD ID no longer exists. |
 | `Conflict` | Observed state changed while work was planned. | OSD state changed between precheck and execution. |
 | `Unsafe` | Safety provider rejected the operation. | Cluster lacks recovery headroom. |
@@ -252,7 +252,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only
 
 Upstream interface candidates:
 
@@ -302,7 +301,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only
 
 Upstream interface candidates:
 
@@ -354,7 +352,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only
 
 Upstream interface candidates:
 
@@ -405,7 +402,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only
 
 Upstream interface candidates:
 
@@ -455,7 +451,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only
 
 Upstream interface candidates:
 
@@ -507,7 +502,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only when available
 
 Upstream interface candidates:
 
@@ -559,7 +553,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only
 
 Upstream interface candidates:
 
@@ -610,7 +603,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only
 
 Upstream interface candidates:
 
@@ -669,7 +661,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only for decision support only
 
 Upstream interface candidates:
 
@@ -726,7 +717,6 @@ No privileged audit required. Deployment state can become Case evidence.
 Supported MVP cluster types:
 
 - Ceph 18 Rook
-- Ceph 16 Rook if present and read-only
 
 Upstream interface candidates:
 
@@ -778,7 +768,6 @@ No privileged audit required.
 Supported MVP cluster types:
 
 - Ceph 18 Rook
-- Ceph 16 Rook if present and read-only
 
 Upstream interface candidates:
 
@@ -832,7 +821,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook when host evidence is needed
-- Ceph 16 read-only when explicitly enabled
 
 Upstream interface candidates:
 
@@ -885,7 +873,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook where direct device replacement applies
-- Ceph 16 read-only by exception only
 
 Upstream interface candidates:
 
@@ -947,7 +934,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal after validation
 - Ceph 18 Rook after validation
-- Ceph 16 mutating operations deferred unless explicitly validated
 
 Upstream interface candidates:
 
@@ -1011,7 +997,6 @@ Supported MVP cluster types:
 
 - Ceph 18 bare-metal
 - Ceph 18 Rook
-- Ceph 16 read-only
 
 Upstream interface candidates:
 
@@ -1075,7 +1060,7 @@ Before scaffolding code, this document should let the team answer:
 - Which evidence collections require audit even though they are read-only?
 - Which provider outputs become Case evidence?
 - What must never be provider-specific?
-- Which provider methods are intentionally unsupported for Ceph 16?
+- Which provider methods are intentionally unsupported per Ceph version?
 
 Current answers:
 
@@ -1085,4 +1070,3 @@ Current answers:
 - Agent evidence collection requires audit because it is privileged even when read-only.
 - Health, alert, OSD, host, device, and safety outputs may become Case evidence.
 - RBAC, policy, audit, Case, Workflow, Timeline, and domain objects must not be provider-specific.
-- Ceph 16 mutating operations are deferred unless explicitly validated.

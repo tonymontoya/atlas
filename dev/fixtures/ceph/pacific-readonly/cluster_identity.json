@@ -1,6 +1,0 @@
-{
-  "fsid": "00000000-0000-4000-8000-000000000116",
-  "name": "pacific-readonly",
-  "cephVersion": "16.2.x",
-  "type": "bare-metal"
-}

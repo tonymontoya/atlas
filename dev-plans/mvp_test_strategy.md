@@ -227,7 +227,6 @@ Should include:
 
 - Ceph 18 bare-metal read validation
 - Ceph 18 Rook read validation
-- Ceph 16 read-only validation where available
 - provider timeout/error behavior
 - Dashboard API availability diagnostics
 - Rook CRD availability diagnostics
@@ -279,7 +278,6 @@ Required first fixtures:
 - degraded Ceph 18 bare-metal cluster with one OSD down
 - healthy Ceph 18 Rook cluster
 - degraded Ceph 18 Rook cluster with one OSD down
-- Ceph 16 read-only cluster
 - provider unavailable
 - provider unauthorized
 - malformed provider response

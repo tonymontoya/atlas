@@ -26,7 +26,6 @@ Cluster-state scenarios (all read methods return normalized data):
 
 - `reef-healthy-baremetal` / `reef-osd-down-baremetal` (Ceph 18, bare-metal)
 - `reef-healthy-rook` / `reef-osd-down-rook` (Ceph 18, Rook-managed)
-- `pacific-readonly` (Ceph 16, read-only)
 
 Error scenarios simulate upstream failure modes instead of cluster states:
 

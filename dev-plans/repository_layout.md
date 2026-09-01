@@ -251,8 +251,7 @@ Suggested shape:
 dev/fixtures/
 ├── ceph/
 │   ├── reef-healthy-baremetal/
-│   ├── reef-osd-down-baremetal/
-│   └── pacific-readonly/
+│   └── reef-osd-down-baremetal/
 ├── rook/
 │   ├── reef-healthy-rook/
 │   └── reef-osd-down-rook/

@@ -1,6 +1,6 @@
 # Atlas Ceph Compatibility Matrix
-**Version:** 0.1 (Draft)  
-**Status:** Pre-development Compatibility Document  
+**Version:** 0.2  
+**Status:** Revised (2026-09-01) — Ceph 16 retired, 19/20 staged  
 **Audience:** Engineering, Architecture, Product, Contributors  
 **Project:** Atlas
 
@@ -8,29 +8,41 @@
 
 # 1. Purpose
 
-This document defines the initial Ceph compatibility posture for Atlas MVP.
+This document defines the Ceph compatibility posture for Atlas.
 
-Decision reference: `docs/adr/0012-ceph-18-and-cluster-type-parity.md`.
+Decision reference: `docs/adr/0012-ceph-18-and-cluster-type-parity.md`
+(including the 2026-09-01 amendment on the version floor and breadth).
 
 ---
 
-# 2. MVP Version Targets
+# 2. Version Targets
 
-| Ceph Version | MVP Posture | Notes |
+**Support floor: Ceph 18 and newer.** Older versions are not validation
+targets and are not rejected permanently, but nothing guarantees behavior
+on them.
+
+| Ceph Version | Posture | Notes |
 |---|---|---|
-| Ceph 18 | Primary target | First-class target for inventory, health, Cases, workflows, policy checks, and Agent operations. |
-| Ceph 16 | Compatibility target | Important during migration. Start with read-only inventory, health, and reporting unless a mutating operation is explicitly validated. |
+| Ceph 18 (Reef) | Primary target | First-class target for inventory, health, Cases, workflows, policy checks, and Agent operations through v0.1.0. |
+| Ceph 19 | Read compatibility (from v0.0.11) | Read paths validated against version-shaped Dashboard fixtures; mutating operations validate with v0.3.0. |
+| Ceph 20 | Read compatibility (from v0.0.11) | Read paths validated against version-shaped Dashboard fixtures; mutating operations validate with v0.3.0. |
 
-Ceph versions outside this table are not rejected permanently, but they are not MVP validation targets.
+Ceph 16 (Pacific) was a pre-development read-only migration target. It was
+retired on 2026-09-01: the migration context is obsolete, the support floor
+is Ceph 18, and the `pacific-readonly` fixture was removed.
+
+The primary Ceph version is re-pinned from fleet reality at v0.3.0, when
+Rook-managed clusters (which run newer Ceph) become first-class and Ceph
+19/20 mutation validation lands.
 
 ---
 
 # 3. Cluster Types
 
-| Cluster Type | MVP Posture | Notes |
+| Cluster Type | Posture | Notes |
 |---|---|---|
 | Bare-metal Ceph | First-class | Direct Ceph provider path for non-Rook clusters. |
-| Rook-managed Ceph | First-class | Kubernetes/Rook provider path for clusters managed through Rook. |
+| Rook-managed Ceph | First-class (provider lands v0.3.0) | Kubernetes/Rook provider path for clusters managed through Rook. |
 
 Bare-metal and Rook-managed clusters must share the same Atlas domain model and user-facing workflow semantics.
 
@@ -40,7 +52,8 @@ Rook support means Atlas understands Kubernetes/Rook as a Ceph deployment and ma
 
 # 4. Provider Boundary
 
-Atlas should model Ceph operations by intent, then route implementation through provider interfaces.
+Atlas should model Ceph operations by intent, then route implementation
+through provider interfaces.
 
 Examples:
 
@@ -53,19 +66,27 @@ Examples:
 
 Provider implementations may differ, but RBAC, policy, approval, audit, Case, Workflow, and Timeline behavior must remain consistent.
 
+Between-release Dashboard REST API drift is absorbed inside the provider
+package behind the shared provider contract (ADR-0023); widening the
+validated read matrix to Ceph 19/20 (v0.0.11) means adding
+version-shaped fixtures and read contract coverage, not new contracts.
+
 ---
 
-# 5. MVP Capability Matrix
+# 5. Capability Matrix
 
-| Capability | Ceph 18 Bare Metal | Ceph 18 Rook | Ceph 16 Bare Metal | Ceph 16 Rook |
-|---|---|---|---|---|
-| Cluster registration | Required | Required | Read-only compatible | Read-only compatible if present |
-| Health sync | Required | Required | Required | Required if present |
-| Inventory sync | Required | Required | Required | Required if present |
-| OSD failure Case creation | Required | Required | Required | Required if present |
-| Replace OSD Workflow | Required after validation | Required after validation | Deferred unless validated | Deferred unless validated |
-| Upgrade readiness report | Required | Required | Useful for migration | Useful for migration if present |
-| RGW signal visibility | Useful | Useful | Useful | Useful if present |
+| Capability | Ceph 18 | Ceph 19 | Ceph 20 |
+|---|---|---|---|
+| Cluster registration | Required | Supported | Supported |
+| Health sync | Required | Validated v0.0.11 | Validated v0.0.11 |
+| Inventory sync | Required | Validated v0.0.11 | Validated v0.0.11 |
+| OSD failure Case creation | Required | Via validated reads | Via validated reads |
+| Replace OSD Workflow | Required after validation | Mutation-validated v0.3.0 | Mutation-validated v0.3.0 |
+| Upgrade readiness report | Required | Useful | Useful |
+| RGW signal visibility | Useful | Useful | Useful |
+
+Rook-managed variants of every capability arrive with the v0.3.0 Rook
+milestone and carry the same per-version validation as bare-metal.
 
 ---
 
@@ -91,7 +112,9 @@ Atlas should not use:
 # 7. Open Validation Work
 
 - Identify exact Ceph 18 minor versions used by first pilot clusters.
-- Identify exact Ceph 16 minor versions still present during migration.
-- Map each MVP operation to its supported Ceph API, CLI fallback, or Rook/Kubernetes provider path.
-- Define test fixtures for Ceph 18 bare-metal and Ceph 18 Rook clusters.
-- Decide whether Ceph 16 mutating operations are explicitly unsupported or supported only by exception.
+- Identify which Ceph 19 and 20 minors the pilot fleets run, to shape the
+  v0.0.11 fixture set.
+- Map each mutating operation to its supported Ceph API, CLI fallback, or
+  Rook/Kubernetes provider path per version (v0.3.0 line).
+- Define test fixtures for Ceph 19 and Ceph 20 Dashboard shapes (v0.0.11).
+- Re-pin the primary Ceph version from fleet reality at v0.3.0.

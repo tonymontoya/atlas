@@ -27,8 +27,7 @@ The example environment includes:
 - dozens of Ceph clusters
 - tens of datacenters
 - multiple global regions
-- Ceph 16 still present during migration
-- active upgrade work toward Ceph 18
+- Ceph 18 in production today, with Ceph 19 and 20 arriving over time
 - bare-metal Ceph clusters on conventional Linux hosts
 - Rook-managed Ceph clusters
 - block storage through RBD-oriented families
@@ -86,7 +85,7 @@ Implementation may differ behind provider interfaces.
 
 Ceph 18 is the primary MVP target.
 
-Ceph 16 remains important as migration context. MVP support for Ceph 16 should focus on read-only inventory, health, and reporting unless specific mutating operations are explicitly validated.
+The Ceph support floor is 18 and newer: Ceph 18 is the primary target, Ceph 19 and 20 gain validated read support at v0.0.11, and their mutating operations validate with the Rook milestone (v0.3.0). Older versions are not validation targets.
 
 ## Operations
 

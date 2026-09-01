@@ -240,7 +240,6 @@ They should provide deterministic scenarios:
 - degraded Ceph 18 bare-metal cluster with one OSD down
 - healthy Ceph 18 Rook cluster
 - degraded Ceph 18 Rook cluster with one OSD down
-- Ceph 16 read-only cluster
 - provider unavailable
 - provider unauthorized
 - malformed upstream response

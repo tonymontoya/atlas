@@ -58,7 +58,7 @@ This checklist captures the work that should be complete before implementation b
 
 - [x] Define the first Ceph compatibility matrix.
   - Ceph 18 is the MVP primary target.
-  - Ceph 16 is migration/read-only compatibility context.
+  - Support floor is Ceph 18 and newer; Ceph 16 retired, 19/20 read-compat from v0.0.11.
   - Bare-metal Ceph and Rook-managed Ceph are equal first-class Cluster types.
   - See `dev-plans/ceph_compatibility.md`.
   - Decision recorded in `docs/adr/0012-ceph-18-and-cluster-type-parity.md`.

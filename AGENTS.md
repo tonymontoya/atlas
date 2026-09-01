@@ -173,7 +173,9 @@ The current implementation supports:
 - Web UI is React with TypeScript.
 - Durable persistence is PostgreSQL.
 - Public API direction is REST API v1.
-- Ceph 18 is the primary MVP target.
+- Ceph 18 is the primary MVP target; the support floor is Ceph 18 and
+  newer (Ceph 16 retired 2026-09-01; Ceph 19/20 read support lands v0.0.11,
+  mutation validation with v0.3.0).
 - Bare-metal Ceph and Rook-managed Ceph are equal first-class cluster types.
 - AWX and Ansible are not runtime dependencies.
 - Atlas Agents must not expose generic shell execution, SSH proxying, or arbitrary remote command APIs.

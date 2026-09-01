@@ -102,7 +102,6 @@ func TestFixturesLoadExtendedInventory(t *testing.T) {
 		"reef-osd-down-baremetal",
 		"reef-healthy-rook",
 		"reef-osd-down-rook",
-		"pacific-readonly",
 	}
 	ctx := context.Background()
 	for _, scenario := range scenarios {

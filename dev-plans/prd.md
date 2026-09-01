@@ -620,7 +620,7 @@ Every module shall support automated testing.
 
 Identity-provider support is delivered through OIDC compatibility; Okta is one compatible example.
 
-## Post-1.0
+## Post-v0.1.0
 
 - Rook-managed Ceph as an equal first-class cluster type
 - Chat notifications (for example, Slack)
@@ -655,7 +655,7 @@ Atlas 0.1.0 is complete when:
 
 ✓ Atlas Agents execute only typed, approved operations
 
-Post-1.0 deliverables include:
+Post-v0.1.0 deliverables include:
 
 ✓ Rook-managed Ceph is an equal first-class cluster type
 
@@ -704,7 +704,7 @@ Long-term deliverables; the v0.1.0 subset is defined in `dev-plans/mvp.md`.
 - REST API
 - Web UI
 
-Post-1.0:
+Post-v0.1.0:
 
 - Federated architecture
 - Global Control Plane
@@ -736,7 +736,7 @@ Post-1.0:
 - Ceph (bare-metal)
 - Prometheus
 
-Post-1.0:
+Post-v0.1.0:
 
 - Rook-managed Ceph
 - Chat notifications (for example, Slack)
@@ -752,7 +752,7 @@ v0.1.0 ships one workflow end to end:
 
 - Replace OSD
 
-Post-1.0 workflow library:
+Post-v0.1.0 workflow library:
 
 - Drain Host
 - Restart Daemon
@@ -764,10 +764,11 @@ Post-1.0 workflow library:
 
 ---
 
-# 16. Post-1.0 Roadmap
+# 16. Post-v0.1.0 Roadmap
 
-The committed post-0.1.0 sequence — Rook-managed Ceph, chat notifications, the
-enterprise integration line, then federation — lives in `dev-plans/roadmap.md`.
+The committed post-v0.1.0 sequence — federation (v0.2.0), then Rook-managed
+Ceph with Ceph 19/20 mutation validation (v0.3.0), then chat notifications
+and the enterprise integration line — lives in `dev-plans/roadmap.md`.
 Beyond that, potential future capabilities:
 
 - Optional ceph-mgr module

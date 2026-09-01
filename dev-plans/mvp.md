@@ -157,7 +157,7 @@ Atlas 0.1.0 is complete when:
 
 ---
 
-# 7. Post-1.0 Candidates
+# 7. Post-v0.1.0 Candidates
 
 These remain important but follow v0.1.0:
 

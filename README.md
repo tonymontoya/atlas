@@ -110,12 +110,15 @@ The full ladder lives in [`dev-plans/roadmap.md`](dev-plans/roadmap.md).
   immutable Audit Events
 - **v0.0.10 — Real Mutations:** mutual TLS hardening, typed approved operations,
   and the Replace OSD workflow executing real mutations end to end
+- **v0.0.11 — Read Matrix Widening:** Ceph 19 and 20 Dashboard fixtures and
+  read contract coverage, ahead of Ship
 - **v0.1.0 — Ship:** deployment artifacts, bootstrap runbook, user docs, and
   a security review — usable by a stranger, single-zone
 
-After v0.1.0: Rook-managed Ceph support, chat notifications, and the broader
-enterprise platform direction (NetBox, log links, external ticket trackers,
-federation).
+After v0.1.0: **v0.2.0 — Federation** (multi-zone), then **v0.3.0 — Rook
+and Version Breadth** (Rook-managed Ceph first-class plus Ceph 19/20
+mutation validation), then chat notifications and the broader enterprise
+platform direction (NetBox, log links, external ticket trackers).
 
 ## Versioning
 
@@ -126,7 +129,9 @@ schema, and configuration are not stable.
 Development happens in the `0.0.x` patch line: each release
 (`v0.0.2`, `v0.0.3`, ...) is a coherent development milestone and may
 include breaking changes, which will be described in the release notes.
-Stability commitments begin at `v0.1.0`.
+Stability commitments begin at `v0.1.0` with minors-as-majors semantics:
+patches are always safe, breaking changes land only at minor boundaries
+with migration notes, and deprecations are flagged one minor ahead.
 
 The first seven releases were published as `v0.1.0` through `v0.6.1` and
 were renumbered down to `v0.0.1` through `v0.0.7` on 2026-09-01, before
@@ -244,7 +249,8 @@ the dev stack never use it, and no credentials are required anywhere else.
 
 Prerequisites on the Ceph side:
 
-- Ceph 18 (Reef) with the Dashboard mgr module enabled and reachable
+- Ceph 18 (Reef) or newer with the Dashboard mgr module enabled and
+  reachable (validated read shapes: Ceph 18; Ceph 19/20 join at v0.0.11)
 - a dedicated Dashboard user with a read-only role (for example
   `atlas-reader`)
 
