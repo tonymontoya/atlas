@@ -9,7 +9,7 @@ batches from the local Ceph Dashboard and pushes them to
 `POST /api/v1/agent/observations` over mutual TLS on an internal
 ticker.
 
-The Agent is read-only by construction in v0.7: it has no dispatch or
+The Agent is read-only by construction in v0.0.8: it has no dispatch or
 command surface, and Dashboard credentials never leave the Agent.
 
 ## Configuration (agent-local `ATLAS_AGENT_*` environment)

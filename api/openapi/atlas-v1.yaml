@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Atlas API
-  version: 0.7.0
+  version: 0.0.8
   description: >
     Atlas REST API contract. Covers local health, the cluster index and
     cluster-scoped inventory reads (health, OSDs, Hosts, Storage
@@ -10,7 +10,7 @@ info:
     history, case records with cluster filtering, and the authenticated
     operator identity probe. Write endpoints and cluster-registration
     management carry a bearer-token security scheme; inventory read
-    endpoints remain public. 0.7.0 is a
+    endpoints remain public. 0.0.8 is a
     documented 0.x breaking change: it adds the cluster index and
     per-cluster reads, and removes the single-cluster
     /api/v1/clusters/current/* family.
@@ -181,7 +181,7 @@ paths:
         is nil from registration until Enrollment binds it (ADR-0026), so
         FSID-addressed management of fresh registrations is impossible.
         Registration management is authenticated like the writes it
-        reports on; inventory reads stay public until RBAC (v0.8).
+        reports on; inventory reads stay public until RBAC (v0.0.9).
       security:
         - bearerAuth: []
       parameters:

@@ -9,7 +9,7 @@ Atlas's first real (non-fake) provider implements `CephReadProvider` for bare-me
 
 Authentication is username and password for a dedicated, read-only Dashboard user. The provider logs in once, caches the resulting JWT in-process, and re-authenticates once on a 401 before failing. A static token was rejected because Dashboard JWTs expire, which would strand unattended sync runs until a human re-mints (and minting requires a login anyway); least privilege comes from the Dashboard user's role, not the credential type. Credentials exist only in the explicit `ATLAS_PROVIDER_MODE=ceph` opt-in path — never in ordinary local development paths (ADR-0011; `dev-plans/local_development_topology.md`) and never in this repository.
 
-Error normalization is pinned as: context cancellation/deadline → `Timeout`; transport failures (connect refused, DNS, TLS) and HTTP 5xx → `Unavailable`; HTTP 401 after the re-auth attempt and HTTP 403 → `Unauthorized`; HTTP 404 on host-scoped lookups → `NotFound`; an undecodable body or shape violation → `MalformedResponse`. The `Partial` class is not produced by this provider in v0.6.0 — no Dashboard read legitimately returns partial data — so the shared contract suite must allow a provider to omit that scenario; the class stays in the contract for providers that can produce it.
+Error normalization is pinned as: context cancellation/deadline → `Timeout`; transport failures (connect refused, DNS, TLS) and HTTP 5xx → `Unavailable`; HTTP 401 after the re-auth attempt and HTTP 403 → `Unauthorized`; HTTP 404 on host-scoped lookups → `NotFound`; an undecodable body or shape violation → `MalformedResponse`. The `Partial` class is not produced by this provider in v0.0.6 — no Dashboard read legitimately returns partial data — so the shared contract suite must allow a provider to omit that scenario; the class stays in the contract for providers that can produce it.
 
 Testing never touches real Ceph: all unit, contract, and wiring tests run against an in-process fake Dashboard (httptest) serving Dashboard-shaped JSON, and the provider runs the shared `contracttest` suite like any other implementation. Response-shape assumptions pinned from Reef documentation rather than a live cluster are documented in-code at the decode sites. Validation against a real cluster is explicit, optional, and manual, per `dev-plans/mvp_test_strategy.md` and `dev-plans/pre_development_checklist.md`.
 
@@ -17,7 +17,7 @@ Testing never touches real Ceph: all unit, contract, and wiring tests run agains
 
 **Consequences**
 
-- Clusters must have the Dashboard mgr module enabled and reachable; clusters without it cannot be read by this provider in v0.6.0.
+- Clusters must have the Dashboard mgr module enabled and reachable; clusters without it cannot be read by this provider in v0.0.6.
 - Endpoint drift is absorbed in one package, but shapes pinned from docs may need correction when first exercised against a live Reef cluster; those sites are marked.
 - Atlas holds a long-lived Dashboard credential in environment configuration; secret storage and rotation design is deferred until real-deployment work (security checklist).
 - Local development and CI gain no new dependency: fake mode remains the default everywhere, and the dev stack is unchanged.

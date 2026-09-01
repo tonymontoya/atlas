@@ -99,8 +99,8 @@ internal names themselves.
 ## Versioning
 
 - [x] Strategy decided: Semantic Versioning; `0.x` pre-stability; initial
-  public tag `v0.1.0`; stability commitments begin at `1.0.0`. Documented in
-  README. `v0.1.0` tagged on the initial public commit.
+  public tag `v0.0.1`; stability commitments begin at `0.1.0`. Documented in
+  README. `v0.0.1` tagged on the initial public commit.
 
 ## History safety
 
@@ -116,7 +116,7 @@ internal names themselves.
 - [x] Ownership decided: personal GitHub account (`tonymontoya`) for early
   exploration; move to a dedicated org if traction develops.
 - [x] Clean repository created and populated from the sanitized tree
-  (2026-08-14), initial commit tagged `v0.1.0`.
+  (2026-08-14), initial commit tagged `v0.0.1`.
 - [x] Communications positioned as "early design/prototype work," not
   "ready for users."
 
@@ -132,5 +132,5 @@ All decisions from the initial audit are resolved:
    example environment.
 3. Ownership: personal GitHub account initially.
 4. `AGENTS.md` ships public; LLM tooling state directories are gitignored.
-5. Versioning: SemVer, `v0.1.0` initial tag, stability commitments at
-   `1.0.0`.
+5. Versioning: SemVer, `v0.0.1` initial tag, stability commitments at
+   `0.1.0`.

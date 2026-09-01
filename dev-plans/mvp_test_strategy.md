@@ -113,12 +113,12 @@ Should include:
   audience, bad signature, missing subject, key rotation)
 - authenticated manual Case writes (create, transition with closed-terminal
   conflicts, assignment, notes) including 401/400/404/409 error envelopes
-- the workflow loop against the fake Agent adapter (v0.5.0): attach,
+- the workflow loop against the fake Agent adapter (v0.0.5): attach,
   Approval Gate pause and idempotent approval, human Task pause and
   completion, retry past scripted transient Job failures, terminal
   succeeded/failed states, and restart re-dispatch under the original
   idempotency key
-- ceph-mode inventory sync (v0.6.0 line): one `RunOnce` batch from the
+- ceph-mode inventory sync (v0.0.6 line): one `RunOnce` batch from the
   bare-metal Dashboard provider against the in-process fake Dashboard
   (`dashtest`), persisted through the same observation/run path as the
   fake provider, including the provider-error failure record — covered;
@@ -291,7 +291,7 @@ Required first fixtures:
 - normalized Host/Storage Device inventory
 - normalized Case input from alert
 
-All required first fixtures exist as of v0.3.0: Ceph read scenarios and
+All required first fixtures exist as of v0.0.3: Ceph read scenarios and
 error directives under `dev/fixtures/ceph/`, Prometheus alert scenarios
 under `dev/fixtures/prometheus/`, and normalized examples under
 `dev/fixtures/normalized/` (including `case-input/osd-down-alert.json`,
@@ -322,9 +322,9 @@ MVP tests should cover:
 - transaction behavior for sync writes
 - append-only audit table behavior once audit exists
 - durable workflow state persistence (instance and Job state machines,
-  approvals, task completions — covered since v0.5.0)
+  approvals, task completions — covered since v0.0.5)
 - provider-scoped check constraints keep the fake and ceph sync-run and
-  observation rows honest (migration 000010 — covered since the v0.6.0
+  observation rows honest (migration 000010 — covered since the v0.0.6
   line)
 
 Do not introduce Redis or NATS test dependencies until code paths require them.
@@ -354,10 +354,10 @@ API tests should use fake providers by default.
 
 MVP workflow testing should start with read-only and state-machine behavior.
 
-Before mutating workflows (state-machine items covered since v0.5.0 against
+Before mutating workflows (state-machine items covered since v0.0.5 against
 the fake Agent adapter, ADR-0022):
 
-- Case creation from alert fixture (covered, v0.3.0)
+- Case creation from alert fixture (covered, v0.0.3)
 - Case creation from OSD-down fake provider scenario
 - Workflow Instance creation (covered)
 - Job state transitions (covered)

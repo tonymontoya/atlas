@@ -25,7 +25,7 @@ import (
 	"github.com/tonymontoya/ceph-atlas/internal/apperr"
 )
 
-// certificateTTL bounds the issued client certificates. v0.7 keeps
+// certificateTTL bounds the issued client certificates. v0.0.8 keeps
 // lifetimes long and renewal manual (ADR-0026): rotation means
 // re-enrollment with a fresh credential.
 const certificateTTL = 365 * 24 * time.Hour

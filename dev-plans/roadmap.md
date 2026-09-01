@@ -8,19 +8,30 @@
 
 # 1. Purpose
 
-This is the canonical version ladder from the current line to Atlas 1.0.0 and
+This is the canonical version ladder from the current line to Atlas 0.1.0 and
 the prioritized direction after it. `dev-plans/prd.md` defines the long-term
-product; `dev-plans/mvp.md` defines the v1.0 scope; this file sequences the
+product; `dev-plans/mvp.md` defines the v0.1.0 scope; this file sequences the
 work. The README summarizes this file; where they disagree, this file wins.
 
 ---
 
 # 2. The Realignment
 
-Atlas 1.0 is the first production-usable single-zone release. It carries the
+Atlas 0.1.0 is the first production-usable single-zone release. It carries the
 scope the PRD originally called "MVP"; the PRD's former "Version 1"
 enterprise vision (fleet scale, broad integrations, search, dashboards,
-federation) is the post-1.0 direction.
+federation) is the post-0.1.0 direction.
+
+**Renumber, 2026-09-01:** the first seven releases were originally
+published as `v0.1.0` through `v0.6.1`, with this document targeting
+`v1.0` as the first production-usable release. They were renumbered down
+to `v0.0.1` through `v0.0.7` — before the project had any users or
+published binaries — because the work was not far enough along to justify
+consuming the `0.x` minor line. The first production-usable target moved
+from `1.0` to `v0.1.0`, development milestones live in `0.0.x` patches,
+and the intermediate rungs were remapped (`v0.7` → `v0.0.8`, `v0.8` →
+`v0.0.9`, `v0.9` → `v0.0.10`). The Go module proxy retains cached copies
+of the old tags; those version strings will never be reused.
 
 Ground rules for the ladder:
 
@@ -28,23 +39,23 @@ Ground rules for the ladder:
   first real Ceph mutation executes.
 - Fake-first: every capability is proven on fake providers and local stacks
   before it touches a real cluster.
-- Each 0.x minor is a coherent development milestone; breaking changes are
-  allowed and described in the release notes. Stability commitments begin
-  at 1.0.0.
+- Each `0.0.x` patch is a coherent development milestone; breaking changes
+  are allowed and described in the release notes. Stability commitments
+  begin at `v0.1.0`.
 
 ---
 
 # 3. Version Ladder
 
-## v0.6 — The Real Ceph Read Provider line (complete)
+## v0.0.6 — The Real Ceph Read Provider line (complete)
 
-v0.6.0 shipped the read-only Ceph Dashboard provider; v0.6.1 shipped the
+v0.0.6 shipped the read-only Ceph Dashboard provider; v0.0.7 shipped the
 internal-architecture hardening pass (app-level error taxonomy,
 guarded-transition store helpers, one Actor type, typed inventory status,
 dashtest provider-welding helpers) with the alert-eval fail-fast behavior
 change documented in its release notes.
 
-## v0.7 — Registered Reads — Current line
+## v0.0.8 — Registered Reads — Current line
 
 Real clusters report in through enrolled Atlas Agents (ADR-0025):
 
@@ -55,7 +66,7 @@ Real clusters report in through enrolled Atlas Agents (ADR-0025):
 - Removal of the control-plane pull path (`ATLAS_PROVIDER_MODE=ceph`)
 - No mutation
 
-## v0.8 — Safety Chain
+## v0.0.9 — Safety Chain
 
 The guardrails before the first real mutation:
 
@@ -64,17 +75,17 @@ The guardrails before the first real mutation:
   checks
 - Immutable Audit Events for privileged operations
 
-## v0.9 — Real Mutations
+## v0.0.10 — Real Mutations
 
 Real mutation through the typed-operation model, dispatched to the Agents
-enrolled since v0.7:
+enrolled since v0.0.8:
 
 - Mutual TLS hardening, credential rotation, and revocation for the Agent channel
 - Typed, approved, idempotent Job execution against real Ceph
 - Replace OSD executing real operations end to end, with recovery
   monitoring and verification
 
-## v1.0 — Ship
+## v0.1.0 — Ship
 
 Usable by a stranger:
 
@@ -85,10 +96,10 @@ Usable by a stranger:
 - User documentation
 - Security review pass (`dev-plans/security_review_checklist.md`)
 - PostgreSQL backup/restore note
-- Upgrade path from v0.9
+- Upgrade path from v0.0.10
 - No new features
 
-v1.0 acceptance criteria live in `dev-plans/mvp.md`.
+v0.1.0 acceptance criteria live in `dev-plans/mvp.md`.
 
 ---
 
@@ -101,7 +112,7 @@ In priority order:
    clusters across 15 datacenters in 3 global zones and will not adopt
    until multi-zone, multi-control-plane features exist. Each regional
    Atlas deployment stays single-zone per ADR-0001; federation links them.
-2. Rook-managed Ceph as an equal first-class cluster type (v1.0 ships
+2. Rook-managed Ceph as an equal first-class cluster type (v0.1.0 ships
    bare-metal first)
 3. Chat notifications (for example, Slack)
 4. Enterprise line: NetBox as a required inventory source,
@@ -115,7 +126,7 @@ In priority order:
 
 # 5. Tracker
 
-GitHub milestones mirror this ladder (`v0.7`, `v0.8`, `v0.9`,
-`v1.0`). Each past release has a closed epic issue linking its release
+GitHub milestones mirror this ladder (`v0.0.8`, `v0.0.9`, `v0.0.10`,
+`v0.1.0`). Each past release has a closed epic issue linking its release
 notes. Forward work is ticketed against these milestones; deferred items
 stay in this file, not the tracker.

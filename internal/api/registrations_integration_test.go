@@ -148,7 +148,7 @@ func TestClusterRegistrationValidationOverAPI(t *testing.T) {
 		"clusterType": "rook",
 	}, true)
 	if rook.Code != http.StatusBadRequest {
-		t.Fatalf("rook status = %d, want 400 (bare-metal only in v0.7)", rook.Code)
+		t.Fatalf("rook status = %d, want 400 (bare-metal only in v0.0.8)", rook.Code)
 	}
 
 	missing := harness.do(t, http.MethodGet, "/api/v1/clusters/999999999", nil, true)
@@ -161,7 +161,7 @@ func TestClusterRegistrationUnsupportedWithoutPostgresReadSource(t *testing.T) {
 	server := NewServer(app.New(config.Config{FakeScenario: "reef-healthy-baremetal"}))
 
 	// Registration management is bearer-authenticated like the other
-	// operator endpoints (RBAC lands in v0.8); the unauthenticated GET
+	// operator endpoints (RBAC lands in v0.0.9); the unauthenticated GET
 	// reports 401 before the unsupported read source is reachable.
 	get := httptestRequest(t, server, http.MethodGet, "/api/v1/clusters/1", nil)
 	if get.Code != http.StatusUnauthorized {

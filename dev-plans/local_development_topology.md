@@ -298,7 +298,7 @@ Suggested local environment names:
 - `ATLAS_AGENT_MUTATION_ENABLED`
 
 These names are suggestions for future implementation, not current code —
-except the read-only Ceph path implemented in the v0.6.0 line (ADR-0023):
+except the read-only Ceph path implemented in the v0.0.6 line (ADR-0023):
 `ATLAS_PROVIDER_MODE=ceph` selects the bare-metal Dashboard provider for the
 inventory sync command, configured through `ATLAS_CEPH_DASHBOARD_URL`,
 `ATLAS_CEPH_DASHBOARD_USER`, `ATLAS_CEPH_DASHBOARD_PASSWORD`, optional

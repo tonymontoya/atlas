@@ -1,6 +1,6 @@
 # Atlas Product Requirements Document (PRD)
 **Version:** 0.2 (Draft)  
-**Status:** Product Requirements Document — realigned 2026-08-19: Atlas 1.0 is the production-usable single-zone release formerly scoped as "MVP"; the former "Version 1" enterprise vision is the post-1.0 direction. See `dev-plans/roadmap.md`.  
+**Status:** Product Requirements Document — realigned 2026-08-19: Atlas 0.1.0 is the production-usable single-zone release formerly scoped as "MVP"; the former "Version 1" enterprise vision is the post-0.1.0 direction. See `dev-plans/roadmap.md`.  
 **Audience:** Engineering, Architecture, UX, Contributors  
 **Project:** Atlas
 
@@ -14,13 +14,13 @@ The purpose of this document is to define **what** Atlas must do.
 
 Implementation details belong in architecture documents.
 
-The v1.0 scope is defined separately in `dev-plans/mvp.md`. v1.0 is intentionally narrower than the long-term product vision and starts with a single-zone deployment. The version ladder from the current line to 1.0 lives in `dev-plans/roadmap.md`.
+The v0.1.0 scope is defined separately in `dev-plans/mvp.md`. v0.1.0 is intentionally narrower than the long-term product vision and starts with a single-zone deployment. The version ladder from the current line to 0.1.0 lives in `dev-plans/roadmap.md`.
 
 ---
 
-# 1.1 v1.0 Relationship
+# 1.1 v0.1.0 Relationship
 
-Atlas 1.0 shall prove the core operational loop before implementing the broader enterprise platform:
+Atlas 0.1.0 shall prove the core operational loop before implementing the broader enterprise platform:
 
 - observe Ceph
 - create or update Cases
@@ -30,7 +30,7 @@ Atlas 1.0 shall prove the core operational loop before implementing the broader 
 - record Audit Events and Timeline Events
 - verify the result
 
-Federation, global dashboards, cross-zone workflows, and mandatory enterprise integrations beyond the v1.0 set are deferred until after the single-zone operating model is proven.
+Federation, global dashboards, cross-zone workflows, and mandatory enterprise integrations beyond the v0.1.0 set are deferred until after the single-zone operating model is proven.
 
 ---
 
@@ -59,7 +59,7 @@ Atlas addresses these challenges while remaining complementary to Ceph.
 
 # 4. Product Goals
 
-Atlas shall (long-term product goals; the v1.0 subset is defined in `dev-plans/mvp.md`):
+Atlas shall (long-term product goals; the v0.1.0 subset is defined in `dev-plans/mvp.md`):
 
 - Provide a secure operational interface for Ceph.
 - Eliminate routine SSH usage.
@@ -180,7 +180,7 @@ Understand what happened.
 - External ticket tracker integration
 - Ceph operations
 
-This is the long-term product scope. The v1.0 subset is defined in
+This is the long-term product scope. The v0.1.0 subset is defined in
 `dev-plans/mvp.md`, and the sequence to it in `dev-plans/roadmap.md`.
 
 ---
@@ -201,7 +201,7 @@ This is the long-term product scope. The v1.0 subset is defined in
 
 # 8. Functional Requirements
 
-These requirements describe the long-term product. v1.0 implements the subset defined in `dev-plans/mvp.md`; the rest follow post-1.0 per `dev-plans/roadmap.md`.
+These requirements describe the long-term product. v0.1.0 implements the subset defined in `dev-plans/mvp.md`; the rest follow post-0.1.0 per `dev-plans/roadmap.md`.
 
 ---
 
@@ -612,7 +612,7 @@ Every module shall support automated testing.
 
 # 11. Integrations
 
-## v1.0 Mandatory
+## v0.1.0 Mandatory
 
 - Ceph (bare-metal)
 - OIDC
@@ -633,7 +633,7 @@ Identity-provider support is delivered through OIDC compatibility; Okta is one c
 
 # 12. Acceptance Criteria
 
-Atlas 1.0 is complete when:
+Atlas 0.1.0 is complete when:
 
 ✓ Operator logs in using OIDC
 
@@ -695,7 +695,7 @@ Post-1.0 deliverables include:
 
 # 15. Deliverables
 
-Long-term deliverables; the v1.0 subset is defined in `dev-plans/mvp.md`.
+Long-term deliverables; the v0.1.0 subset is defined in `dev-plans/mvp.md`.
 
 ## Platform
 
@@ -748,7 +748,7 @@ Post-1.0:
 
 ## Operations
 
-v1.0 ships one workflow end to end:
+v0.1.0 ships one workflow end to end:
 
 - Replace OSD
 
@@ -766,7 +766,7 @@ Post-1.0 workflow library:
 
 # 16. Post-1.0 Roadmap
 
-The committed post-1.0 sequence — Rook-managed Ceph, chat notifications, the
+The committed post-0.1.0 sequence — Rook-managed Ceph, chat notifications, the
 enterprise integration line, then federation — lives in `dev-plans/roadmap.md`.
 Beyond that, potential future capabilities:
 
@@ -781,7 +781,7 @@ Beyond that, potential future capabilities:
 - Advanced chat bot interactions
 - Public automation SDKs
 
-These items are intentionally excluded from the v1.0 commitment.
+These items are intentionally excluded from the v0.1.0 commitment.
 
 ---
 

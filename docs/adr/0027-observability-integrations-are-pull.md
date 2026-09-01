@@ -12,4 +12,4 @@ Alerts do not flow through the Atlas Agent: relaying them would couple alert del
 - Alerts join clusters by their `cluster` label resolved to an FSID (`resolveClusterLabel`), so one environment-level Prometheus can serve multiple registered clusters.
 - The `alert_evaluation_runs.provider` check must widen beyond `'fake'`, and alert-source selection gains its own explicit opt-in (mirroring `ATLAS_PROVIDER_MODE`), so local development and CI stay fake-first.
 - Future integrations (Datadog, OpenSearch, Splunk) follow this same pull pattern rather than inventing per-vendor push arrangements.
-- Alertmanager integration (silence-aware detection, silence context on Cases) is deferred: its value is policy behavior, which joins the v0.8 policy-evaluation line rather than the v0.7 alert source. It would slot in as another `ATLAS_ALERT_SOURCE` value.
+- Alertmanager integration (silence-aware detection, silence context on Cases) is deferred: its value is policy behavior, which joins the v0.0.9 policy-evaluation line rather than the v0.0.8 alert source. It would slot in as another `ATLAS_ALERT_SOURCE` value.

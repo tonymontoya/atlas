@@ -61,7 +61,7 @@ func TestIssueProducesClientCertificateChainedToCA(t *testing.T) {
 		t.Fatalf("leaf certificate is not signed by the issuing CA: %v", err)
 	}
 	if leaf.NotAfter.Sub(leaf.NotBefore) < 364*24*time.Hour {
-		t.Fatalf("validity = %s, want a long v0.7 lifetime", leaf.NotAfter.Sub(leaf.NotBefore))
+		t.Fatalf("validity = %s, want a long v0.0.8 lifetime", leaf.NotAfter.Sub(leaf.NotBefore))
 	}
 	if issued.SerialNumber == "" || issued.Fingerprint == "" || issued.CommonName != "atlas-agent" {
 		t.Fatalf("issued identity handles incomplete: %+v", issued)

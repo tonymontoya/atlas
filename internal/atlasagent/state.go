@@ -4,7 +4,7 @@
 // issued client certificate, then collect full inventory batches
 // through the Ceph Dashboard read provider running inside the Agent and
 // push them to Atlas over mutual TLS. The Agent is read-only by
-// construction in v0.7: it exposes no dispatch or command surface, and
+// construction in v0.0.8: it exposes no dispatch or command surface, and
 // Dashboard credentials never leave the Agent.
 package atlasagent
 

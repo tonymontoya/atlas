@@ -121,7 +121,7 @@ func (h *loopHarness) newRunner(t *testing.T, credential string) *Runner {
 	})
 }
 
-// TestEnrolledLoopEndToEnd drives the whole v0.7 Agent contract
+// TestEnrolledLoopEndToEnd drives the whole v0.0.8 Agent contract
 // against the real API server: enroll with the one-time credential,
 // collect from the fake Dashboard, push over mutual TLS, and persist
 // as provider "agent". The second run reuses the stored certificate —

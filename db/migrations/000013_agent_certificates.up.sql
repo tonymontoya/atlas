@@ -4,7 +4,7 @@ BEGIN;
 -- Enrollment exchanges a one-time Enrollment Credential for a
 -- certificate chained to the Atlas internal CA; the serial number maps
 -- a certificate to exactly one registered Cluster, which is also how
--- v0.7 revocation works: Atlas rejects the certificate (revoked_at is
+-- v0.0.8 revocation works: Atlas rejects the certificate (revoked_at is
 -- set) instead of maintaining a CRL.
 
 CREATE TABLE cluster_agent_certificates (

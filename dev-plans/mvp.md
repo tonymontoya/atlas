@@ -1,6 +1,6 @@
-# Atlas v1.0 Scope
+# Atlas v0.1.0 Scope
 **Version:** 0.2 (Draft)  
-**Status:** v1.0 Scope Document — realigned 2026-08-19; this milestone was formerly called "MVP". See `dev-plans/roadmap.md` for the ladder to 1.0.  
+**Status:** v0.1.0 Scope Document — realigned 2026-08-19; this milestone was formerly called "MVP". See `dev-plans/roadmap.md` for the ladder to 0.1.0.  
 **Audience:** Engineering, Architecture, Product, Contributors  
 **Project:** Atlas
 
@@ -8,17 +8,17 @@
 
 # 1. Purpose
 
-This document defines the scope of Atlas 1.0 — the first production-usable, single-zone release, and the first release carrying stability commitments.
+This document defines the scope of Atlas 0.1.0 — the first production-usable, single-zone release, and the first release carrying stability commitments.
 
-v1.0 should prove that Atlas can safely turn Ceph operational intent into governed, auditable work. It should not attempt to deliver the broader enterprise platform, which follows post-1.0.
+v0.1.0 should prove that Atlas can safely turn Ceph operational intent into governed, auditable work. It should not attempt to deliver the broader enterprise platform, which follows post-0.1.0.
 
 ---
 
-# 2. v1.0 Thesis
+# 2. v0.1.0 Thesis
 
-Atlas 1.0 is a single-zone operations platform for one or more Ceph clusters in one operational boundary.
+Atlas 0.1.0 is a single-zone operations platform for one or more Ceph clusters in one operational boundary.
 
-v1.0 must prove the core Atlas loop:
+v0.1.0 must prove the core Atlas loop:
 
 1. observe Ceph inventory and health
 2. create or update a Case
@@ -30,7 +30,7 @@ v1.0 must prove the core Atlas loop:
 
 ---
 
-# 3. v1.0 In Scope
+# 3. v0.1.0 In Scope
 
 ## Platform
 
@@ -44,7 +44,7 @@ v1.0 must prove the core Atlas loop:
 - PostgreSQL persistence
 
 Rook-managed Ceph remains an equal first-class cluster type in the data
-model, but its provider lands post-1.0 as the first follow-on slice (see
+model, but its provider lands post-0.1.0 as the first follow-on slice (see
 `dev-plans/roadmap.md`).
 
 ## Inventory
@@ -87,19 +87,19 @@ model, but its provider lands post-1.0 as the first follow-on slice (see
 - OIDC: required
 - Prometheus: required for health and alert context, including a live alert source
 
-Deferred to post-1.0: Rook-managed Ceph, chat notifications, NetBox, the
+Deferred to post-0.1.0: Rook-managed Ceph, chat notifications, NetBox, the
 external ticket tracker, and OpenSearch/Splunk (see `dev-plans/roadmap.md`).
 
 ---
 
-# 4. v1.0 Out of Scope
+# 4. v0.1.0 Out of Scope
 
 - Global Control Plane
 - multi-zone synchronization
 - cross-zone workflows
 - WAN conflict resolution
 - global dashboards
-- Rook-managed Ceph provider (first post-1.0 slice)
+- Rook-managed Ceph provider (first post-0.1.0 slice)
 - chat notifications
 - arbitrary shell execution
 - SSH proxying
@@ -118,7 +118,7 @@ external ticket tracker, and OpenSearch/Splunk (see `dev-plans/roadmap.md`).
 
 # 5. First Workflow: Replace OSD
 
-Replace OSD is the v1.0 tracer-bullet workflow because it exercises the main Atlas concepts without requiring federation.
+Replace OSD is the v0.1.0 tracer-bullet workflow because it exercises the main Atlas concepts without requiring federation.
 
 The workflow should include:
 
@@ -134,13 +134,13 @@ The workflow should include:
 - Audit Events for every privileged action
 - Timeline Events for user-facing progress
 
-v1.0 may support dry-run execution before real mutation if needed to validate the safety model.
+v0.1.0 may support dry-run execution before real mutation if needed to validate the safety model.
 
 ---
 
-# 6. v1.0 Acceptance Criteria
+# 6. v0.1.0 Acceptance Criteria
 
-Atlas 1.0 is complete when:
+Atlas 0.1.0 is complete when:
 
 - an operator can log in through OIDC
 - a Ceph cluster can be registered
@@ -159,7 +159,7 @@ Atlas 1.0 is complete when:
 
 # 7. Post-1.0 Candidates
 
-These remain important but follow v1.0:
+These remain important but follow v0.1.0:
 
 - Rook-managed Ceph provider
 - chat notifications
@@ -186,4 +186,4 @@ These remain important but follow v1.0:
 - Do not add generic remote execution to Atlas Agents.
 - Do not make AWX or Ansible a runtime dependency.
 - Existing AWX jobs, Ansible playbooks, and runbooks may be used only as discovery and migration inputs.
-- Keep v1.0 data models compatible with future federation, but do not implement federation early.
+- Keep v0.1.0 data models compatible with future federation, but do not implement federation early.

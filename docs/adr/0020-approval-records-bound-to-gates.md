@@ -2,7 +2,7 @@
 
 An Approval is a durable record bound to a specific Workflow Instance and the gate it is paused at, satisfying the security review checklist's approval gate. The record captures approver identity as an OIDC subject with a display-name snapshot (the assignment pattern from manual Case writes), the Workflow Instance and gate, an optional reason, and a timestamp. One approval advances the instance past its current gate; it authorizes nothing else. Approval expiration is deferred until approvals guard real mutation.
 
-Before RBAC exists, any authenticated Operator may approve, mirroring the v0.4.0 decision that all authenticated operators may perform manual writes. Approval authority becomes a permission when RBAC lands; the record shape does not change.
+Before RBAC exists, any authenticated Operator may approve, mirroring the v0.0.4 decision that all authenticated operators may perform manual writes. Approval authority becomes a permission when RBAC lands; the record shape does not change.
 
 **Consequences**
 

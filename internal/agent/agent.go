@@ -1,6 +1,6 @@
 // Package agent defines the Atlas Agent boundary (ADR-0022): the
 // dispatcher hands serialized typed-operation request envelopes to an
-// AgentAdapter and gets a job outcome back. The only v0.5.0
+// AgentAdapter and gets a job outcome back. The only v0.0.5
 // implementation is the in-process fake; a network-speaking agent will
 // slot behind the same interface.
 package agent

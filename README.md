@@ -98,37 +98,43 @@ What does not exist yet:
 
 ## Roadmap
 
-Atlas is working toward a production-usable single-zone 1.0. Each 0.x minor
-is a coherent development milestone; stability commitments begin at 1.0.0.
+Atlas is working toward a production-usable single-zone `v0.1.0`. Each
+`0.0.x` patch is a coherent development milestone; stability commitments
+begin at `v0.1.0`.
 The full ladder lives in [`dev-plans/roadmap.md`](dev-plans/roadmap.md).
 
-- **v0.7 — Registered Reads:** cluster registration and Enrollment, a
+- **v0.0.8 — Registered Reads:** cluster registration and Enrollment, a
   read-only Atlas Agent pushing observations from real clusters, and real
   alert ingestion creating Cases automatically
-- **v0.8 — Safety Chain:** hierarchical RBAC, policy evaluation, and
+- **v0.0.9 — Safety Chain:** hierarchical RBAC, policy evaluation, and
   immutable Audit Events
-- **v0.9 — Real Mutations:** mutual TLS hardening, typed approved operations,
+- **v0.0.10 — Real Mutations:** mutual TLS hardening, typed approved operations,
   and the Replace OSD workflow executing real mutations end to end
-- **v1.0 — Ship:** deployment artifacts, bootstrap runbook, user docs, and
+- **v0.1.0 — Ship:** deployment artifacts, bootstrap runbook, user docs, and
   a security review — usable by a stranger, single-zone
 
-After 1.0: Rook-managed Ceph support, chat notifications, and the broader
+After v0.1.0: Rook-managed Ceph support, chat notifications, and the broader
 enterprise platform direction (NetBox, log links, external ticket trackers,
 federation).
 
 ## Versioning
 
-Atlas follows [Semantic Versioning](https://semver.org/). While Atlas is in
-`0.x`, anything may change at any time and the API, database schema, and
-configuration are not stable.
+Atlas follows [Semantic Versioning](https://semver.org/). While Atlas is
+below `v0.1.0`, anything may change at any time and the API, database
+schema, and configuration are not stable.
 
-The initial public release will be tagged `v0.1.0`. During `0.x`, minor
-versions (`v0.2.0`, `v0.3.0`, ...) mark coherent development milestones and may
+Development happens in the `0.0.x` patch line: each release
+(`v0.0.2`, `v0.0.3`, ...) is a coherent development milestone and may
 include breaking changes, which will be described in the release notes.
-Stability commitments begin at `1.0.0`.
+Stability commitments begin at `v0.1.0`.
 
-The `/api/v1` path segment identifies the REST API contract direction; during
-`0.x` it does not imply a stability guarantee.
+The first seven releases were published as `v0.1.0` through `v0.6.1` and
+were renumbered down to `v0.0.1` through `v0.0.7` on 2026-09-01, before
+the project had any users or published binaries, to reserve `v0.1.0` for
+the first release intended to be usable by others.
+
+The `/api/v1` path segment identifies the REST API contract direction; below
+`v0.1.0` it does not imply a stability guarantee.
 
 ## Documentation
 
@@ -136,8 +142,8 @@ The `/api/v1` path segment identifies the REST API contract direction; during
 - `dev-plans/prd.md` - product requirements
 - `dev-plans/hld.md` - high-level architecture
 - `dev-plans/domain_model.md` - canonical product language
-- `dev-plans/mvp.md` - v1.0 scope document
-- `dev-plans/roadmap.md` - version ladder to 1.0 and post-1.0 direction
+- `dev-plans/mvp.md` - v0.1.0 scope document
+- `dev-plans/roadmap.md` - version ladder to 0.1.0 and post-0.1.0 direction
 - `dev-plans/scale_tiers.md` - scale targets by deployment tier
 - `dev-plans/environment_context.md` - example operating environment context and portability rules
 - `dev-plans/ceph_compatibility.md` - Ceph version and cluster type compatibility posture
@@ -316,10 +322,10 @@ go run ./cmd/atlas-api
 
 Setting one path without the other refuses to start. Issued
 certificates carry `commonName=atlas-agent` and client-auth extended
-key usage, live for one year (v0.7 keeps lifetimes long and renewal
+key usage, live for one year (v0.0.8 keeps lifetimes long and renewal
 manual — rotation means re-enrollment), and map to exactly one
 registered Cluster through their recorded serial number. Revocation in
-v0.7 is Atlas rejecting the certificate.
+v0.0.8 is Atlas rejecting the certificate.
 
 ### Run the atlas-agent binary
 

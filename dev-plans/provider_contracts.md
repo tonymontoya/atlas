@@ -967,7 +967,7 @@ Purpose:
 
 Return current alert context for a Cluster or target object.
 
-Implementation note: implemented in v0.3.0 against the fake provider as
+Implementation note: implemented in v0.0.3 against the fake provider as
 `CurrentAlerts(ctx)` without the target-scope and filter inputs below — the
 single-zone fake scaffold has no consumer for them yet; parameters arrive with
 the first real observability source.
