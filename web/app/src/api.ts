@@ -11,6 +11,7 @@ export type ClusterSummary = {
   healthStatus: string | null;
   healthSummary: string | null;
   agentLastSeen: string | null;
+  agentLastPushAt: string | null;
 };
 
 export type ClusterIndex = {
@@ -149,8 +150,6 @@ export type ClusterView = {
   pools: Pool[];
   cases: CaseRecord[];
   casesUnavailable?: string;
-  syncRuns: InventorySyncRun[];
-  syncRunsUnavailable?: string;
 };
 
 export type ClusterViewNotFound = {
@@ -203,9 +202,8 @@ export async function resolveCluster(
   return cluster && cluster.fsid !== null ? cluster : null;
 }
 
-// loadClusterView gathers everything the per-cluster overview shows:
-// the cluster itself, its scoped inventory reads, its Cases, and its
-// sync runs (which carry the Agent's push history). A FSID no
+// loadClusterView gathers everything the per-cluster overview shows: the
+// cluster itself, its scoped inventory reads, and its Cases. A FSID no
 // registered cluster carries resolves to notFound.
 export async function loadClusterView(
   fsid: string,
@@ -217,38 +215,24 @@ export async function loadClusterView(
   }
 
   const scopedFSID = cluster.fsid;
-  const [
-    health,
-    osds,
-    hosts,
-    storageDevices,
-    daemons,
-    pools,
-    casesResult,
-    syncRunsResult,
-  ] = await Promise.all([
-    request<ClusterHealth>(`/api/v1/clusters/${scopedFSID}/health`, signal),
-    request<OSD[]>(`/api/v1/clusters/${scopedFSID}/osds`, signal),
-    request<Host[]>(`/api/v1/clusters/${scopedFSID}/hosts`, signal),
-    request<StorageDevice[]>(
-      `/api/v1/clusters/${scopedFSID}/storage-devices`,
-      signal,
-    ),
-    request<Daemon[]>(`/api/v1/clusters/${scopedFSID}/daemons`, signal),
-    request<Pool[]>(`/api/v1/clusters/${scopedFSID}/pools`, signal),
-    settle(
-      request<CaseRecord[]>(
-        `/api/v1/cases?cluster=${encodeURIComponent(scopedFSID)}`,
+  const [health, osds, hosts, storageDevices, daemons, pools, casesResult] =
+    await Promise.all([
+      request<ClusterHealth>(`/api/v1/clusters/${scopedFSID}/health`, signal),
+      request<OSD[]>(`/api/v1/clusters/${scopedFSID}/osds`, signal),
+      request<Host[]>(`/api/v1/clusters/${scopedFSID}/hosts`, signal),
+      request<StorageDevice[]>(
+        `/api/v1/clusters/${scopedFSID}/storage-devices`,
         signal,
       ),
-    ),
-    settle(
-      request<InventorySyncRun[]>(
-        `/api/v1/inventory-sync-runs?cluster=${encodeURIComponent(scopedFSID)}`,
-        signal,
+      request<Daemon[]>(`/api/v1/clusters/${scopedFSID}/daemons`, signal),
+      request<Pool[]>(`/api/v1/clusters/${scopedFSID}/pools`, signal),
+      settle(
+        request<CaseRecord[]>(
+          `/api/v1/cases?cluster=${encodeURIComponent(scopedFSID)}`,
+          signal,
+        ),
       ),
-    ),
-  ]);
+    ]);
 
   return {
     cluster,
@@ -260,10 +244,6 @@ export async function loadClusterView(
     pools,
     cases: casesResult.ok ? casesResult.value : [],
     casesUnavailable: casesResult.ok ? undefined : errorMessage(casesResult.error),
-    syncRuns: syncRunsResult.ok ? syncRunsResult.value : [],
-    syncRunsUnavailable: syncRunsResult.ok
-      ? undefined
-      : errorMessage(syncRunsResult.error),
   };
 }
 export async function listCases(

@@ -55,8 +55,9 @@ The current implementation supports:
 - Plain SQL migrations.
 - Fake-provider inventory fixtures.
 - A REST API v1 scaffold: the cluster index (`GET /api/v1/clusters`,
-  searchable and paginated, with health summary and Agent last-seen),
-  cluster-scoped inventory reads (`GET /api/v1/clusters/{fsid}/health`,
+  searchable and paginated, with health summary and Agent last-seen and
+  last-push times), cluster-scoped inventory reads
+  (`GET /api/v1/clusters/{fsid}/health`,
   `/osds`, `/hosts`, `/storage-devices`, `/daemons`, `/pools`),
   cluster-filtered Case lists (`GET /api/v1/cases?cluster=…`) and
   sync-run history (`GET /api/v1/inventory-sync-runs?cluster=…`; runs

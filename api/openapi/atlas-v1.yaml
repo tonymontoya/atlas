@@ -1680,7 +1680,16 @@ components:
             - string
             - "null"
           format: date-time
-          description: When an enrolled Agent last pushed an observation batch; null when no agent batch has arrived.
+          description: When an enrolled Agent last pushed an observation batch
+            (the batch's observation timestamp, the Agent's clock); null when
+            no agent batch has arrived.
+        agentLastPushAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: When Atlas last received an Agent push — the agent sync
+            run's server-side start; null when no agent run is recorded.
     ClusterIndex:
       type: object
       additionalProperties: false

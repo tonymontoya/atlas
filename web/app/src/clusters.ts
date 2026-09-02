@@ -2,7 +2,7 @@
 // health and agent activity (a registered cluster may have no observation
 // yet); these helpers give every nullable field a stable display label.
 import { coarseDuration } from "./format";
-import type { ClusterSummary, InventorySyncRun } from "./api";
+import type { ClusterSummary } from "./api";
 
 export function healthStatusLabel(status: ClusterSummary["healthStatus"]): string {
   if (status === null || status === undefined || status === "") {
@@ -37,30 +37,17 @@ function ageLabel(timestamp: string, now: number): string {
   }).format(new Date(seen));
 }
 
-// Buckets for agent activity, from "just now" to "never".
-export function agentLastSeenLabel(
-  lastSeen: ClusterSummary["agentLastSeen"],
+// Buckets for agent activity, from "just now" to "never". Both agent
+// timestamps — last-seen (the batch's observation time) and last-push
+// (the run's server-side start) — share the buckets.
+export function agentActivityLabel(
+  activity: string | null | undefined,
   now: number = Date.now(),
 ): string {
-  if (lastSeen === null || lastSeen === undefined || lastSeen === "") {
+  if (activity === null || activity === undefined || activity === "") {
     return "never";
   }
-  return ageLabel(lastSeen, now);
-}
-
-// The Agent's last push is its latest sync run's start — the moment
-// Atlas received a batch, as distinct from last-seen's observation
-// timestamp, which is the Agent's own clock. Runs arrive ordered
-// newest first, so the first agent run is the latest push.
-export function agentLastPushLabel(
-  runs: InventorySyncRun[],
-  now: number = Date.now(),
-): string {
-  const latest = runs.find((run) => run.provider === "agent");
-  if (!latest) {
-    return "never";
-  }
-  return ageLabel(latest.startedAt, now);
+  return ageLabel(activity, now);
 }
 
 // Carbon Pagination is 1-based; the cluster index API takes a 0-based

@@ -22,7 +22,10 @@ import {
   daemonStatusSummary,
   type DaemonStatusCounts,
 } from "../inventory";
-import { agentLastSeenLabel, agentLastPushLabel, healthStatusLabel } from "../clusters";
+import {
+  agentActivityLabel,
+  healthStatusLabel,
+} from "../clusters";
 import { toneForHealth } from "../tones";
 
 function daemonTileTone(counts: DaemonStatusCounts): "ok" | "warn" | "err" {
@@ -64,7 +67,7 @@ export function ClusterDetailPage() {
   }
 
   const clusterView: ClusterView = view.data;
-  const { cluster, health, osds, hosts, storageDevices, daemons, pools, cases, syncRuns } = clusterView;
+  const { cluster, health, osds, hosts, storageDevices, daemons, pools, cases } = clusterView;
   const downOsds = osds.filter((osd) => !osd.up).length;
   const outOsds = osds.filter((osd) => !osd.in).length;
   const daemonCounts = daemonStatusCounts(daemons);
@@ -93,14 +96,6 @@ export function ClusterDetailPage() {
           subtitle={clusterView.casesUnavailable}
         />
       ) : null}
-      {clusterView.syncRunsUnavailable ? (
-        <InlineNotification
-          kind="warning"
-          lowContrast
-          title="Sync run history unavailable"
-          subtitle={clusterView.syncRunsUnavailable}
-        />
-      ) : null}
 
       <Grid fullWidth className="atlas-metrics">
         <Column sm={4} md={4} lg={4}>
@@ -114,8 +109,8 @@ export function ClusterDetailPage() {
         <Column sm={4} md={4} lg={4}>
           <MetricTile
             label="Agent"
-            value={agentLastSeenLabel(cluster.agentLastSeen)}
-            detail={`last push ${agentLastPushLabel(syncRuns)}`}
+            value={`seen ${agentActivityLabel(cluster.agentLastSeen)}`}
+            detail={`last push ${agentActivityLabel(cluster.agentLastPushAt)}`}
           />
         </Column>
         <Column sm={4} md={4} lg={4}>

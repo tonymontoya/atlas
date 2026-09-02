@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button, Column, Grid, Pagination, Search } from "@carbon/react";
 import { listClusters } from "../api";
 import {
-  agentLastSeenLabel,
+  agentActivityLabel,
   clusterRoute,
   healthStatusLabel,
   offsetForPage,
@@ -110,7 +110,7 @@ export function ClusterIndexPage() {
     {
       key: "agent",
       header: "Agent last seen",
-      render: (cluster) => agentLastSeenLabel(cluster.agentLastSeen),
+      render: (cluster) => agentActivityLabel(cluster.agentLastSeen),
     },
   ];
   if (token !== null) {

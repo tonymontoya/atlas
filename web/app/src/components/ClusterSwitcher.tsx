@@ -15,7 +15,9 @@ export function ClusterSwitcher() {
   const navigate = useNavigate();
   const selectedFSID = clusterFsidFromPath(location.pathname);
   // Refetch on navigation so registering or deregistering a cluster
-  // from any page keeps the switcher's list honest.
+  // from any page keeps the switcher's list honest. The list is one
+  // API page (100 = the max); the searchable index remains the surface
+  // for larger fleets.
   const clusters = useResource(
     (signal) => listClusters({ limit: 100 }, signal),
     [location.pathname],

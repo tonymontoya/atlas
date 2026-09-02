@@ -166,8 +166,12 @@ wait_for_json "current daemons" "$api_base/api/v1/clusters/$cluster_fsid/daemons
 wait_for_json "current pools" "$api_base/api/v1/clusters/$cluster_fsid/pools" \
     'length >= 1 and all(.[]; .name != "" and (.type == "replicated" or .type == "erasure"))'
 expect_status "unknown cluster health is 404" "$api_base/api/v1/clusters/00000000-0000-4000-8000-0000000009ff/health" 404
+# Position-independent: the enrolled Agent pushes runs every few
+# seconds, so the newest run is often provider "agent" by the time
+# this polls. The claim under test is that the fake seeder recorded a
+# succeeded run at all.
 wait_for_json "inventory sync runs" "$api_base/api/v1/inventory-sync-runs" \
-    'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded"'
+    'length >= 1 and any(.[]; .provider == "fake" and .status == "succeeded")'
 wait_for_json "alert evaluation runs" "$api_base/api/v1/alert-evaluation-runs" \
     'length >= 1 and .[0].provider == "fake" and .[0].status == "succeeded" and .[0].alertsEvaluated == 1'
 
@@ -192,6 +196,13 @@ wait_for_json "agent cluster daemons" "$api_base/api/v1/clusters/$agent_fsid/dae
     'length == 5 and any(.[]; .type == "mon" and .status == "running") and any(.[]; .status == "stopped")'
 wait_for_json "agent cluster pools" "$api_base/api/v1/clusters/$agent_fsid/pools" \
     'length == 2 and any(.[]; .name == "device_health_metrics")'
+# Cluster-scoped sync run history (#42): the Agent's pushes are
+# attributed to its cluster, and the scoped list carries the
+# attribution on every row.
+wait_for_json "agent cluster sync runs" "$api_base/api/v1/inventory-sync-runs?cluster=$agent_fsid" \
+    "length >= 1 and all(.[]; .clusterFsid == \"$agent_fsid\") and any(.[]; .provider == \"agent\" and .status == \"succeeded\")"
+wait_for_json "agent last-push time" "$api_base/api/v1/clusters?q=dev-agent-reef" \
+    '.clusters[0].agentLastPushAt != null'
 expect_post_status "agent enrollment with a bogus credential is rejected" \
     "$api_base/api/v1/agent/enroll" 401 \
     "{\"credentialToken\":\"atl_enroll_dev_stack_check_bogus\",\"fsid\":\"$agent_fsid\",\"csr\":\"$enroll_csr\"}"

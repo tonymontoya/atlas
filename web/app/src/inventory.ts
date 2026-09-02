@@ -67,7 +67,12 @@ export function daemonStatusSummary(counts: DaemonStatusCounts): string {
   if (counts.unknown > 0) {
     breakdown.push(`${counts.unknown} unknown`);
   }
-  return breakdown.length > 0 ? breakdown.join(", ") : "all running";
+  // A status outside the five known ones still counts as not running;
+  // name it honestly instead of contradicting the tally.
+  if (breakdown.length === 0) {
+    return `${counts.total - counts.running} not running`;
+  }
+  return breakdown.join(", ");
 }
 
 export function poolRedundancyLabel(pool: Pool): string {

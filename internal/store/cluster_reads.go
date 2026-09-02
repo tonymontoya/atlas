@@ -36,6 +36,10 @@ type ClusterSummary struct {
 	HealthStatus  *string           `json:"healthStatus"`
 	HealthSummary *string           `json:"healthSummary"`
 	AgentLastSeen *time.Time        `json:"agentLastSeen"`
+	// AgentLastPushAt is when Atlas last received an Agent push — the
+	// sync run's server-side start, as distinct from AgentLastSeen's
+	// observation timestamp, which is the Agent's own clock.
+	AgentLastPushAt *time.Time `json:"agentLastPushAt"`
 }
 
 // ClusterIndex is one page of the cluster index plus the total the
@@ -110,7 +114,7 @@ func (s *PostgresStore) ListClusterSummaries(ctx context.Context, query ListClus
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT clusters.id, clusters.fsid::text, clusters.name, clusters.cluster_type, clusters.ceph_version,
-			health.status, health.summary, agent.last_seen
+			health.status, health.summary, agent.last_seen, agent_push.last_push
 		FROM atlas_clusters AS clusters
 		LEFT JOIN cluster_current_health AS health
 			ON health.fsid = clusters.fsid
@@ -119,6 +123,11 @@ func (s *PostgresStore) ListClusterSummaries(ctx context.Context, query ListClus
 			FROM inventory_snapshots
 			WHERE cluster_id = clusters.id AND provider = 'agent'
 		) AS agent ON true
+		LEFT JOIN LATERAL (
+			SELECT max(started_at) AS last_push
+			FROM inventory_sync_runs
+			WHERE cluster_id = clusters.id AND provider = 'agent'
+		) AS agent_push ON true
 		WHERE `+predicate+`
 		ORDER BY clusters.name, clusters.id
 		LIMIT $2 OFFSET $3
@@ -134,7 +143,7 @@ func (s *PostgresStore) ListClusterSummaries(ctx context.Context, query ListClus
 		var id int64
 		var fsid sql.NullString
 		var cephVersion, healthStatus, healthSummary sql.NullString
-		var agentLastSeen sql.NullTime
+		var agentLastSeen, agentLastPushAt sql.NullTime
 		if err := rows.Scan(
 			&id,
 			&fsid,
@@ -144,6 +153,7 @@ func (s *PostgresStore) ListClusterSummaries(ctx context.Context, query ListClus
 			&healthStatus,
 			&healthSummary,
 			&agentLastSeen,
+			&agentLastPushAt,
 		); err != nil {
 			return ClusterIndex{}, err
 		}
@@ -167,6 +177,10 @@ func (s *PostgresStore) ListClusterSummaries(ctx context.Context, query ListClus
 		if agentLastSeen.Valid {
 			value := agentLastSeen.Time
 			summary.AgentLastSeen = &value
+		}
+		if agentLastPushAt.Valid {
+			value := agentLastPushAt.Time
+			summary.AgentLastPushAt = &value
 		}
 		index.Clusters = append(index.Clusters, summary)
 	}

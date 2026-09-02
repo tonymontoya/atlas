@@ -92,6 +92,17 @@ describe("daemonStatusSummary", () => {
     ]);
     expect(daemonStatusSummary(counts)).toBe("1 starting");
   });
+
+  it("counts unrecognized statuses as not running instead of claiming all running", () => {
+    const daemons = [
+      daemon({ name: "mon.a", status: "running" }),
+      daemon({ name: "mon.b", status: "degraded" as Daemon["status"] }),
+    ];
+    const counts = daemonStatusCounts(daemons);
+    expect(counts.running).toBe(1);
+    expect(notRunningDaemonCount(daemons)).toBe(1);
+    expect(daemonStatusSummary(counts)).toBe("1 not running");
+  });
 });
 
 describe("poolRedundancyLabel", () => {

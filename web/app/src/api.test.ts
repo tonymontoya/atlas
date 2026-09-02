@@ -153,18 +153,6 @@ describe("loadClusterView", () => {
           return jsonResponse([]);
         case "/api/v1/cases?cluster=00000000-0000-4000-8000-000000000101":
           return jsonResponse([CASE_JSON]);
-        case "/api/v1/inventory-sync-runs?cluster=00000000-0000-4000-8000-000000000101":
-          return jsonResponse([
-            {
-              id: 7,
-              provider: "agent",
-              status: "succeeded",
-              startedAt: "2026-09-02T12:00:00Z",
-              finishedAt: "2026-09-02T12:00:01Z",
-              clusterFsid: "00000000-0000-4000-8000-000000000101",
-              clusterName: "fixture-healthy",
-            },
-          ]);
         default:
           throw new Error(`unexpected fetch ${path}`);
       }
@@ -181,9 +169,6 @@ describe("loadClusterView", () => {
     expect(view.osds).toHaveLength(1);
     expect(view.cases).toEqual([CASE_JSON]);
     expect(view.casesUnavailable).toBeUndefined();
-    expect(view.syncRuns).toHaveLength(1);
-    expect(view.syncRuns[0].provider).toBe("agent");
-    expect(view.syncRunsUnavailable).toBeUndefined();
   });
 
   it("resolves a cluster case-insensitively by FSID", async () => {
@@ -225,26 +210,6 @@ describe("loadClusterView", () => {
     }
     expect(view.cases).toEqual([]);
     expect(view.casesUnavailable).toBe("cases are down");
-  });
-
-  it("degrades to an unavailable note instead of failing when the sync run list rejects", async () => {
-    const fetchMock = stubFetch((path) => {
-      if (path.startsWith("/api/v1/clusters?")) {
-        return jsonResponse({ clusters: [CLUSTER_JSON], total: 1, limit: 50, offset: 0 });
-      }
-      if (path.startsWith("/api/v1/inventory-sync-runs")) {
-        return jsonResponse({ error: { class: "Unavailable", message: "runs are down" } }, 503);
-      }
-      return jsonResponse([]);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const view = await loadClusterView("00000000-0000-4000-8000-000000000101");
-    if ("notFound" in view) {
-      throw new Error("expected a cluster view");
-    }
-    expect(view.syncRuns).toEqual([]);
-    expect(view.syncRunsUnavailable).toBe("runs are down");
   });
 });
 

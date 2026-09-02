@@ -74,8 +74,18 @@ func seedClusterReads(t *testing.T, store *PostgresStore) {
 	b.Devices = []inventory.StorageDevice{{Host: "host-rb1.example.invalid", Serial: "serial-rb1"}}
 	b.Daemons = []inventory.Daemon{{Type: inventory.DaemonOsd, Name: "osd.21", Host: "host-rb2.example.invalid", Status: inventory.DaemonStopped}}
 	b.Pools = []inventory.Pool{{ID: 2, Name: "pool-b", Type: "replicated"}}
-	if _, err := store.SaveInventoryObservation(ctx, b); err != nil {
+	bResult, err := store.SaveInventoryObservation(ctx, b)
+	if err != nil {
 		t.Fatalf("seed cluster B: %v", err)
+	}
+	// The enrolled loop records an agent run for the push; mirror it so
+	// the summaries' last-push derivation has a row to read.
+	runID, err := store.BeginInventorySyncRun(ctx, BeginSyncRun{Provider: "agent", ClusterID: &bResult.ClusterID})
+	if err != nil {
+		t.Fatalf("begin agent run: %v", err)
+	}
+	if err := store.SucceedInventorySyncRun(ctx, SyncRunResult{RunID: runID, SnapshotID: bResult.SnapshotID, ClusterID: bResult.ClusterID}); err != nil {
+		t.Fatalf("succeed agent run: %v", err)
 	}
 
 	c := base(clusterReadsFSIDC, "clusterreads-c", "fake")
@@ -280,6 +290,9 @@ func TestListClusterSummariesIndexesHealthAndAgentLastSeen(t *testing.T) {
 	if b.AgentLastSeen == nil {
 		t.Fatal("summary B agent last-seen = nil, want the agent push time")
 	}
+	if b.AgentLastPushAt == nil {
+		t.Fatal("summary B agent last-push = nil, want the agent run start")
+	}
 }
 
 func TestListClusterSummariesSearchAndPagination(t *testing.T) {
@@ -408,7 +421,7 @@ func TestListClusterSummariesIncludesRegisteredUnobservedCluster(t *testing.T) {
 	if found == nil {
 		t.Fatalf("index misses the registered-but-unobserved cluster: %+v", index.Clusters)
 	}
-	if found.FSID != nil || found.HealthStatus != nil || found.AgentLastSeen != nil {
-		t.Fatalf("unobserved summary = %+v, want nil fsid/health/last-seen", found)
+	if found.FSID != nil || found.HealthStatus != nil || found.AgentLastSeen != nil || found.AgentLastPushAt != nil {
+		t.Fatalf("unobserved summary = %+v, want nil fsid/health/last-seen/last-push", found)
 	}
 }
