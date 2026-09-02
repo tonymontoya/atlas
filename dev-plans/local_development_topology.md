@@ -278,34 +278,27 @@ When using payloads derived from real systems, scrub them before committing.
 
 Local configuration should support:
 
-- provider mode: `fake`, `ceph`, `rook`, `simulated`
 - database URL
 - fake scenario selection
 - optional Prometheus endpoint
-- optional Ceph Dashboard endpoint
-- optional Kubernetes context
 - disabled-by-default Agent mutation provider
 
 Suggested local environment names:
 
-- `ATLAS_PROVIDER_MODE`
 - `ATLAS_FAKE_SCENARIO`
 - `ATLAS_DATABASE_URL`
 - `ATLAS_PROMETHEUS_URL`
-- `ATLAS_CEPH_DASHBOARD_URL`
 - `ATLAS_KUBECONFIG`
 - `ATLAS_AGENT_MUTATION_ENABLED`
 
-These names are suggestions for future implementation, not current code —
-except the read-only Ceph path implemented in the v0.0.6 line (ADR-0023):
-`ATLAS_PROVIDER_MODE=ceph` selects the bare-metal Dashboard provider for the
-inventory sync command, configured through `ATLAS_CEPH_DASHBOARD_URL`,
-`ATLAS_CEPH_DASHBOARD_USER`, `ATLAS_CEPH_DASHBOARD_PASSWORD`, optional
-`ATLAS_CEPH_CLUSTER_NAME`, and optional
-`ATLAS_CEPH_DASHBOARD_INSECURE_TLS`. This path is an explicit opt-in: the
-default remains `fake`, no ordinary local development or test path reads
-these variables, and selecting `ceph` without a complete configuration
-fails fast.
+These names are suggestions for future implementation, not current code.
+The read-only Ceph path implemented in the v0.0.6 line (ADR-0023) ran in
+the control plane through `ATLAS_PROVIDER_MODE=ceph` and
+`ATLAS_CEPH_DASHBOARD_*`; the v0.0.8 line removed that pull path
+(ADR-0025) as a documented 0.x breaking change — the same Dashboard
+provider now runs inside the enrolled Agent, configured through
+`ATLAS_AGENT_DASHBOARD_*`, and setting any removed variable fails fast in
+every command.
 
 ---
 

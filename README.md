@@ -60,12 +60,17 @@ What exists today:
   Enrollment Credential is shown exactly once with the Agent install
   instructions, and the index carries a deregister action
 - PostgreSQL persistence with plain SQL migrations
-- Fake-provider inventory fixtures and an inventory sync command
-- A read-only real Ceph provider: `ATLAS_PROVIDER_MODE=ceph` points the
-  inventory sync command at a live Ceph Dashboard REST API with a dedicated
-  read-only user (ADR-0023). Explicit opt-in; local development and tests
-  never require a real cluster (the provider is tested against an in-process
-  fake Dashboard)
+- Fake-provider inventory fixtures and an inventory sync command (fake-mode
+  dev seeder)
+- A read-only real Ceph provider over the Ceph Dashboard REST API
+  (ADR-0023) that lives inside the enrolled Atlas Agent's collection path
+  (ADR-0025): the Agent logs into a live Dashboard with a dedicated
+  read-only user, and the credentials never leave the cluster's trust
+  domain. The control-plane pull path (`ATLAS_PROVIDER_MODE=ceph` with
+  stored Dashboard credentials) was removed as a documented 0.x breaking
+  change; setting the removed variables fails fast in every
+  control-plane command. Tests run against an in-process fake
+  Dashboard, never real Ceph
 - Fake-provider alert evaluation that automatically creates a Case (with
   Timeline Events and deduplication) from a firing alert, plus a real
   Prometheus alert source: `ATLAS_ALERT_SOURCE=prometheus` points
@@ -245,43 +250,27 @@ Stop the full stack with:
 make dev-stack-down
 ```
 
-### Point inventory sync at a real Ceph cluster
+### Read a real Ceph cluster through an enrolled Agent
 
-The read-only real Ceph provider (ADR-0023) syncs inventory from a live
-Ceph Dashboard REST API. It is explicit opt-in: the default local paths and
-the dev stack never use it, and no credentials are required anywhere else.
+The control-plane pull path is gone: `atlas-inventory-sync` no longer
+reads a live Ceph Dashboard with stored credentials, and the
+`ATLAS_PROVIDER_MODE` and `ATLAS_CEPH_DASHBOARD_*` environment variables
+are removed (ADR-0025 — the no-stored-credentials posture is not
+optional per environment). This is a documented 0.x breaking change: the
+control-plane read path moved into the enrolled Agent, it did not vanish.
+Setting any removed variable fails fast in every control-plane command,
+so a stale environment cannot silently fall back to fake seeding.
 
-Prerequisites on the Ceph side:
-
-- Ceph 18 (Reef) or newer with the Dashboard mgr module enabled and
-  reachable (validated read shapes: Ceph 18; Ceph 19/20 join at v0.0.11)
-- a dedicated Dashboard user with a read-only role (for example
-  `atlas-reader`)
-
-Then run one sync with:
-
-```sh
-ATLAS_PROVIDER_MODE=ceph \
-ATLAS_CEPH_DASHBOARD_URL=https://mon.example.invalid:8443 \
-ATLAS_CEPH_DASHBOARD_USER=atlas-reader \
-ATLAS_CEPH_DASHBOARD_PASSWORD='…' \
-ATLAS_CEPH_CLUSTER_NAME=reef-lab \
-go run ./cmd/atlas-inventory-sync
-```
-
-`ATLAS_CEPH_CLUSTER_NAME` is optional (defaults to `ceph`) because the
-Dashboard API does not expose a cluster name. For lab clusters with
-self-signed certificates, set `ATLAS_CEPH_DASHBOARD_INSECURE_TLS=true`.
-
-Atlas validates its environment at startup and fails fast: every problem
-is reported in one error naming the offending `ATLAS_*` variables.
-`ATLAS_PROVIDER_MODE=ceph` requires the Dashboard URL to be an absolute
-URL with a scheme plus the read-only credentials, in every command.
-
-Scope notes: this path is read-only and writes one observation batch per
-run through the same persistence as the fake provider, and the API read
-source (`ATLAS_READ_SOURCE`) still serves from the fake provider or
-PostgreSQL.
+Real clusters report in through the read-only Atlas Agent, which runs
+inside the cluster's trust domain, collects over the same Dashboard REST
+API (ADR-0023) with a dedicated read-only user, and pushes observation
+batches over mutual TLS — see
+[Enroll an Atlas Agent against a registration](#enroll-an-atlas-agent-against-a-registration)
+and
+[Run the atlas-agent binary](#run-the-atlas-agent-binary).
+Agent pushes are the real path's sync-run history (provider `agent`);
+`atlas-inventory-sync` remains the fake-mode dev seeder behind
+`make db-sync-fake`.
 
 ### Point alert evaluation at a real Prometheus
 

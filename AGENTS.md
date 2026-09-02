@@ -156,12 +156,20 @@ The current implementation supports:
   `ATLAS_AGENT_ENROLLMENT_CREDENTIAL_FILE`). `make dev-stack-check`
   asserts register → enroll → push → read end to end and stays green
   across reruns against the persistent PostgreSQL volume.
-- A read-only real Ceph provider over the Ceph Dashboard REST API (ADR-0023):
-  `ATLAS_PROVIDER_MODE=ceph` points inventory sync at a live Dashboard with a
-  dedicated read-only user. Explicit opt-in only — no default local path uses
-  credentials or real clusters. Tests run against an in-process fake Dashboard
-  (`internal/providers/ceph/dashtest`), never real Ceph. The API read source
-  (`ATLAS_READ_SOURCE`) still uses fake/postgres sources.
+- A read-only real Ceph provider over the Ceph Dashboard REST API
+  (ADR-0023) that lives inside the enrolled Agent's collection path with
+  `ATLAS_AGENT_DASHBOARD_*` env (ADR-0025): the Agent logs into a live
+  Dashboard with a dedicated read-only user and never exports
+  credentials. The control-plane pull path
+  (`ATLAS_PROVIDER_MODE=ceph` + `ATLAS_CEPH_*` stored credentials) is
+  removed as a documented 0.x breaking change — setting the removed
+  variables fails fast in every control-plane command (the Agent's own
+  env surface, `ATLAS_AGENT_*`, never read them), and
+  `atlas-inventory-sync` remains the fake-mode dev seeder
+  (`make db-sync-fake`). Tests run
+  against an in-process fake Dashboard
+  (`internal/providers/ceph/dashtest`), never real Ceph. The API read
+  source (`ATLAS_READ_SOURCE`) still uses fake/postgres sources.
 - Fake alert evaluation that creates and deduplicates Cases from alerts.
 - A real Prometheus alert source (ADR-0027): `ATLAS_ALERT_SOURCE=prometheus`
   plus `ATLAS_PROMETHEUS_URL` (optional bearer token and insecure-TLS flag)

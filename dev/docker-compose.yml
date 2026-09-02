@@ -42,7 +42,6 @@ services:
         condition: service_completed_successfully
     environment:
       ATLAS_DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
-      ATLAS_PROVIDER_MODE: fake
       ATLAS_FAKE_SCENARIO: reef-osd-down-baremetal
     volumes:
       - ..:/workspace
@@ -61,7 +60,6 @@ services:
         condition: service_completed_successfully
     environment:
       ATLAS_DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
-      ATLAS_PROVIDER_MODE: fake
       ATLAS_FAKE_SCENARIO: reef-healthy-baremetal
     volumes:
       - ..:/workspace
@@ -80,7 +78,6 @@ services:
         condition: service_completed_successfully
     environment:
       ATLAS_DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
-      ATLAS_PROVIDER_MODE: fake
       ATLAS_FAKE_ALERT_SCENARIO: osd-down-alert
     volumes:
       - ..:/workspace
@@ -118,7 +115,6 @@ services:
     environment:
       ATLAS_HTTP_ADDR: :8080
       ATLAS_DATABASE_URL: postgres://atlas:atlas_dev@postgres:5432/atlas?sslmode=disable
-      ATLAS_PROVIDER_MODE: fake
       ATLAS_READ_SOURCE: postgres
       ATLAS_AGENT_MODE: fake
       ATLAS_FAKE_AGENT_SCENARIO: ${ATLAS_FAKE_AGENT_SCENARIO:-}

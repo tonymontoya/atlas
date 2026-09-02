@@ -48,14 +48,14 @@ func main() {
 }
 
 func serveHTTP(addr string, cfg config.Config, server *atlasapi.Server) {
-	log.Printf("atlas-api listening on %s with provider mode %s and read source %s", addr, cfg.ProviderMode, cfg.ReadSource)
+	log.Printf("atlas-api listening on %s with read source %s", addr, cfg.ReadSource)
 	if err := http.ListenAndServe(addr, server.Routes()); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func serveTLS(addr string, cfg config.Config, server *atlasapi.Server) {
-	log.Printf("atlas-api listening on https://%s with provider mode %s and read source %s (client certificates verified by the enrollment CA)", addr, cfg.ProviderMode, cfg.ReadSource)
+	log.Printf("atlas-api listening on https://%s with read source %s (client certificates verified by the enrollment CA)", addr, cfg.ReadSource)
 	err := (&http.Server{
 		Addr:      addr,
 		Handler:   server.Routes(),

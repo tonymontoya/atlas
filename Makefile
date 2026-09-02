@@ -20,10 +20,10 @@ lint:
 	go test ./...
 
 dev:
-	ATLAS_PROVIDER_MODE=$${ATLAS_PROVIDER_MODE:-fake} go run ./cmd/atlas-api
+	go run ./cmd/atlas-api
 
 dev-fake:
-	ATLAS_PROVIDER_MODE=fake go run ./cmd/atlas-api
+	go run ./cmd/atlas-api
 
 db-up:
 	docker compose -f dev/docker-compose.yml up -d postgres
@@ -44,10 +44,10 @@ db-migrate:
 	sh scripts/apply_migrations.sh
 
 db-sync-fake: db-migrate
-	ATLAS_PROVIDER_MODE=fake go run ./cmd/atlas-inventory-sync
+	go run ./cmd/atlas-inventory-sync
 
 db-alert-eval-fake: db-migrate
-	ATLAS_PROVIDER_MODE=fake go run ./cmd/atlas-alert-eval
+	go run ./cmd/atlas-alert-eval
 
 db-test:
 	@set -e; \

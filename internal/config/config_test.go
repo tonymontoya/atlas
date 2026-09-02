@@ -6,12 +6,23 @@ import (
 	"time"
 )
 
-func clearModeEnv(t *testing.T) {
+// removedPullPathEnv are the deleted control-plane pull-path variables
+// (ADR-0025). Load rejects them when set; clearing them keeps these tests
+// hermetic against a stale developer shell.
+var removedPullPathEnv = []string{
+	"ATLAS_PROVIDER_MODE",
+	"ATLAS_CEPH_DASHBOARD_URL",
+	"ATLAS_CEPH_DASHBOARD_USER",
+	"ATLAS_CEPH_DASHBOARD_PASSWORD",
+	"ATLAS_CEPH_CLUSTER_NAME",
+	"ATLAS_CEPH_DASHBOARD_INSECURE_TLS",
+}
+
+func clearAtlasEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
 		"ATLAS_HTTP_ADDR",
 		"ATLAS_DATABASE_URL",
-		"ATLAS_PROVIDER_MODE",
 		"ATLAS_FAKE_SCENARIO",
 		"ATLAS_FAKE_ALERT_SCENARIO",
 		"ATLAS_FAKE_AGENT_SCENARIO",
@@ -22,11 +33,6 @@ func clearModeEnv(t *testing.T) {
 		"ATLAS_OIDC_ISSUER",
 		"ATLAS_OIDC_AUDIENCE",
 		"ATLAS_OIDC_JWKS_URL",
-		"ATLAS_CEPH_DASHBOARD_URL",
-		"ATLAS_CEPH_DASHBOARD_USER",
-		"ATLAS_CEPH_DASHBOARD_PASSWORD",
-		"ATLAS_CEPH_CLUSTER_NAME",
-		"ATLAS_CEPH_DASHBOARD_INSECURE_TLS",
 		"ATLAS_PROMETHEUS_URL",
 		"ATLAS_PROMETHEUS_BEARER_TOKEN",
 		"ATLAS_PROMETHEUS_INSECURE_TLS",
@@ -35,10 +41,13 @@ func clearModeEnv(t *testing.T) {
 	} {
 		t.Setenv(key, "")
 	}
+	for _, key := range removedPullPathEnv {
+		t.Setenv(key, "")
+	}
 }
 
-func TestLoadDefaultsToFakeProvider(t *testing.T) {
-	clearModeEnv(t)
+func TestLoadDefaults(t *testing.T) {
+	clearAtlasEnv(t)
 
 	cfg, err := Load()
 	if err != nil {
@@ -46,9 +55,6 @@ func TestLoadDefaultsToFakeProvider(t *testing.T) {
 	}
 	if cfg.HTTPAddr != ":8080" {
 		t.Fatalf("HTTPAddr = %q, want :8080", cfg.HTTPAddr)
-	}
-	if cfg.ProviderMode != ProviderModeFake {
-		t.Fatalf("ProviderMode = %q, want fake", cfg.ProviderMode)
 	}
 	if cfg.DatabaseURL == "" {
 		t.Fatal("DatabaseURL is empty")
@@ -77,45 +83,10 @@ func TestLoadDefaultsToFakeProvider(t *testing.T) {
 	if cfg.PrometheusURL != "" || cfg.PrometheusBearerToken != "" || cfg.PrometheusInsecureTLS {
 		t.Fatalf("prometheus config = %q/%q/%t, want all empty by default", cfg.PrometheusURL, cfg.PrometheusBearerToken, cfg.PrometheusInsecureTLS)
 	}
-	if cfg.CephDashboardURL != "" || cfg.CephDashboardUser != "" || cfg.CephDashboardPassword != "" || cfg.CephClusterName != "" {
-		t.Fatalf("ceph dashboard config = %q/%q/%q/%q, want all empty by default", cfg.CephDashboardURL, cfg.CephDashboardUser, cfg.CephDashboardPassword, cfg.CephClusterName)
-	}
-	if cfg.CephDashboardInsecureTLS {
-		t.Fatal("CephDashboardInsecureTLS = true, want false by default")
-	}
-}
-
-func TestLoadReadsCephDashboardConfig(t *testing.T) {
-	clearModeEnv(t)
-	t.Setenv("ATLAS_CEPH_DASHBOARD_URL", "https://mon.example.invalid:8443")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_USER", "atlas-reader")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_PASSWORD", "secret")
-	t.Setenv("ATLAS_CEPH_CLUSTER_NAME", "reef-lab")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_INSECURE_TLS", "true")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-	if cfg.CephDashboardURL != "https://mon.example.invalid:8443" {
-		t.Fatalf("CephDashboardURL = %q", cfg.CephDashboardURL)
-	}
-	if cfg.CephDashboardUser != "atlas-reader" {
-		t.Fatalf("CephDashboardUser = %q", cfg.CephDashboardUser)
-	}
-	if cfg.CephDashboardPassword != "secret" {
-		t.Fatalf("CephDashboardPassword = %q", cfg.CephDashboardPassword)
-	}
-	if cfg.CephClusterName != "reef-lab" {
-		t.Fatalf("CephClusterName = %q", cfg.CephClusterName)
-	}
-	if !cfg.CephDashboardInsecureTLS {
-		t.Fatal("CephDashboardInsecureTLS = false, want true")
-	}
 }
 
 func TestLoadCanonicalizesEmptyAliases(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_READ_SOURCE", "")
 	t.Setenv("ATLAS_AGENT_MODE", "")
 
@@ -136,14 +107,13 @@ func TestLoadRejectsUnknownModes(t *testing.T) {
 		name string
 		key  string
 	}{
-		{name: "provider mode", key: "ATLAS_PROVIDER_MODE"},
 		{name: "read source", key: "ATLAS_READ_SOURCE"},
 		{name: "agent mode", key: "ATLAS_AGENT_MODE"},
 		{name: "alert source", key: "ATLAS_ALERT_SOURCE"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			clearModeEnv(t)
+			clearAtlasEnv(t)
 			t.Setenv(tc.key, "bogus")
 
 			_, err := Load()
@@ -158,7 +128,7 @@ func TestLoadRejectsUnknownModes(t *testing.T) {
 }
 
 func TestLoadRejectsPartialOIDCTrio(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_OIDC_ISSUER", "https://atlas-dev-issuer.local")
 
 	_, err := Load()
@@ -173,7 +143,7 @@ func TestLoadRejectsPartialOIDCTrio(t *testing.T) {
 }
 
 func TestLoadRejectsPartialEnrollmentCAPair(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_ENROLLMENT_CA_CERT_PATH", "/etc/atlas/ca.crt")
 
 	_, err := Load()
@@ -188,7 +158,7 @@ func TestLoadRejectsPartialEnrollmentCAPair(t *testing.T) {
 }
 
 func TestLoadAcceptsFullEnrollmentCAPair(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_ENROLLMENT_CA_CERT_PATH", "/etc/atlas/ca.crt")
 	t.Setenv("ATLAS_ENROLLMENT_CA_KEY_PATH", "/etc/atlas/ca.key")
 
@@ -202,7 +172,7 @@ func TestLoadAcceptsFullEnrollmentCAPair(t *testing.T) {
 }
 
 func TestLoadRejectsPartialAPITLSPair(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_API_TLS_CERT_PATH", "/etc/atlas/api.crt")
 
 	_, err := Load()
@@ -218,7 +188,7 @@ func TestLoadRejectsPartialAPITLSPair(t *testing.T) {
 }
 
 func TestLoadAcceptsFullAPITLSPair(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_API_TLS_CERT_PATH", "/etc/atlas/api.crt")
 	t.Setenv("ATLAS_API_TLS_KEY_PATH", "/etc/atlas/api.key")
 
@@ -235,7 +205,7 @@ func TestLoadAcceptsFullAPITLSPair(t *testing.T) {
 }
 
 func TestLoadAcceptsHTTPSAddrWithTLSPair(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_API_TLS_CERT_PATH", "/etc/atlas/api.crt")
 	t.Setenv("ATLAS_API_TLS_KEY_PATH", "/etc/atlas/api.key")
 	t.Setenv("ATLAS_HTTPS_ADDR", ":8443")
@@ -250,7 +220,7 @@ func TestLoadAcceptsHTTPSAddrWithTLSPair(t *testing.T) {
 }
 
 func TestLoadRejectsHTTPSAddrWithoutTLSPair(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_HTTPS_ADDR", ":8443")
 
 	_, err := Load()
@@ -264,71 +234,60 @@ func TestLoadRejectsHTTPSAddrWithoutTLSPair(t *testing.T) {
 	}
 }
 
-func TestLoadCephModeRequiresDashboardConfiguration(t *testing.T) {
-	clearModeEnv(t)
-	t.Setenv("ATLAS_PROVIDER_MODE", "ceph")
+// The control-plane pull path is gone (ADR-0025): every removed variable
+// fails fast when set, whatever the value, so a stale environment cannot
+// silently fall back to fake seeding.
+func TestLoadRejectsRemovedPullPathEnv(t *testing.T) {
+	cases := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "provider mode ceph", key: "ATLAS_PROVIDER_MODE", value: "ceph"},
+		{name: "provider mode fake", key: "ATLAS_PROVIDER_MODE", value: "fake"},
+		{name: "dashboard url", key: "ATLAS_CEPH_DASHBOARD_URL", value: "https://mon.example.invalid:8443"},
+		{name: "dashboard user", key: "ATLAS_CEPH_DASHBOARD_USER", value: "atlas-reader"},
+		{name: "dashboard password", key: "ATLAS_CEPH_DASHBOARD_PASSWORD", value: "secret"},
+		{name: "cluster name", key: "ATLAS_CEPH_CLUSTER_NAME", value: "reef-lab"},
+		{name: "dashboard insecure tls", key: "ATLAS_CEPH_DASHBOARD_INSECURE_TLS", value: "true"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearAtlasEnv(t)
+			t.Setenv(tc.key, tc.value)
 
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	for _, want := range []string{"ATLAS_CEPH_DASHBOARD_URL", "ATLAS_CEPH_DASHBOARD_USER", "ATLAS_CEPH_DASHBOARD_PASSWORD"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error %q does not name %s", err, want)
-		}
-	}
-}
-
-func TestLoadCephModeRejectsSchemelessDashboardURL(t *testing.T) {
-	clearModeEnv(t)
-	t.Setenv("ATLAS_PROVIDER_MODE", "ceph")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_URL", "mon.example.invalid:8443")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_USER", "atlas-reader")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_PASSWORD", "secret")
-
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "ATLAS_CEPH_DASHBOARD_URL") {
-		t.Fatalf("error %q does not name ATLAS_CEPH_DASHBOARD_URL", err)
-	}
-	if !strings.Contains(err.Error(), "absolute URL") {
-		t.Fatalf("error %q does not explain the absolute URL requirement", err)
-	}
-}
-
-func TestLoadCephModeAcceptsValidDashboardConfiguration(t *testing.T) {
-	clearModeEnv(t)
-	t.Setenv("ATLAS_PROVIDER_MODE", "ceph")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_URL", "https://mon.example.invalid:8443/")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_USER", "atlas-reader")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_PASSWORD", "secret")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-	if cfg.ProviderMode != ProviderModeCeph {
-		t.Fatalf("ProviderMode = %q, want ceph", cfg.ProviderMode)
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tc.key) {
+				t.Fatalf("error %q does not name %s", err, tc.key)
+			}
+			if !strings.Contains(err.Error(), "no longer supported") {
+				t.Fatalf("error %q does not say the variable is no longer supported", err)
+			}
+			if !strings.Contains(err.Error(), "enrolled Atlas Agent") {
+				t.Fatalf("error %q does not point at the replacement path", err)
+			}
+		})
 	}
 }
 
 func TestLoadRejectsInvalidBoolean(t *testing.T) {
-	clearModeEnv(t)
-	t.Setenv("ATLAS_CEPH_DASHBOARD_INSECURE_TLS", "tru")
+	clearAtlasEnv(t)
+	t.Setenv("ATLAS_PROMETHEUS_INSECURE_TLS", "tru")
 
 	_, err := Load()
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "ATLAS_CEPH_DASHBOARD_INSECURE_TLS") {
-		t.Fatalf("error %q does not name ATLAS_CEPH_DASHBOARD_INSECURE_TLS", err)
+	if !strings.Contains(err.Error(), "ATLAS_PROMETHEUS_INSECURE_TLS") {
+		t.Fatalf("error %q does not name ATLAS_PROMETHEUS_INSECURE_TLS", err)
 	}
 }
 
 func TestLoadReadsPrometheusAlertConfiguration(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_ALERT_SOURCE", "prometheus")
 	t.Setenv("ATLAS_PROMETHEUS_URL", "http://prometheus.example.invalid:9090")
 	t.Setenv("ATLAS_PROMETHEUS_BEARER_TOKEN", "secret-token")
@@ -357,7 +316,7 @@ func TestLoadReadsPrometheusAlertConfiguration(t *testing.T) {
 }
 
 func TestLoadPrometheusAlertSourceRequiresURL(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_ALERT_SOURCE", "prometheus")
 
 	_, err := Load()
@@ -370,7 +329,7 @@ func TestLoadPrometheusAlertSourceRequiresURL(t *testing.T) {
 }
 
 func TestLoadPrometheusAlertSourceRejectsSchemelessURL(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_ALERT_SOURCE", "prometheus")
 	t.Setenv("ATLAS_PROMETHEUS_URL", "prometheus.example.invalid:9090")
 
@@ -387,7 +346,7 @@ func TestLoadPrometheusAlertSourceRejectsSchemelessURL(t *testing.T) {
 }
 
 func TestLoadPrometheusAlertSourceAcceptsValidConfiguration(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_ALERT_SOURCE", "prometheus")
 	t.Setenv("ATLAS_PROMETHEUS_URL", "http://prometheus.example.invalid:9090/")
 
@@ -410,7 +369,7 @@ func TestLoadRejectsInvalidAlertEvalInterval(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			clearModeEnv(t)
+			clearAtlasEnv(t)
 			t.Setenv("ATLAS_ALERT_EVAL_INTERVAL", tc.value)
 
 			_, err := Load()
@@ -425,11 +384,10 @@ func TestLoadRejectsInvalidAlertEvalInterval(t *testing.T) {
 }
 
 func TestLoadJoinsAllFindingsIntoOneError(t *testing.T) {
-	clearModeEnv(t)
+	clearAtlasEnv(t)
 	t.Setenv("ATLAS_PROVIDER_MODE", "ceph")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_URL", "mon.example.invalid:8443")
+	t.Setenv("ATLAS_CEPH_DASHBOARD_URL", "https://mon.example.invalid:8443")
 	t.Setenv("ATLAS_READ_SOURCE", "bogus")
-	t.Setenv("ATLAS_CEPH_DASHBOARD_INSECURE_TLS", "tru")
 	t.Setenv("ATLAS_ALERT_SOURCE", "prometheus")
 	t.Setenv("ATLAS_ALERT_EVAL_INTERVAL", "never")
 
@@ -438,11 +396,9 @@ func TestLoadJoinsAllFindingsIntoOneError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 	for _, want := range []string{
-		"ATLAS_READ_SOURCE",
+		"ATLAS_PROVIDER_MODE",
 		"ATLAS_CEPH_DASHBOARD_URL",
-		"ATLAS_CEPH_DASHBOARD_USER",
-		"ATLAS_CEPH_DASHBOARD_PASSWORD",
-		"ATLAS_CEPH_DASHBOARD_INSECURE_TLS",
+		"ATLAS_READ_SOURCE",
 		"ATLAS_ALERT_SOURCE",
 		"ATLAS_PROMETHEUS_URL",
 		"ATLAS_ALERT_EVAL_INTERVAL",

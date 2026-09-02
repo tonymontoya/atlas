@@ -10,16 +10,6 @@ import (
 	"time"
 )
 
-// ProviderMode selects which Ceph read provider adapters construct. It is
-// the typed form of ATLAS_PROVIDER_MODE; Load canonicalizes and validates
-// it before any caller sees it.
-type ProviderMode string
-
-const (
-	ProviderModeFake ProviderMode = "fake"
-	ProviderModeCeph ProviderMode = "ceph"
-)
-
 // ReadSource selects where the API serves inventory reads from. It is the
 // typed form of ATLAS_READ_SOURCE; the empty env value canonicalizes to
 // ReadSourceProvider in Load.
@@ -54,7 +44,6 @@ const (
 type Config struct {
 	HTTPAddr          string
 	DatabaseURL       string
-	ProviderMode      ProviderMode
 	FakeScenario      string
 	FakeAlertScenario string
 	FakeAgentScenario string
@@ -65,12 +54,6 @@ type Config struct {
 	OIDCIssuer        string
 	OIDCAudience      string
 	OIDCJWKSURL       string
-
-	CephDashboardURL         string
-	CephDashboardUser        string
-	CephDashboardPassword    string
-	CephClusterName          string
-	CephDashboardInsecureTLS bool
 
 	PrometheusURL         string
 	PrometheusBearerToken string
@@ -100,7 +83,6 @@ func Load() (Config, error) {
 	cfg := Config{
 		HTTPAddr:          env("ATLAS_HTTP_ADDR", ":8080"),
 		DatabaseURL:       env("ATLAS_DATABASE_URL", "postgres://atlas:atlas_dev@127.0.0.1:15432/atlas?sslmode=disable"),
-		ProviderMode:      ProviderMode(env("ATLAS_PROVIDER_MODE", string(ProviderModeFake))),
 		FakeScenario:      env("ATLAS_FAKE_SCENARIO", "reef-healthy-baremetal"),
 		FakeAlertScenario: env("ATLAS_FAKE_ALERT_SCENARIO", "osd-down-alert"),
 		FakeAgentScenario: env("ATLAS_FAKE_AGENT_SCENARIO", ""),
@@ -110,11 +92,6 @@ func Load() (Config, error) {
 		OIDCIssuer:        env("ATLAS_OIDC_ISSUER", ""),
 		OIDCAudience:      env("ATLAS_OIDC_AUDIENCE", ""),
 		OIDCJWKSURL:       env("ATLAS_OIDC_JWKS_URL", ""),
-
-		CephDashboardURL:      env("ATLAS_CEPH_DASHBOARD_URL", ""),
-		CephDashboardUser:     env("ATLAS_CEPH_DASHBOARD_USER", ""),
-		CephDashboardPassword: env("ATLAS_CEPH_DASHBOARD_PASSWORD", ""),
-		CephClusterName:       env("ATLAS_CEPH_CLUSTER_NAME", ""),
 
 		PrometheusURL:         env("ATLAS_PROMETHEUS_URL", ""),
 		PrometheusBearerToken: env("ATLAS_PROMETHEUS_BEARER_TOKEN", ""),
@@ -129,12 +106,6 @@ func Load() (Config, error) {
 
 	var errs []error
 
-	insecureTLS, err := envBool("ATLAS_CEPH_DASHBOARD_INSECURE_TLS", false)
-	cfg.CephDashboardInsecureTLS = insecureTLS
-	if err != nil {
-		errs = append(errs, err)
-	}
-
 	prometheusInsecureTLS, err := envBool("ATLAS_PROMETHEUS_INSECURE_TLS", false)
 	cfg.PrometheusInsecureTLS = prometheusInsecureTLS
 	if err != nil {
@@ -147,11 +118,7 @@ func Load() (Config, error) {
 		errs = append(errs, err)
 	}
 
-	switch cfg.ProviderMode {
-	case ProviderModeFake, ProviderModeCeph:
-	default:
-		errs = append(errs, fmt.Errorf("unsupported ATLAS_PROVIDER_MODE %q (supported: fake, ceph)", cfg.ProviderMode))
-	}
+	errs = appendRejectedPullPathEnv(errs)
 
 	switch cfg.ReadSource {
 	case ReadSourceProvider, ReadSourcePostgres:
@@ -195,10 +162,6 @@ func Load() (Config, error) {
 		errs = append(errs, errors.New("ATLAS_HTTPS_ADDR requires both ATLAS_API_TLS_CERT_PATH and ATLAS_API_TLS_KEY_PATH"))
 	}
 
-	if cfg.ProviderMode == ProviderModeCeph {
-		errs = appendCephDashboardChecks(errs, cfg)
-	}
-
 	if cfg.AlertSource == AlertSourcePrometheus {
 		errs = appendPrometheusAlertChecks(errs, cfg)
 	}
@@ -206,20 +169,23 @@ func Load() (Config, error) {
 	return cfg, errors.Join(errs...)
 }
 
-// appendCephDashboardChecks enforces the ATLAS_PROVIDER_MODE=ceph
-// cross-field contract: claiming ceph mode requires a Dashboard URL with
-// a scheme and read-only credentials, in every binary.
-func appendCephDashboardChecks(errs []error, cfg Config) []error {
-	if cfg.CephDashboardURL == "" {
-		errs = append(errs, errors.New("ATLAS_PROVIDER_MODE=ceph requires ATLAS_CEPH_DASHBOARD_URL"))
-	} else if !absoluteURL(cfg.CephDashboardURL) {
-		errs = append(errs, fmt.Errorf("ATLAS_CEPH_DASHBOARD_URL %q must be an absolute URL with a scheme (for example https://mon.example.invalid:8443)", cfg.CephDashboardURL))
-	}
-	if cfg.CephDashboardUser == "" {
-		errs = append(errs, errors.New("ATLAS_PROVIDER_MODE=ceph requires ATLAS_CEPH_DASHBOARD_USER"))
-	}
-	if cfg.CephDashboardPassword == "" {
-		errs = append(errs, errors.New("ATLAS_PROVIDER_MODE=ceph requires ATLAS_CEPH_DASHBOARD_PASSWORD"))
+// appendRejectedPullPathEnv fails fast on the deleted control-plane pull
+// path (ADR-0025): the stored-credential Dashboard reads moved into the
+// enrolled Atlas Agent, so any surviving ATLAS_PROVIDER_MODE or
+// ATLAS_CEPH_* setting is a stale environment that must not silently
+// fall back to fake seeding. Empty values count as unset.
+func appendRejectedPullPathEnv(errs []error) []error {
+	for _, key := range []string{
+		"ATLAS_PROVIDER_MODE",
+		"ATLAS_CEPH_DASHBOARD_URL",
+		"ATLAS_CEPH_DASHBOARD_USER",
+		"ATLAS_CEPH_DASHBOARD_PASSWORD",
+		"ATLAS_CEPH_CLUSTER_NAME",
+		"ATLAS_CEPH_DASHBOARD_INSECURE_TLS",
+	} {
+		if os.Getenv(key) != "" {
+			errs = append(errs, fmt.Errorf("%s is no longer supported: control-plane Ceph reads moved into the enrolled Atlas Agent (ADR-0025); configure the Agent instead", key))
+		}
 	}
 	return errs
 }
