@@ -290,6 +290,69 @@ func TestPostgresReadSourceListsSucceededAndFailedSyncRuns(t *testing.T) {
 	}
 }
 
+func TestPostgresReadSourceScopesSyncRunsToCluster(t *testing.T) {
+	ctx := context.Background()
+	db, _ := testdb.Open(t)
+	resetInventoryTables(t, db)
+
+	writer := store.NewPostgres(db)
+	if _, err := inventorysync.RunFakeOnce(ctx, writer, inventorysync.Options{
+		Scenario:   "reef-osd-down-baremetal",
+		ObservedAt: time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("sync fake inventory: %v", err)
+	}
+	if _, err := inventorysync.RunFakeOnce(ctx, writer, inventorysync.Options{
+		Scenario:   "missing",
+		ObservedAt: time.Date(2026, 9, 2, 12, 1, 0, 0, time.UTC),
+	}); err == nil {
+		t.Fatal("expected failed fake sync")
+	}
+
+	server := newPostgresServer(t, ctx)
+
+	// The succeeded run is attributed to the fixture cluster; the
+	// failed pull never reached a cluster and stays unattributed.
+	scoped := serve(server, http.MethodGet, "/api/v1/inventory-sync-runs?cluster=00000000-0000-4000-8000-000000000102")
+	if scoped.Code != http.StatusOK {
+		t.Fatalf("scoped status = %d, want %d; body=%s", scoped.Code, http.StatusOK, scoped.Body.String())
+	}
+	var runs []struct {
+		Status      string  `json:"status"`
+		ClusterFSID *string `json:"clusterFsid"`
+		ClusterName *string `json:"clusterName"`
+	}
+	if err := json.NewDecoder(scoped.Body).Decode(&runs); err != nil {
+		t.Fatalf("decode scoped runs: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("scoped run count = %d, want 1; runs=%+v", len(runs), runs)
+	}
+	if runs[0].Status != "succeeded" {
+		t.Fatalf("scoped run status = %q, want succeeded", runs[0].Status)
+	}
+	if runs[0].ClusterFSID == nil || *runs[0].ClusterFSID != "00000000-0000-4000-8000-000000000102" {
+		t.Fatalf("scoped run clusterFsid = %+v, want the fixture FSID", runs[0].ClusterFSID)
+	}
+	if runs[0].ClusterName == nil || *runs[0].ClusterName == "" {
+		t.Fatalf("scoped run clusterName = %+v, want the fixture cluster name", runs[0].ClusterName)
+	}
+
+	// An unknown cluster scopes to an empty list, not an error.
+	empty := serve(server, http.MethodGet, "/api/v1/inventory-sync-runs?cluster=00000000-0000-4000-8000-0000000009ff")
+	if empty.Code != http.StatusOK {
+		t.Fatalf("empty scope status = %d, want %d; body=%s", empty.Code, http.StatusOK, empty.Body.String())
+	}
+	if strings.TrimSpace(empty.Body.String()) != "[]" {
+		t.Fatalf("empty scope body = %s, want []", empty.Body.String())
+	}
+
+	invalid := serve(server, http.MethodGet, "/api/v1/inventory-sync-runs?cluster=not-a-uuid")
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid filter status = %d, want %d; body=%s", invalid.Code, http.StatusBadRequest, invalid.Body.String())
+	}
+}
+
 func TestPostgresReadSourceListsAndGetsSeedCases(t *testing.T) {
 	ctx := context.Background()
 	server := newPostgresServer(t, ctx)

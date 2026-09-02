@@ -1,9 +1,11 @@
 import React from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Column, Grid, InlineNotification } from "@carbon/react";
 import { loadClusterView, type ClusterView } from "../api";
-import { CasesSection } from "../components/cases";
-import { OperatorPanel } from "../components/OperatorPanel";
+import {
+  ClusterNotFound,
+  ClusterPageHeader,
+} from "../components/ClusterPageHeader";
 import {
   DaemonTable,
   HealthChecksTable,
@@ -11,19 +13,34 @@ import {
   PoolTable,
   StorageDeviceTable,
 } from "../components/inventoryTables";
-import { ErrorState, MetricTile, PageIntro, StatusTag } from "../components/ui";
+import { OperatorPanel } from "../components/OperatorPanel";
+import { ErrorState, MetricTile, StatusTag } from "../components/ui";
 import { useOperator } from "../operator";
 import { useResource } from "../resources";
-import { stoppedDaemonCount } from "../inventory";
-import { agentLastSeenLabel, healthStatusLabel } from "../clusters";
+import {
+  daemonStatusCounts,
+  daemonStatusSummary,
+  type DaemonStatusCounts,
+} from "../inventory";
+import { agentLastSeenLabel, agentLastPushLabel, healthStatusLabel } from "../clusters";
 import { toneForHealth } from "../tones";
 
-// ClusterDetailPage re-founds the old single-cluster dashboard on the
-// cluster-scoped reads: summary, health checks, inventory tables, and the
-// cluster's Cases — all keyed by the FSID in the route.
+function daemonTileTone(counts: DaemonStatusCounts): "ok" | "warn" | "err" {
+  if (counts.running === counts.total) {
+    return "ok";
+  }
+  if (counts.error > 0) {
+    return "err";
+  }
+  return "warn";
+}
+
+// The cluster overview (issue #42): summary tiles, health checks, and
+// inventory tables, all keyed by the FSID in the route. The cluster's
+// Cases and Sync runs live behind the section tabs.
 export function ClusterDetailPage() {
   const { fsid } = useParams();
-  const { operator, token, signIn, signOut } = useOperator();
+  const { operator, signIn, signOut } = useOperator();
 
   const view = useResource(
     fsid ? (signal) => loadClusterView(fsid, signal) : null,
@@ -39,19 +56,7 @@ export function ClusterDetailPage() {
   }
 
   if (view.data && "notFound" in view.data) {
-    return (
-      <div>
-        <InlineNotification
-          kind="error"
-          lowContrast
-          title="Cluster not found"
-          subtitle={`No registered cluster carries the FSID ${fsid}. It may have been deregistered, or the link is stale.`}
-        />
-        <Link className="atlas-table-link" to="/">
-          ← Back to all clusters
-        </Link>
-      </div>
-    );
+    return <ClusterNotFound fsid={fsid} />;
   }
 
   if (view.error || !view.data) {
@@ -59,26 +64,43 @@ export function ClusterDetailPage() {
   }
 
   const clusterView: ClusterView = view.data;
-  const { cluster, health, osds, hosts, storageDevices, daemons, pools, cases } = clusterView;
+  const { cluster, health, osds, hosts, storageDevices, daemons, pools, cases, syncRuns } = clusterView;
   const downOsds = osds.filter((osd) => !osd.up).length;
   const outOsds = osds.filter((osd) => !osd.in).length;
-  const stoppedDaemons = stoppedDaemonCount(daemons);
+  const daemonCounts = daemonStatusCounts(daemons);
 
   return (
     <>
-      <p>
-        <Link to="/" className="atlas-table-link">
-          ← All clusters
-        </Link>
-      </p>
-      <h1 className="atlas-page-title">{cluster.name}</h1>
-      <PageIntro>
-        <span className="atlas-mono">{cluster.fsid}</span> · {cluster.clusterType} ·{" "}
-        {cluster.cephVersion ?? "Ceph version unreported"} · agent last seen{" "}
-        {agentLastSeenLabel(cluster.agentLastSeen)}
-      </PageIntro>
+      <ClusterPageHeader
+        fsid={fsid}
+        active="Overview"
+        title={cluster.name}
+        intro={
+          <>
+            <span className="atlas-mono">{cluster.fsid}</span> · {cluster.clusterType} ·{" "}
+            {cluster.cephVersion ?? "Ceph version unreported"}
+          </>
+        }
+      />
 
       <OperatorPanel operator={operator} onSignIn={signIn} onSignOut={signOut} />
+
+      {clusterView.casesUnavailable ? (
+        <InlineNotification
+          kind="warning"
+          lowContrast
+          title="Cases unavailable"
+          subtitle={clusterView.casesUnavailable}
+        />
+      ) : null}
+      {clusterView.syncRunsUnavailable ? (
+        <InlineNotification
+          kind="warning"
+          lowContrast
+          title="Sync run history unavailable"
+          subtitle={clusterView.syncRunsUnavailable}
+        />
+      ) : null}
 
       <Grid fullWidth className="atlas-metrics">
         <Column sm={4} md={4} lg={4}>
@@ -87,6 +109,13 @@ export function ClusterDetailPage() {
             value={healthStatusLabel(cluster.healthStatus)}
             detail={cluster.healthSummary ?? health.summary}
             tone={toneForHealth(cluster.healthStatus)}
+          />
+        </Column>
+        <Column sm={4} md={4} lg={4}>
+          <MetricTile
+            label="Agent"
+            value={agentLastSeenLabel(cluster.agentLastSeen)}
+            detail={`last push ${agentLastPushLabel(syncRuns)}`}
           />
         </Column>
         <Column sm={4} md={4} lg={4}>
@@ -107,15 +136,15 @@ export function ClusterDetailPage() {
           <MetricTile
             label="Ceph Daemons"
             value={daemons.length}
-            detail={stoppedDaemons === 0 ? "all running" : `${stoppedDaemons} stopped`}
-            tone={stoppedDaemons === 0 ? "ok" : "warn"}
+            detail={daemonStatusSummary(daemonCounts)}
+            tone={daemonTileTone(daemonCounts)}
           />
         </Column>
         <Column sm={4} md={4} lg={4}>
           <MetricTile label="Pools" value={pools.length} />
         </Column>
         <Column sm={4} md={4} lg={4}>
-          <MetricTile label="Cases" value={cases.length} detail="recent updates" />
+          <MetricTile label="Cases" value={cases.length} detail="behind the Cases tab" />
         </Column>
       </Grid>
 
@@ -148,19 +177,6 @@ export function ClusterDetailPage() {
       <section className="atlas-panel" aria-label="Pools">
         <h2 className="atlas-panel-heading">Pools</h2>
         <PoolTable pools={pools} />
-      </section>
-
-      <section className="atlas-panel" aria-label="Cases">
-        <h2 className="atlas-panel-heading">Cases</h2>
-        <CasesSection
-          cases={cases}
-          casesUnavailable={clusterView.casesUnavailable}
-          operator={operator}
-          token={token}
-          defaultClusterFsid={cluster.fsid ?? undefined}
-          onCaseCreated={view.reload}
-          onCasesChanged={view.reload}
-        />
       </section>
     </>
   );

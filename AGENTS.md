@@ -58,9 +58,13 @@ The current implementation supports:
   searchable and paginated, with health summary and Agent last-seen),
   cluster-scoped inventory reads (`GET /api/v1/clusters/{fsid}/health`,
   `/osds`, `/hosts`, `/storage-devices`, `/daemons`, `/pools`),
-  cluster-filtered Case lists (`GET /api/v1/cases?cluster=…`), and
-  read-only Case endpoints; manual Case writes authenticate with OIDC
-  bearer tokens (ADR-0016). The single-cluster
+  cluster-filtered Case lists (`GET /api/v1/cases?cluster=…`) and
+  sync-run history (`GET /api/v1/inventory-sync-runs?cluster=…`; runs
+  carry `clusterFsid`/`clusterName` when attributed — agent pushes from
+  the begin that follows certificate resolution, succeeded runs from
+  their snapshot — and failed pulls that never reached a cluster stay
+  unattributed), and read-only Case endpoints; manual Case writes
+  authenticate with OIDC bearer tokens (ADR-0016). The single-cluster
   `/api/v1/clusters/current/*` family was removed as a documented 0.x
   breaking change. Provider read source serves the same cluster-scoped
   shape through `internal/providers/singlecluster` (its one provider is
@@ -74,16 +78,23 @@ The current implementation supports:
   means one declaration entry plus the artifacts that cannot be
   derived (migration, OpenAPI path, web page, and one typed binding
   entry per consumer).
-- An IBM Carbon web UI (ADR-0028): app shell, cluster index (searchable,
-  paginated, health + Agent last-seen), per-cluster detail pages over the
-  cluster-scoped reads, global Cases and Sync Runs pages, operator
-  bearer-token sign-in, manual Case writes, Workflow
-  attach/approve/resume forms, and Cluster Registration through the UI —
-  a Register flow that shows the one-time Enrollment Credential and
-  Agent install instructions exactly once behind an explicit
-  acknowledgment (the credential is never re-displayable; it lives only
-  in the registration response), plus a deregister row action on the
-  index. The load/submit choreography (abort,
+- An IBM Carbon web UI (ADR-0028): app shell with a cluster switcher
+  in the header (selection is the URL — picking a cluster navigates to
+  its overview), cluster index (searchable, paginated, health + Agent
+  last-seen), per-cluster views over the cluster-scoped reads — an
+  Overview page (metric tiles including an Agent tile with last-seen
+  and last-push age, health checks, inventory tables, all five Daemon
+  statuses treated deliberately: running/stopped/starting/error/unknown
+  each with their own badge tone and tally) plus cluster-scoped Cases
+  and Sync runs sections behind section tabs (`/clusters/{fsid}/cases`,
+  `/clusters/{fsid}/sync-runs`) — global Cases and Sync Runs pages for
+  the fleet-wide views, operator bearer-token sign-in, manual Case
+  writes, Workflow attach/approve/resume forms, and Cluster Registration
+  through the UI — a Register flow that shows the one-time Enrollment
+  Credential and Agent install instructions exactly once behind an
+  explicit acknowledgment (the credential is never re-displayable; it
+  lives only in the registration response), plus a deregister row
+  action on the index. The load/submit choreography (abort,
   stale-result ignoring, data retention, double-submit guarding,
   formatted errors) is centralized in two hook-tested seams —
   `useResource` and `useMutation` in `web/app/src/resources.ts` — and

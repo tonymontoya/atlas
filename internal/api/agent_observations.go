@@ -98,7 +98,7 @@ func (s *Server) pushAgentObservations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := inventorysync.RunPush(r.Context(), s.app.AgentObservations, store.InventoryObservation{
+	result, err := inventorysync.RunPush(r.Context(), s.app.AgentObservations, resolved.ClusterID, store.InventoryObservation{
 		ObservedAt: batch.ObservedAt,
 		Cluster:    batch.Cluster,
 		Health:     batch.Health,

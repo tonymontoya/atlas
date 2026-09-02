@@ -86,6 +86,8 @@ export type InventorySyncRun = {
   snapshotId?: number;
   errorClass?: string;
   errorMessage?: string;
+  clusterFsid?: string;
+  clusterName?: string;
 };
 
 export type CaseDetectionLink = {
@@ -147,6 +149,8 @@ export type ClusterView = {
   pools: Pool[];
   cases: CaseRecord[];
   casesUnavailable?: string;
+  syncRuns: InventorySyncRun[];
+  syncRunsUnavailable?: string;
 };
 
 export type ClusterViewNotFound = {
@@ -182,43 +186,69 @@ export async function listClusters(
   return request<ClusterIndex>(`/api/v1/clusters${suffix}`, signal);
 }
 
-// loadClusterView gathers everything the per-cluster page shows. The
-// cluster itself is resolved through the index (searching by FSID) so
-// provider-mode clusters — whose numeric id is null — stay addressable.
-// A FSID no registered cluster carries resolves to notFound.
-export async function loadClusterView(
+// resolveCluster finds the registered cluster carrying an FSID through
+// the index (searching by FSID) so provider-mode clusters — whose
+// numeric id is null — stay addressable. A FSID no registered cluster
+// carries resolves to null.
+export async function resolveCluster(
   fsid: string,
   signal?: AbortSignal,
-): Promise<ClusterView | ClusterViewNotFound> {
+): Promise<ClusterSummary | null> {
   const index = await listClusters({ q: fsid }, signal);
   const cluster = index.clusters.find(
     (candidate) =>
       candidate.fsid !== null &&
       candidate.fsid.toLowerCase() === fsid.toLowerCase(),
   );
+  return cluster && cluster.fsid !== null ? cluster : null;
+}
+
+// loadClusterView gathers everything the per-cluster overview shows:
+// the cluster itself, its scoped inventory reads, its Cases, and its
+// sync runs (which carry the Agent's push history). A FSID no
+// registered cluster carries resolves to notFound.
+export async function loadClusterView(
+  fsid: string,
+  signal?: AbortSignal,
+): Promise<ClusterView | ClusterViewNotFound> {
+  const cluster = await resolveCluster(fsid, signal);
   if (!cluster || cluster.fsid === null) {
     return { notFound: true };
   }
 
   const scopedFSID = cluster.fsid;
-  const [health, osds, hosts, storageDevices, daemons, pools, casesResult] =
-    await Promise.all([
-      request<ClusterHealth>(`/api/v1/clusters/${scopedFSID}/health`, signal),
-      request<OSD[]>(`/api/v1/clusters/${scopedFSID}/osds`, signal),
-      request<Host[]>(`/api/v1/clusters/${scopedFSID}/hosts`, signal),
-      request<StorageDevice[]>(
-        `/api/v1/clusters/${scopedFSID}/storage-devices`,
+  const [
+    health,
+    osds,
+    hosts,
+    storageDevices,
+    daemons,
+    pools,
+    casesResult,
+    syncRunsResult,
+  ] = await Promise.all([
+    request<ClusterHealth>(`/api/v1/clusters/${scopedFSID}/health`, signal),
+    request<OSD[]>(`/api/v1/clusters/${scopedFSID}/osds`, signal),
+    request<Host[]>(`/api/v1/clusters/${scopedFSID}/hosts`, signal),
+    request<StorageDevice[]>(
+      `/api/v1/clusters/${scopedFSID}/storage-devices`,
+      signal,
+    ),
+    request<Daemon[]>(`/api/v1/clusters/${scopedFSID}/daemons`, signal),
+    request<Pool[]>(`/api/v1/clusters/${scopedFSID}/pools`, signal),
+    settle(
+      request<CaseRecord[]>(
+        `/api/v1/cases?cluster=${encodeURIComponent(scopedFSID)}`,
         signal,
       ),
-      request<Daemon[]>(`/api/v1/clusters/${scopedFSID}/daemons`, signal),
-      request<Pool[]>(`/api/v1/clusters/${scopedFSID}/pools`, signal),
-      settle(
-        request<CaseRecord[]>(
-          `/api/v1/cases?cluster=${encodeURIComponent(scopedFSID)}`,
-          signal,
-        ),
+    ),
+    settle(
+      request<InventorySyncRun[]>(
+        `/api/v1/inventory-sync-runs?cluster=${encodeURIComponent(scopedFSID)}`,
+        signal,
       ),
-    ]);
+    ),
+  ]);
 
   return {
     cluster,
@@ -230,6 +260,10 @@ export async function loadClusterView(
     pools,
     cases: casesResult.ok ? casesResult.value : [],
     casesUnavailable: casesResult.ok ? undefined : errorMessage(casesResult.error),
+    syncRuns: syncRunsResult.ok ? syncRunsResult.value : [],
+    syncRunsUnavailable: syncRunsResult.ok
+      ? undefined
+      : errorMessage(syncRunsResult.error),
   };
 }
 export async function listCases(
@@ -243,8 +277,15 @@ export async function listCases(
   return request<CaseRecord[]>(`/api/v1/cases${suffix}`, signal);
 }
 
-export async function listSyncRuns(signal?: AbortSignal): Promise<InventorySyncRun[]> {
-  return request<InventorySyncRun[]>("/api/v1/inventory-sync-runs", signal);
+export async function listSyncRuns(
+  filter: { cluster?: string } = {},
+  signal?: AbortSignal,
+): Promise<InventorySyncRun[]> {
+  const suffix =
+    filter.cluster !== undefined && filter.cluster !== ""
+      ? `?cluster=${encodeURIComponent(filter.cluster)}`
+      : "";
+  return request<InventorySyncRun[]>(`/api/v1/inventory-sync-runs${suffix}`, signal);
 }
 
 export type Operator = {

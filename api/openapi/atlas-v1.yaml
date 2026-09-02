@@ -534,6 +534,14 @@ paths:
         - Inventory
       operationId: listInventorySyncRuns
       summary: List recent inventory sync runs
+      parameters:
+        - name: cluster
+          in: query
+          description: Optional cluster FSID; only that cluster's runs list.
+            Runs the history cannot attribute to a cluster — failed pulls
+            that never reached one — never appear in a scoped list.
+          schema:
+            type: string
       responses:
         "200":
           description: Recent inventory sync run history.
@@ -561,6 +569,8 @@ paths:
                       startedAt: "2026-08-13T12:00:00Z"
                       finishedAt: "2026-08-13T12:00:01Z"
                       snapshotId: 1
+                      clusterFsid: 00000000-0000-4000-8000-000000000102
+                      clusterName: reef-fixture
         default:
           $ref: "#/components/responses/Error"
   /api/v1/alert-evaluation-runs:
@@ -1887,6 +1897,16 @@ components:
           $ref: "#/components/schemas/ErrorClass"
         errorMessage:
           type: string
+        clusterFsid:
+          type: string
+          description: FSID of the cluster the run touched. Present for
+            attributed runs — agent pushes from the start, succeeded
+            runs from their snapshot — and absent for failed pulls that
+            never reached a cluster.
+        clusterName:
+          type: string
+          description: Name of the cluster the run touched; present
+            exactly when clusterFsid is.
     InventorySyncRunStatus:
       type: string
       enum:

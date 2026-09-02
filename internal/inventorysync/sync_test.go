@@ -238,7 +238,7 @@ func TestRunPushPinsAgentProviderAndSavesBatch(t *testing.T) {
 		ObservedAt: observedAt,
 	}
 
-	result, err := RunPush(context.Background(), writer, batch)
+	result, err := RunPush(context.Background(), writer, 77, batch)
 	if err != nil {
 		t.Fatalf("RunPush returned error: %v", err)
 	}
@@ -248,14 +248,17 @@ func TestRunPushPinsAgentProviderAndSavesBatch(t *testing.T) {
 	if writer.begin.Provider != "agent" || writer.begin.Scenario != "" {
 		t.Fatalf("begin = %+v, want provider agent with no scenario", writer.begin)
 	}
+	if writer.begin.ClusterID == nil || *writer.begin.ClusterID != 77 {
+		t.Fatalf("begin cluster ID = %+v, want 77 (cert-resolved cluster stamps the run at begin)", writer.begin.ClusterID)
+	}
 	if writer.observation.Provider != "agent" {
 		t.Fatalf("saved provider = %q, want agent (server-pinned, never the payload claim)", writer.observation.Provider)
 	}
 	if !writer.observation.ObservedAt.Equal(observedAt) {
 		t.Fatalf("ObservedAt = %s, want %s", writer.observation.ObservedAt, observedAt)
 	}
-	if writer.succeeded.RunID != 30 || writer.succeeded.SnapshotID != 20 {
-		t.Fatalf("sync success = %+v, want run 30 snapshot 20", writer.succeeded)
+	if writer.succeeded.RunID != 30 || writer.succeeded.SnapshotID != 20 || writer.succeeded.ClusterID != 10 {
+		t.Fatalf("sync success = %+v, want run 30 snapshot 20 cluster 10", writer.succeeded)
 	}
 	if writer.failed.RunID != 0 {
 		t.Fatalf("unexpected sync failure = %+v", writer.failed)
@@ -265,11 +268,14 @@ func TestRunPushPinsAgentProviderAndSavesBatch(t *testing.T) {
 func TestRunPushRecordsFailedRunWhenSaveFails(t *testing.T) {
 	writer := &recordingWriter{saveErr: apperr.Error{Class: apperr.InvalidRequest, Message: "batch rejected for test"}}
 
-	if _, err := RunPush(context.Background(), writer, store.InventoryObservation{}); err == nil {
+	if _, err := RunPush(context.Background(), writer, 77, store.InventoryObservation{}); err == nil {
 		t.Fatal("expected error")
 	}
 	if writer.failed.RunID != 30 {
 		t.Fatalf("failure run ID = %d, want 30", writer.failed.RunID)
+	}
+	if writer.begin.ClusterID == nil || *writer.begin.ClusterID != 77 {
+		t.Fatalf("begin cluster ID = %+v, want 77 (failed pushes stay attributed)", writer.begin.ClusterID)
 	}
 	if writer.failed.ErrorClass != "InvalidRequest" {
 		t.Fatalf("failure error class = %q, want InvalidRequest", writer.failed.ErrorClass)

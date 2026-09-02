@@ -2,7 +2,7 @@
 // health and agent activity (a registered cluster may have no observation
 // yet); these helpers give every nullable field a stable display label.
 import { coarseDuration } from "./format";
-import type { ClusterSummary } from "./api";
+import type { ClusterSummary, InventorySyncRun } from "./api";
 
 export function healthStatusLabel(status: ClusterSummary["healthStatus"]): string {
   if (status === null || status === undefined || status === "") {
@@ -11,15 +11,9 @@ export function healthStatusLabel(status: ClusterSummary["healthStatus"]): strin
   return status.replace("HEALTH_", "");
 }
 
-// Buckets for agent activity, from "just now" to "never".
-export function agentLastSeenLabel(
-  lastSeen: ClusterSummary["agentLastSeen"],
-  now: number = Date.now(),
-): string {
-  if (lastSeen === null || lastSeen === undefined || lastSeen === "") {
-    return "never";
-  }
-  const seen = Date.parse(lastSeen);
+// Buckets for a past timestamp, from "just now" to a formatted date.
+function ageLabel(timestamp: string, now: number): string {
+  const seen = Date.parse(timestamp);
   if (Number.isNaN(seen)) {
     return "unknown";
   }
@@ -43,6 +37,32 @@ export function agentLastSeenLabel(
   }).format(new Date(seen));
 }
 
+// Buckets for agent activity, from "just now" to "never".
+export function agentLastSeenLabel(
+  lastSeen: ClusterSummary["agentLastSeen"],
+  now: number = Date.now(),
+): string {
+  if (lastSeen === null || lastSeen === undefined || lastSeen === "") {
+    return "never";
+  }
+  return ageLabel(lastSeen, now);
+}
+
+// The Agent's last push is its latest sync run's start — the moment
+// Atlas received a batch, as distinct from last-seen's observation
+// timestamp, which is the Agent's own clock. Runs arrive ordered
+// newest first, so the first agent run is the latest push.
+export function agentLastPushLabel(
+  runs: InventorySyncRun[],
+  now: number = Date.now(),
+): string {
+  const latest = runs.find((run) => run.provider === "agent");
+  if (!latest) {
+    return "never";
+  }
+  return ageLabel(latest.startedAt, now);
+}
+
 // Carbon Pagination is 1-based; the cluster index API takes a 0-based
 // offset. Keep the translation in one place.
 export function offsetForPage(page: number, pageSize: number): number {
@@ -54,4 +74,12 @@ export function offsetForPage(page: number, pageSize: number): number {
 
 export function clusterRoute(cluster: ClusterSummary): string | null {
   return cluster.fsid ? `/clusters/${cluster.fsid}` : null;
+}
+
+// The selected cluster is the FSID in the URL (/clusters/<fsid> and its
+// scoped sections), so no page can show one cluster's data while
+// another is selected — the route is the selection.
+export function clusterFsidFromPath(pathname: string): string | null {
+  const match = /^\/clusters\/([^/]+)(?:\/.*)?$/.exec(pathname);
+  return match ? decodeURIComponent(match[1]) : null;
 }

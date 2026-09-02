@@ -52,7 +52,9 @@ What exists today:
 - OIDC bearer-token identity verification (JWT against the issuer's JWKS) with
   a local dev issuer for development stacks
 - React and TypeScript web UI on IBM Carbon (ADR-0028) with a searchable
-  cluster index, per-cluster detail pages, global Cases and Sync Runs
+  cluster index, a cluster switcher in the header, per-cluster views
+  (overview with Agent status and deliberately treated Daemon statuses,
+  plus scoped Cases and Sync runs sections), global Cases and Sync Runs
   views, operator sign-in, manual Case writes, Workflow
   attach/approve/resume forms, and Cluster Registration — the one-time
   Enrollment Credential is shown exactly once with the Agent install

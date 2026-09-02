@@ -52,11 +52,17 @@ func RunOnce(ctx context.Context, writer Writer, provider providers.CephReadProv
 // batch was already collected by the Agent, so there is no provider to
 // pull from: the run lifecycle wraps the existing single-transaction
 // save path, pinning provider to "agent" and leaving the scenario
-// empty. A save failure still records a failed run; the batch itself
-// stays all-or-nothing.
-func RunPush(ctx context.Context, writer Writer, obs store.InventoryObservation) (store.SaveInventoryResult, error) {
+// empty. clusterID is the cluster the client certificate resolved to,
+// stamped on the run at begin so failed pushes stay attributed. A save
+// failure still records a failed run; the batch itself stays
+// all-or-nothing.
+func RunPush(ctx context.Context, writer Writer, clusterID int64, obs store.InventoryObservation) (store.SaveInventoryResult, error) {
 	obs.Provider = AgentProviderName
-	return recordRun(ctx, writer, store.BeginSyncRun{Provider: AgentProviderName}, func(ctx context.Context) (store.SaveInventoryResult, error) {
+	begin := store.BeginSyncRun{Provider: AgentProviderName}
+	if clusterID > 0 {
+		begin.ClusterID = &clusterID
+	}
+	return recordRun(ctx, writer, begin, func(ctx context.Context) (store.SaveInventoryResult, error) {
 		return writer.SaveInventoryObservation(ctx, obs)
 	})
 }
@@ -77,7 +83,7 @@ func recordRun(ctx context.Context, writer Writer, run store.BeginSyncRun, save 
 		}
 		return store.SaveInventoryResult{}, err
 	}
-	if err := writer.SucceedInventorySyncRun(ctx, store.SyncRunResult{RunID: runID, SnapshotID: result.SnapshotID}); err != nil {
+	if err := writer.SucceedInventorySyncRun(ctx, store.SyncRunResult{RunID: runID, SnapshotID: result.SnapshotID, ClusterID: result.ClusterID}); err != nil {
 		return store.SaveInventoryResult{}, err
 	}
 	return result, nil

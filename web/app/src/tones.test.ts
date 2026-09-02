@@ -100,9 +100,15 @@ describe("toneForDeviceHealth", () => {
 });
 
 describe("toneForDaemonStatus", () => {
-  it("reads only running daemons as healthy", () => {
+  it("gives all five daemon statuses a deliberate tone", () => {
     expect(toneForDaemonStatus("running")).toBe<Tone>("ok");
     expect(toneForDaemonStatus("stopped")).toBe<Tone>("err");
-    expect(toneForDaemonStatus("unknown")).toBe<Tone>("err");
+    expect(toneForDaemonStatus("error")).toBe<Tone>("err");
+    expect(toneForDaemonStatus("starting")).toBe<Tone>("warn");
+    expect(toneForDaemonStatus("unknown")).toBe<Tone>("neutral");
+  });
+
+  it("reads unrecognized statuses as unknown, not as failures", () => {
+    expect(toneForDaemonStatus("something-else")).toBe<Tone>("neutral");
   });
 });

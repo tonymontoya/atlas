@@ -68,7 +68,7 @@ type AgentObservationStore interface {
 }
 
 type InventorySyncRunReader interface {
-	ListInventorySyncRuns(ctx context.Context, limit int) ([]store.InventorySyncRun, error)
+	ListInventorySyncRuns(ctx context.Context, limit int, clusterFSID string) ([]store.InventorySyncRun, error)
 }
 
 type AlertEvaluationRunReader interface {

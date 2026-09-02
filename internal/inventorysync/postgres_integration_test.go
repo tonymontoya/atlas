@@ -475,7 +475,7 @@ func TestRunPushPersistsAgentObservationToPostgres(t *testing.T) {
 	t.Cleanup(cleanupAgentPush)
 
 	writer := store.NewPostgres(db)
-	result, err := RunPush(ctx, writer, store.InventoryObservation{
+	result, err := RunPush(ctx, writer, 0, store.InventoryObservation{
 		Cluster: fleet.ClusterIdentity{
 			FSID:        fsid,
 			Name:        "agent-push-pg-test",
@@ -504,13 +504,14 @@ func TestRunPushPersistsAgentObservationToPostgres(t *testing.T) {
 	var snapshotProvider string
 	var runStatus string
 	var runSnapshotID int64
+	var runClusterID sql.NullInt64
 	var runScenario sql.NullString
 	if err := db.QueryRowContext(ctx, `
-		SELECT snapshots.provider, runs.status, runs.snapshot_id, runs.scenario
+		SELECT snapshots.provider, runs.status, runs.snapshot_id, runs.cluster_id, runs.scenario
 		FROM inventory_snapshots AS snapshots
 		JOIN inventory_sync_runs AS runs ON runs.snapshot_id = snapshots.id
 		WHERE snapshots.cluster_id = $1 AND snapshots.id = $2
-	`, result.ClusterID, result.SnapshotID).Scan(&snapshotProvider, &runStatus, &runSnapshotID, &runScenario); err != nil {
+	`, result.ClusterID, result.SnapshotID).Scan(&snapshotProvider, &runStatus, &runSnapshotID, &runClusterID, &runScenario); err != nil {
 		t.Fatalf("query snapshot and run: %v", err)
 	}
 	if snapshotProvider != "agent" {
@@ -524,6 +525,27 @@ func TestRunPushPersistsAgentObservationToPostgres(t *testing.T) {
 	}
 	if runScenario.Valid {
 		t.Fatalf("sync run scenario = %q, want none", runScenario.String)
+	}
+	if !runClusterID.Valid || runClusterID.Int64 != result.ClusterID {
+		t.Fatalf("sync run cluster id = %+v, want %d (succeed stamps the snapshot's cluster)", runClusterID, result.ClusterID)
+	}
+
+	runs, err := writer.ListInventorySyncRuns(ctx, 10, fsid)
+	if err != nil {
+		t.Fatalf("ListInventorySyncRuns: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("cluster-scoped run count = %d, want 1", len(runs))
+	}
+	if runs[0].ClusterFSID == nil || *runs[0].ClusterFSID != fsid || runs[0].ClusterName == nil || *runs[0].ClusterName != "agent-push-pg-test" {
+		runFSID, runName := "", ""
+		if runs[0].ClusterFSID != nil {
+			runFSID = *runs[0].ClusterFSID
+		}
+		if runs[0].ClusterName != nil {
+			runName = *runs[0].ClusterName
+		}
+		t.Fatalf("scoped run cluster = (%q, %q), want (%q, agent-push-pg-test)", runFSID, runName, fsid)
 	}
 
 	var runProvider string

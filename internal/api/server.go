@@ -132,7 +132,7 @@ func (s *Server) inventorySyncRuns(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	runs, err := s.app.InventorySyncRuns.ListInventorySyncRuns(r.Context(), 50)
+	runs, err := s.app.InventorySyncRuns.ListInventorySyncRuns(r.Context(), 50, r.URL.Query().Get("cluster"))
 	if err != nil {
 		writeError(w, err)
 		return

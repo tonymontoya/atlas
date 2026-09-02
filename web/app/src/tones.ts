@@ -121,6 +121,19 @@ export function toneForDeviceHealth(health: string | undefined): Tone {
   return "neutral";
 }
 
+// All five Ceph Daemon statuses get a deliberate tone: running is
+// healthy, stopped and error are failures, starting is transitional,
+// unknown carries no signal (issue #30).
 export function toneForDaemonStatus(status: string): Tone {
-  return status === "running" ? "ok" : "err";
+  switch (status) {
+    case "running":
+      return "ok";
+    case "stopped":
+    case "error":
+      return "err";
+    case "starting":
+      return "warn";
+    default:
+      return "neutral";
+  }
 }
