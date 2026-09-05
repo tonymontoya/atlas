@@ -62,6 +62,9 @@ func normalizeClusterFSID(fsid string) (string, bool) {
 	return fsid, true
 }
 
+// clusterExistsByFSID reports whether the FSID addresses a live
+// cluster: deregistered holders are out of the fleet and address
+// nothing (ADR-0026 amendment 2026-09-05).
 func (s *PostgresStore) clusterExistsByFSID(ctx context.Context, fsid string) (bool, error) {
 	normalized, ok := normalizeClusterFSID(fsid)
 	if !ok {
@@ -69,7 +72,10 @@ func (s *PostgresStore) clusterExistsByFSID(ctx context.Context, fsid string) (b
 	}
 	var exists bool
 	err := s.db.QueryRowContext(ctx, `
-		SELECT EXISTS (SELECT 1 FROM atlas_clusters WHERE fsid = $1::uuid)
+		SELECT EXISTS (
+			SELECT 1 FROM atlas_clusters
+			WHERE fsid = $1::uuid AND deregistered_at IS NULL
+		)
 	`, normalized).Scan(&exists)
 	return exists, err
 }

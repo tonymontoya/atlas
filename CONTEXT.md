@@ -120,6 +120,10 @@ _Avoid_: Cluster onboarding, connection setup
 The process by which an Atlas Agent establishes a durable, trusted identity with Atlas for a registered Cluster.
 _Avoid_: Pairing, join, agent registration
 
+**Deregistration**:
+The Operator act of retiring a Cluster Registration; the Cluster leaves the fleet but its recorded history remains.
+_Avoid_: Deletion, removal, offboarding
+
 **Atlas Agent**:
 A privileged component in a Cluster's trust domain that collects cluster state and executes strongly typed, approved operations.
 _Avoid_: SSH proxy, remote shell, worker node

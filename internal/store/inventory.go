@@ -120,6 +120,10 @@ func normalizeInventoryObservation(obs InventoryObservation) (InventoryObservati
 	return obs, nil
 }
 
+// upsertCluster binds the observation's cluster identity, refusing to
+// refresh a deregistered holder: a dead row accepts no data (#56,
+// ADR-0026 amendment 2026-09-05). The guarded conflict-update returns
+// no row exactly when the existing holder is deregistered.
 func upsertCluster(ctx context.Context, tx *sql.Tx, cluster fleet.ClusterIdentity) (int64, error) {
 	var clusterID int64
 	err := tx.QueryRowContext(ctx, `
@@ -130,8 +134,12 @@ func upsertCluster(ctx context.Context, tx *sql.Tx, cluster fleet.ClusterIdentit
 			ceph_version = EXCLUDED.ceph_version,
 			cluster_type = EXCLUDED.cluster_type,
 			updated_at = now()
+		WHERE atlas_clusters.deregistered_at IS NULL
 		RETURNING id
 	`, cluster.FSID, cluster.Name, cluster.CephVersion, string(cluster.Type)).Scan(&clusterID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, conflictError("cluster is deregistered")
+	}
 	return clusterID, err
 }
 

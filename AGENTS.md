@@ -124,7 +124,13 @@ The current implementation supports:
   payload claims — an FSID mismatch is a 409. Batches persist through
   the existing single-transaction save path with provider `agent`
   (migration 000014 widens both provider CHECKs); revoked,
-  deregistered, or expired certificates push nothing.
+  deregistered, or expired certificates push nothing. Deregistration
+  means out of the fleet end to end (ADR-0026 amendment 2026-09-05):
+  every cluster-scoped read view filters deregistered rows
+  (migration 000016), the FSID existence check treats them as
+  not-found, and the save path rejects observations for a deregistered
+  FSID holder; Case and Sync Run `?cluster=` filters stay pure record
+  matches, so a deregistered cluster's history stays queryable.
 - A fake inventory sync command that writes one observation batch to PostgreSQL.
 - The atlas-agent binary (`cmd/atlas-agent`, ADR-0025/0026): one-shot
   (`-once`) or daemon operation from agent-local `ATLAS_AGENT_*`
